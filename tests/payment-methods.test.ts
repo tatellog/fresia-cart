@@ -60,12 +60,16 @@ describe('aviso por WhatsApp al negocio', () => {
     await tick(50);
     const msg = t.ctx.notifier.whatsappOutbox.find((m) => m.text.includes(r.body.number))!;
     expect(msg.to).toBe('525582330124');
-    expect(msg.text).toContain('Paga al recibir');
-    expect(msg.text).toContain('• 3× Frésia Clásica Mediano 16 oz (Nuez picada, Coco rallado, Granola artesanal) → Ana');
-    expect(msg.text).toContain('📍 https://maps.google.com/?q=');
-    expect(msg.text).toContain('Entrega: Calle de ejemplo 123, Piso 4, oficina 402');
+    expect(msg.text).toContain('💵 Paga al recibir: $756'); // $726 + $30 de envío
+    expect(msg.text).toContain('*1) 3 × Frésia Clásica · Mediano 16 oz* — $414\n   Para: Ana\n   Toppings: nuez picada, coco rallado, granola artesanal');
+    expect(msg.text).toContain('*2) 3 × Waffle Frésia* — $312\n   Toppings: chocolate Turín');
+    expect(msg.text).toContain('🛵 *Entrega a domicilio* · 15–25 min\n   Calle de ejemplo 123, Piso 4, oficina 402\n   Del Valle Norte, CP 03103\n   Ref: Recepción\n   📍 https://maps.google.com/?q=');
+    expect(msg.text).toContain('👤 Ana Prueba · 55 1234 5678');
     expect(msg.text).toContain('/admin/pedidos/');
+    // Plantilla de Meta: 6 variables de una sola línea + id para el botón.
+    expect(msg.params).toHaveLength(6);
     expect(msg.params.every((p) => !p.includes('\n'))).toBe(true);
+    expect(msg.buttonParam).toMatch(/^[0-9a-f-]{36}$/);
   });
 
   it('pedido pagado en línea: avisa cuando el pago se confirma, no antes', async () => {
@@ -76,7 +80,7 @@ describe('aviso por WhatsApp al negocio', () => {
     await t.api('POST', `/api/demo/preferences/${co.body.checkoutUrl.split('/').pop()}/pay`, { outcome: 'approved' });
     await tick(80);
     const msg = t.ctx.notifier.whatsappOutbox.find((m) => m.text.includes(c.body.number))!;
-    expect(msg.text).toContain('Pagado en línea');
+    expect(msg.text).toContain('✅ Pagado en línea: $');
   });
 
   it('los combos muestran qué lleva cada pieza', async () => {
@@ -87,8 +91,9 @@ describe('aviso por WhatsApp al negocio', () => {
     }));
     await tick(50);
     const msg = t.ctx.notifier.whatsappOutbox.find((m) => m.text.includes(r.body.number))!;
-    expect(msg.text).toContain('Recoge en Frésia');
-    expect(msg.text).toContain('• 1× Dulce Tradición → Equipo\n   – 3× Pan relleno Frésia (Cajeta)\n   – 2× Pan relleno Frésia');
+    expect(msg.text).toContain('💵 Paga al recoger');
+    expect(msg.text).toContain('🏪 *Recoge en Frésia*');
+    expect(msg.text).toContain('*1) Combo Dulce Tradición* — $500\n   Para: Equipo\n   • 3 Pan relleno Frésia: cajeta\n   • 2 Pan relleno Frésia');
     expect(msg.text).not.toContain('Pieza');
     expect(msg.text).not.toContain('📍'); // recoge en tienda: sin ubicación
   });

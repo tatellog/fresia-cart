@@ -9,7 +9,7 @@ export function testConfig(over: Partial<Config> = {}): Config {
   return {
     port: 0, publicUrl: 'http://localhost:9999', databaseUrl: '', pglitePath: 'memory://', adminPassword: 'secreto-de-prueba',
     sessionSecret: 'x'.repeat(32), production: false, mpAccessToken: '', mpWebhookSecret: '', notifyWebhookUrl: '',
-    whatsappProvider: '', whatsappNotifyTo: '', callmebotApiKey: '', metaWhatsappToken: '', metaWhatsappPhoneNumberId: '', metaWhatsappTemplate: '', metaWhatsappTemplateLang: 'es_MX',
+    whatsappProvider: '', whatsappNotifyTo: '', callmebotApiKey: '', metaWhatsappToken: '', metaWhatsappPhoneNumberId: '', metaWhatsappTemplate: '', metaWhatsappTemplateLang: 'es_MX', metaWhatsappTemplateButton: true,
     ...over,
   };
 }

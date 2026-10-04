@@ -40,8 +40,29 @@ entrega, cliente y enlace al panel. El servidor lo envía aunque el cliente cier
 
 Configura **una** opción en `.env`:
 - **Meta WhatsApp Cloud API (oficial):** `WHATSAPP_PROVIDER=meta`, `META_WHATSAPP_TOKEN`, `META_WHATSAPP_PHONE_NUMBER_ID`,
-  `META_WHATSAPP_TEMPLATE` (plantilla aprobada de 4 variables: «Nuevo pedido {{1}}. {{2}}. Total: {{3}}. Ver detalle: {{4}} — Frésia Office»).
-  Necesita un número dedicado para enviar, distinto del que recibe.
+  `META_WHATSAPP_TEMPLATE=pedido_fresia`. Si el número que recibe le escribió al número del negocio en las últimas 24 h, llega el
+  mensaje completo tipo comanda; si no, llega la plantilla (Meta no permite saltos de línea en sus variables, así que los productos
+  van en un renglón y el botón abre el detalle).
+
+**Plantilla `pedido_fresia`** (Meta → Plantillas de mensajes → Crear): categoría **Utilidad**, idioma **Español (MEX)**.
+
+Cuerpo:
+```
+🍓 *Nuevo pedido {{1}}*
+
+💵 {{2}}
+🛵 {{3}}
+👤 {{4}}
+
+🧾 *Productos:* {{5}}
+
+📝 {{6}}
+
+Toca «Ver pedido» para el detalle completo.
+```
+Botón: **Visitar sitio web** · texto «Ver pedido» · URL **dinámica** `https://fresia-office.vercel.app/admin/pedidos/{{1}}`.
+Si se crea sin botón, pon `META_WHATSAPP_TEMPLATE_BUTTON=0`.
+
 - **CallMeBot (rápida, gratuita):** `WHATSAPP_PROVIDER=callmebot`, `CALLMEBOT_APIKEY`. Se activa desde tu WhatsApp siguiendo
   https://www.callmebot.com/blog/free-api-whatsapp-messages/. Es un servicio de terceros: el texto del aviso pasa por sus servidores.
 

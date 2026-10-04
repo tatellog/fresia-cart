@@ -4,15 +4,14 @@ import type { Config } from './env';
  * Envío de avisos de WhatsApp AL NEGOCIO (no al cliente).
  *
  * - meta: WhatsApp Cloud API oficial. Los mensajes iniciados por el negocio
- *   requieren una plantilla aprobada; usamos una con 4 variables de una línea:
- *   «Nuevo pedido {{1}}. {{2}}. Total: {{3}}. Ver detalle: {{4}} — Frésia Office».
+ *   requieren una plantilla aprobada (ver README: «pedido_fresia», 6 variables + botón).
  *   Si la plantilla aún no está aprobada, se manda como texto (solo llega si el receptor
  *   escribió al número del negocio en las últimas 24 h).
  * - callmebot: servicio gratuito para recibir mensajes en TU número
  *   (https://www.callmebot.com/blog/free-api-whatsapp-messages/). Es un tercero:
  *   el texto del aviso pasa por sus servidores.
  */
-export type WhatsAppMessage = { to: string; text: string; params: [string, string, string, string] };
+export type WhatsAppMessage = { to: string; text: string; params: string[]; buttonParam?: string };
 
 export function whatsappConfigured(cfg: Config): boolean {
   if (cfg.whatsappProvider === 'meta') return Boolean(cfg.metaWhatsappToken && cfg.metaWhatsappPhoneNumberId);
@@ -33,9 +32,15 @@ export async function sendWhatsApp(cfg: Config, msg: WhatsAppMessage): Promise<v
     const res = await post({
       type: 'template',
       template: {
-        name: cfg.metaWhatsappTemplate || 'nuevo_pedido',
+        name: cfg.metaWhatsappTemplate || 'pedido_fresia',
         language: { code: cfg.metaWhatsappTemplateLang },
-        components: [{ type: 'body', parameters: msg.params.map((t) => ({ type: 'text', text: oneLine(t) })) }],
+        components: [
+          { type: 'body', parameters: msg.params.map((t) => ({ type: 'text', text: oneLine(t) })) },
+          // Botón «Ver pedido»: URL base fija en la plantilla + id del pedido.
+          ...(msg.buttonParam && cfg.metaWhatsappTemplateButton
+            ? [{ type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: msg.buttonParam }] }]
+            : []),
+        ],
       },
     });
     if (res.ok) return;

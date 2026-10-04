@@ -99,50 +99,83 @@ const mask = (n: string) => n.replace(/\d(?=\d{4})/g, '•');
 
 /** Texto del aviso: lo que la cocina y el repartidor necesitan, sin datos de pago. */
 export function buildWhatsApp(kind: NotifyKind, o: AdminOrder, adminUrl: string, to: string): WhatsAppMessage {
-  const pay = o.paymentMethod === 'contra_entrega' ? 'Paga al recibir' : o.paymentStatus === 'aprobado' ? 'Pagado en línea' : 'Pago en línea pendiente';
   const total = o.total != null ? money(o.total) : 'envío por cotizar';
-  const where =
+  const cod = o.paymentMethod === 'contra_entrega';
+  const pay = cod
+    ? `${o.paymentStatus === 'aprobado' ? '✅ Cobrado' : '💵 Paga ' + (o.fulfillment === 'pickup' ? 'al recoger' : 'al recibir')}: ${total}`
+    : o.paymentStatus === 'aprobado'
+      ? `✅ Pagado en línea: ${total}`
+      : `⏳ Pago en línea pendiente: ${total}`;
+
+  const a = o.address;
+  const eta =
+    o.deliveryQuote.status === 'covered' ? ` · ${o.deliveryQuote.etaMin}–${o.deliveryQuote.etaMax} min`
+    : o.deliveryQuote.status === 'quoted' ? ` · ${o.deliveryQuote.etaText}`
+    : o.deliveryQuote.status === 'manual' ? ' · ⚠️ confirmar envío' : '';
+  const map = a?.location ? `https://maps.google.com/?q=${a.location.lat.toFixed(6)},${a.location.lng.toFixed(6)}` : '';
+  const deliveryLines =
     o.fulfillment === 'pickup'
-      ? 'Recoge en Frésia'
-      : `Entrega: ${o.address?.street} ${o.address?.number}, ${o.address?.office}${o.address?.references ? ` (${o.address.references})` : ''}`;
-  const size = (label: string) => (label === 'Pieza' || label === 'Combo' ? '' : ` ${label}`);
-  const tops = (ts: { name: string }[]) => (ts.length ? ` (${ts.map((t) => t.name).join(', ')})` : '');
-  const items = o.items
-    .map((l) => {
-      const who = l.forWhom ? ` → ${l.forWhom}` : '';
-      if (!l.choices) return `• ${l.qty}× ${l.name}${size(l.sizeLabel)}${tops(l.toppings)}${who}`;
-      // Agrupa piezas idénticas del combo: «2× Pan relleno Frésia (Cajeta)».
-      const groups = new Map<string, number>();
-      for (const c of l.choices) {
-        const key = `${c.name}${size(c.sizeLabel)}${tops(c.toppings)}`;
-        groups.set(key, (groups.get(key) ?? 0) + 1);
-      }
-      const pieces = [...groups].map(([k, n]) => `   – ${n}× ${k}`).join('\n');
-      return `• ${l.qty}× ${l.name}${who}\n${pieces}`;
-    })
-    .join('\n');
-  const loc = o.address?.location;
-  const map = loc ? `📍 https://maps.google.com/?q=${loc.lat.toFixed(6)},${loc.lng.toFixed(6)}` : '';
-  const customer = `${o.customerName} · ${o.customerPhone}`;
+      ? ['🏪 *Recoge en Frésia*']
+      : [
+          `🛵 *Entrega a domicilio*${eta}`,
+          `   ${a?.street} ${a?.number}, ${a?.office}`,
+          ...(a?.colonia ? [`   ${a.colonia}${a.postalCode ? `, CP ${a.postalCode}` : ''}`] : []),
+          ...(a?.references ? [`   Ref: ${a.references}`] : []),
+          ...(map ? [`   📍 ${map}`] : []),
+        ];
+  const phone = o.customerPhone.replace(/^(\d{2})(\d{4})(\d{4})$/, '$1 $2 $3');
+
+  const size = (label: string) => (label === 'Pieza' || label === 'Combo' ? '' : ` · ${label}`);
+  const tops = (ts: { name: string }[]) => (ts.length ? `: ${ts.map((t) => t.name.charAt(0).toLowerCase() + t.name.slice(1)).join(', ')}` : '');
+  const blocks = o.items.map((l, i) => {
+    const head = `*${i + 1}) ${l.qty > 1 ? `${l.qty} × ` : ''}${l.choices ? 'Combo ' : ''}${l.name}${l.choices ? '' : size(l.sizeLabel)}* — ${money(l.lineTotal)}`;
+    const who = l.forWhom ? [`   Para: ${l.forWhom}`] : [];
+    if (!l.choices) return [head, ...who, ...(l.toppings.length ? [`   Toppings${tops(l.toppings)}`] : ['   Sin toppings'])];
+    const groups = new Map<string, number>();
+    for (const c of l.choices) {
+      const key = `${c.name}${size(c.sizeLabel)}${tops(c.toppings)}`;
+      groups.set(key, (groups.get(key) ?? 0) + 1);
+    }
+    return [head, ...who, ...[...groups].map(([k, n]) => `   • ${n} ${k}`)];
+  });
+
   const text = [
-    `🍓 ${TITLES[kind]}: ${o.number}`,
-    `${pay} · Total ${total}`,
-    where,
-    ...(map ? [map] : []),
-    customer,
+    `🍓 *NUEVO PEDIDO ${o.number}*${kind === 'cotizacion_envio' ? ' — confirmar envío' : kind === 'revision' ? ' — revisar' : ''}`,
     '',
-    items,
-    o.notes ? `\nNotas: ${o.notes}` : '',
-    o.needsReview ? `\n⚠️ ${o.needsReview}` : '',
+    pay,
+    ...deliveryLines,
+    `👤 ${o.customerName} · ${phone}`,
     '',
-    adminUrl,
-  ]
-    .filter((l, i, a) => !(l === '' && a[i - 1] === ''))
-    .join('\n')
-    .trim();
+    `🧾 *PRODUCTOS*`,
+    ...blocks.flatMap((b) => ['', ...b]),
+    ...(o.notes ? ['', `📝 Notas: ${o.notes}`] : []),
+    ...(o.needsReview ? ['', `⚠️ ${o.needsReview}`] : []),
+    '',
+    `Ver en el panel: ${adminUrl}`,
+  ].join('\n');
+
+  // Plantilla de Meta: las variables no admiten saltos de línea, así que cada dato va en
+  // su propio renglón fijo de la plantilla y los productos se separan con « ┃ ».
+  const flat = (lines: string[]) => lines.map((x) => x.trim()).filter(Boolean).join(' · ').replace(/\*/g, '');
+  const products = blocks
+    .map((b) => {
+      const [head, ...rest] = b.map((x) => x.trim().replace(/\*/g, ''));
+      const who = rest.find((x) => x.startsWith('Para: '));
+      const detail = rest.filter((x) => x !== who).map((x) => x.replace(/^• /, '')).join('; ');
+      return `${head}${who ? ` (${who})` : ''}: ${detail}`;
+    })
+    .join('  ┃  ');
   return {
     to,
     text,
-    params: [o.number, `${pay} · ${where} · ${customer} · ${items.replace(/\n\s*/g, ' ')}`, total, adminUrl],
+    params: [
+      o.number,
+      pay.replace(/^\S+\s/, ''),
+      flat(deliveryLines).replace(/^\S+\s/, ''),
+      `${o.customerName} · ${phone}`,
+      products,
+      o.notes || 'Sin notas',
+    ],
+    buttonParam: o.id,
   };
 }

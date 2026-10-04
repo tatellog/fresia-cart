@@ -30,6 +30,8 @@ export type Config = {
   metaWhatsappPhoneNumberId: string;
   metaWhatsappTemplate: string;
   metaWhatsappTemplateLang: string;
+  /** La plantilla tiene botón de URL dinámica (…/admin/pedidos/{{1}}). */
+  metaWhatsappTemplateButton: boolean;
 };
 
 export function loadConfig(overrides: Partial<Config> = {}): Config {
@@ -57,6 +59,7 @@ export function loadConfig(overrides: Partial<Config> = {}): Config {
     metaWhatsappPhoneNumberId: process.env.META_WHATSAPP_PHONE_NUMBER_ID || '',
     metaWhatsappTemplate: process.env.META_WHATSAPP_TEMPLATE || '',
     metaWhatsappTemplateLang: process.env.META_WHATSAPP_TEMPLATE_LANG || 'es_MX',
+    metaWhatsappTemplateButton: process.env.META_WHATSAPP_TEMPLATE_BUTTON !== '0',
     ...overrides,
   };
   if (!cfg.databaseUrl) {
