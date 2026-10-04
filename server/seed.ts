@@ -148,7 +148,7 @@ Transferencias: no vendemos ni compartimos tus datos, salvo con Mercado Pago (pa
 
 En tu navegador: guardamos tu carrito y tus pedidos recientes en tu propio dispositivo para que no los pierdas. No usamos cookies de publicidad ni de rastreo.
 
-Conservación: ${PENDING}.
+Conservación: las fotos de entrega se borran automáticamente a los 30 días. Para los demás datos: ${PENDING}.
 
 Derechos ARCO y revocación del consentimiento: para acceder, rectificar, cancelar u oponerte al uso de tus datos, o revocar tu consentimiento, escribe a fresia12026@gmail.com con tu nombre, teléfono y lo que solicitas. Te responderemos en un máximo de 20 días hábiles.
 

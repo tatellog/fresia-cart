@@ -170,6 +170,9 @@ export type CustomerLocation = LatLng & { accuracyM: number };
 
 export type CourierMode = 'walk' | 'bike' | 'moto';
 
+/** Días que se guarda la foto de entrega (después se borra). */
+export const PHOTO_RETENTION_DAYS = 30;
+
 /** Seguimiento en vivo para el cliente (solo mientras va en camino). */
 export type TrackingInfo = {
   active: boolean;

@@ -12,6 +12,11 @@ export function passwordMatches(cfg: Config, attempt: string) {
   return timingSafeEqual(sha(attempt), sha(cfg.adminPassword));
 }
 
+/** Compara una clave secreta en tiempo constante. */
+export function secretMatches(attempt: string, secret: string) {
+  return Boolean(secret) && timingSafeEqual(sha(attempt), sha(secret));
+}
+
 function sign(cfg: Config, value: string) {
   return createHmac('sha256', cfg.sessionSecret).update(value).digest('base64url');
 }
