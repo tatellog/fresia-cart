@@ -133,27 +133,39 @@ export const LEGAL_DRAFTS: Record<LegalSlug, LegalDoc> = {
     slug: 'privacidad',
     title: 'Aviso de privacidad',
     approved: false,
-    body: `Responsable: ${PENDING} (razón social, domicilio y contacto).
+    body: `Responsable: Tania Anahí Tello García (RFC TEGT900130SW9), quien opera Frésia, con domicilio para oír y recibir notificaciones en Av. Insurgentes Sur 612, local C, esq. Valle de Arizpe, col. Del Valle Norte, C.P. 03103, alcaldía Benito Juárez, Ciudad de México. Contacto: fresia12026@gmail.com.
 
-Datos que recabamos: nombre, teléfono, dirección de entrega y los nombres opcionales que escribas en "¿Para quién es?".
+Datos que recabamos: nombre, teléfono, dirección de entrega (incluida la ubicación del mapa si decides compartirla), los nombres opcionales que escribas en "¿Para quién es?" y, solo si pides factura, tus datos fiscales (RFC, nombre o razón social, régimen fiscal, código postal fiscal, uso del CFDI y correo). No recabamos datos sensibles.
 
-Finalidad: preparar y entregar tu pedido, y contactarte sobre él. No usamos tus datos para publicidad sin tu consentimiento.
+Finalidades necesarias: preparar y entregar tu pedido, cobrarlo, contactarte sobre él, mostrarte su estado y la foto de entrega, emitir tu factura si la pides y sumar sellos a tu tarjeta de Frésia Club si tienes una registrada con el mismo teléfono. No usamos tus datos para publicidad.
 
-Pagos: los realiza Mercado Pago. Frésia no recibe ni guarda datos de tarjetas.
+Pagos: los procesa Mercado Pago. Frésia no recibe ni guarda datos de tarjetas.
+
+Transferencias: no vendemos ni compartimos tus datos, salvo con Mercado Pago (para cobrar tu pedido) y con el SAT al emitir tu factura (solo si la pides), y cuando lo exija una autoridad.
+
+En tu navegador: guardamos tu carrito y tus pedidos recientes en tu propio dispositivo para que no los pierdas. No usamos cookies de publicidad ni de rastreo.
 
 Conservación: ${PENDING}.
 
-Derechos ARCO: para acceder, rectificar, cancelar u oponerte al uso de tus datos, escribe a ${PENDING}.`,
+Derechos ARCO y revocación del consentimiento: para acceder, rectificar, cancelar u oponerte al uso de tus datos, o revocar tu consentimiento, escribe a fresia12026@gmail.com con tu nombre, teléfono y lo que solicitas. Te responderemos en un máximo de 20 días hábiles.
+
+Cambios a este aviso: los publicaremos en esta misma página.`,
   },
   entregas: {
     slug: 'entregas',
     title: 'Política de entregas',
     approved: false,
-    body: `Zonas de cobertura y tarifas: se muestran antes de pagar, según tu código postal.
+    body: `Cobertura: entregamos a oficinas cercanas a Frésia (Av. Insurgentes Sur 612, local C, Del Valle Norte). Antes de pagar te mostramos si tu dirección está dentro de la zona, el costo de envío y el tiempo estimado.
 
-Direcciones fuera de zona: confirmamos el costo por WhatsApp antes de cobrar.
+Fuera de zona: si no podemos confirmar tu dirección automáticamente, te confirmamos el costo antes de cobrar.
+
+Horario: lunes a jueves de 12:00 a 20:30, viernes y sábado de 12:00 a 20:00; domingo cerrado. Puedes programar tu pedido para más tarde o para otro día.
 
 Tiempos estimados: ${PENDING}.
+
+Seguimiento: cuando tu pedido sale, puedes ver al repartidor en el mapa desde la página de tu pedido. Al entregarlo tomamos una foto como comprobante, que solo ve quien tiene el enlace del pedido.
+
+Pago contra entrega: solo en efectivo; indícanos con cuánto pagas para llevar cambio.
 
 Recepción en oficinas: ${PENDING} (p. ej. quién recibe en recepción, tiempo de espera del repartidor).`,
   },
