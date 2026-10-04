@@ -1,3 +1,6 @@
+import type { Schedule } from './schedule';
+import type { InvoiceData } from './invoice';
+
 // Modelo compartido entre navegador y servidor.
 // Todos los importes van en centavos (enteros) para evitar errores de redondeo.
 
@@ -73,6 +76,7 @@ export type PricedChoice = {
   slotId: string;
   slotLabel: string;
   productId: string;
+  sizeId: string;
   name: string;
   sizeLabel: string;
   toppings: PricedTopping[];
@@ -217,6 +221,12 @@ export type PublicOrder = {
   cashTendered: number | null;
   /** Cuándo se subió la foto de entrega (comprobante); null si no hay. */
   deliveryPhotoAt: string | null;
+  /** Hora para la que se programó (null = lo antes posible). */
+  scheduledFor: string | null;
+  invoice: InvoiceData | null;
+  invoiceStatus: 'no_aplica' | 'solicitada' | 'emitida';
+  /** Pedido de equipo del que salió, si aplica. */
+  groupName: string | null;
   orderStatus: OrderStatus;
   refundStatus: RefundStatus;
   demo: boolean;
@@ -225,6 +235,8 @@ export type PublicOrder = {
 
 export type AdminOrder = PublicOrder & {
   id: string;
+  /** QR / edificio que trajo al cliente. */
+  source: string | null;
   updatedAt: string;
   paidAt: string | null;
   needsReview: string | null;
@@ -236,6 +248,7 @@ export type MenuResponse = {
   products: Product[];
   toppings: Topping[];
   rules: MenuRules;
+  schedule: Schedule;
   business: BusinessInfo;
   delivery: Omit<DeliveryConfig, 'zones'> & { zoneNames: string[] };
   paymentsMode: 'demo' | 'mercadopago';

@@ -885,3 +885,21 @@ legend {
   font-size: 0.9375rem;
   box-shadow: var(--shadow);
 }
+
+.group-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  padding: 10px 20px;
+  background: var(--rose-soft);
+  color: var(--choc);
+  font-size: 0.875rem;
+}
+.group-banner a { font-weight: 600; }
+.group-banner .linkbtn { min-height: 0; padding: 0; }
+.closed-banner {
+  margin-top: 12px;
+  text-align: center;
+}

@@ -4,6 +4,8 @@ import { formatDate } from '../lib/format';
 import { LoadError, Spinner } from '../components/ui';
 import { MoneyInput, SaveBar, Toggle, splitList } from './fields';
 import type { BusinessInfo, DeliveryConfig, LegalDoc, Zone } from '../../shared/types';
+import type { Schedule } from '../../shared/schedule';
+import { scheduleText } from '../../shared/schedule';
 
 function useResource<T>(url: string) {
   const [value, setValue] = useState<T | null>(null);
@@ -196,7 +198,11 @@ export function BusinessSettings() {
         <div className="field"><label>Nombre</label><input className="input sm" value={b.name} onChange={(e) => set({ name: e.target.value })} /></div>
         <div className="field"><label>Dirección</label><input className="input sm" value={b.address} onChange={(e) => set({ address: e.target.value })} /></div>
         <div className="field"><label>Enlace de Google Maps</label><input className="input sm" value={b.mapsUrl} placeholder="https://maps.app.goo.gl/…" onChange={(e) => set({ mapsUrl: e.target.value })} /></div>
-        <div className="field"><label>Horario</label><textarea className="textarea" value={b.hours} placeholder={'Lunes a viernes · 10:00–19:00'} onChange={(e) => set({ hours: e.target.value })} /></div>
+        <div className="field">
+          <label>Horario que ven los clientes</label>
+          <p className="legal-body muted small">{b.hours || '—'}</p>
+          <span className="hint">Se actualiza solo al guardar el horario de abajo.</span>
+        </div>
         <div className="field">
           <label>WhatsApp</label>
           <input className="input sm" inputMode="numeric" value={b.whatsapp} placeholder="5215512345678" onChange={(e) => set({ whatsapp: e.target.value.replace(/\D/g, '') })} />
@@ -206,7 +212,53 @@ export function BusinessSettings() {
         <Toggle checked={b.example} onChange={(example) => set({ example })} label="Mostrar como datos por confirmar" />
       </section>
       <SaveBar busy={r.busy} saved={r.everSaved} error={r.saveError} dirty={r.dirty} onSave={() => r.save()} />
+      <ScheduleEditor onSaved={r.load} />
     </div>
+  );
+}
+
+const DAYS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+const ORDER = [1, 2, 3, 4, 5, 6, 0];
+
+/** Horario por día: decide cuándo se acepta «lo antes posible» y qué horas se pueden programar. */
+function ScheduleEditor({ onSaved }: { onSaved: () => void }) {
+  const r = useResource<Schedule>('/api/admin/schedule');
+  if (!r.value) return null;
+  const s = r.value;
+  const setDay = (d: number, v: Schedule['days'][number]) => r.setValue({ ...s, days: s.days.map((x, i) => (i === d ? v : x)) });
+  return (
+    <section className="card stack">
+      <h2>Horario de pedidos</h2>
+      <p className="muted small">Fuera de este horario la tienda solo deja programar pedidos.</p>
+      {ORDER.map((d) => {
+        const h = s.days[d];
+        return (
+          <div key={d} className="row" style={{ flexWrap: 'wrap', gap: 10 }}>
+            <span style={{ width: 96, fontWeight: 600 }}>{DAYS[d]}</span>
+            <Toggle checked={!!h} onChange={(on) => setDay(d, on ? { open: '12:00', close: '20:00' } : null)} label={h ? 'Abierto' : 'Cerrado'} />
+            {h && (
+              <>
+                <input aria-label={`Abre ${DAYS[d]}`} type="time" className="input sm" style={{ width: 130 }} value={h.open} onChange={(e) => setDay(d, { ...h, open: e.target.value })} />
+                <span>a</span>
+                <input aria-label={`Cierra ${DAYS[d]}`} type="time" className="input sm" style={{ width: 130 }} value={h.close} onChange={(e) => setDay(d, { ...h, close: e.target.value })} />
+              </>
+            )}
+          </div>
+        );
+      })}
+      <div className="row" style={{ flexWrap: 'wrap', gap: 16 }}>
+        <div className="field" style={{ width: 200 }}>
+          <label>Anticipación mínima (min)</label>
+          <input className="input sm" inputMode="numeric" value={s.leadMinutes} onChange={(e) => r.setValue({ ...s, leadMinutes: parseInt(e.target.value, 10) || 0 })} />
+        </div>
+        <div className="field" style={{ width: 200 }}>
+          <label>Programar hasta (días)</label>
+          <input className="input sm" inputMode="numeric" value={s.maxDays} onChange={(e) => r.setValue({ ...s, maxDays: Math.max(1, parseInt(e.target.value, 10) || 1) })} />
+        </div>
+      </div>
+      <p className="legal-body muted small">{scheduleText(s)}</p>
+      <SaveBar busy={r.busy} saved={r.everSaved} error={r.saveError} dirty={r.dirty} onSave={() => r.save().then(onSaved)} />
+    </section>
   );
 }
 
@@ -305,6 +357,8 @@ export function SystemSettings() {
           </table>
         )}
       </section>
+      <QrSources />
+
       <section className="card stack">
         <h2>Configuración</h2>
         <dl className="kv">
@@ -340,4 +394,68 @@ function OnlineNote() {
   }, []);
   if (ready !== false) return null;
   return <p className="muted small">Se mostrará a los clientes cuando configures Mercado Pago. Mientras tanto solo ven «pago al recibir».</p>;
+}
+
+type Source = { slug: string; label: string; scans: number; orders: number; sales: number; url: string };
+
+/** Un QR por edificio: cuántos lo escanean, cuántos piden y cuánto venden. */
+function QrSources() {
+  const [list, setList] = useState<Source[] | null>(null);
+  const [label, setLabel] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const load = () => api<{ sources: Source[] }>('/api/admin/qr-sources').then((r) => setList(r.sources), (e: Error) => setError(e.message));
+  useEffect(() => {
+    void load();
+  }, []);
+  const slugOf = (s: string) =>
+    s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40);
+
+  async function add() {
+    setError(null);
+    try {
+      await api('/api/admin/qr-sources', { body: { label: label.trim(), slug: slugOf(label) } });
+      setLabel('');
+      void load();
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
+  async function download(s: Source) {
+    const svg = await (await fetch(`/api/admin/qr-sources/${s.slug}/svg`, { credentials: 'same-origin' })).text();
+    const url = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `fresia-qr-${s.slug}.svg`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  return (
+    <section className="card stack">
+      <h2>QR por edificio</h2>
+      <p className="muted">Imprime un QR distinto para cada edificio o empresa y ve cuál trae más pedidos.</p>
+      <form className="row" style={{ flexWrap: 'wrap' }} onSubmit={(e) => { e.preventDefault(); void add(); }}>
+        <input className="input sm" style={{ flex: '1 1 220px' }} placeholder="Ej. Torre Insurgentes 600" value={label} onChange={(e) => setLabel(e.target.value)} aria-label="Nombre del edificio" />
+        <button className="btn primary small" disabled={label.trim().length < 2}>Crear QR</button>
+      </form>
+      {error && <p className="error-text">{error}</p>}
+      {list && list.length > 0 && (
+        <table>
+          <thead><tr><th>Edificio</th><th>Escaneos</th><th>Pedidos</th><th>Ventas</th><th /></tr></thead>
+          <tbody>
+            {list.map((s) => (
+              <tr key={s.slug}>
+                <td>{s.label}<div className="muted small" style={{ wordBreak: 'break-all' }}>{s.url}</div></td>
+                <td>{s.scans}</td>
+                <td>{s.orders}</td>
+                <td className="price">${(s.sales / 100).toLocaleString('es-MX')}</td>
+                <td><button className="btn ghost small" onClick={() => download(s)}>QR</button></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      <p className="muted small">«Ventas» cuenta pedidos entregados. Los pedidos se atribuyen al último QR escaneado en los 30 días previos.</p>
+    </section>
+  );
 }

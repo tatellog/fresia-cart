@@ -3,6 +3,8 @@ import type { InputHTMLAttributes, ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useMenu } from '../lib/menu';
 import { useCart } from '../lib/cart';
+import { activeGroup, setActiveGroup } from '../lib/groupState';
+import { useState } from 'react';
 import { money } from '../lib/format';
 
 export function DemoBanner() {
@@ -44,8 +46,35 @@ export function TopBar({ back, step }: { back?: string | (() => void); step?: st
   );
 }
 
+/** Aviso cuando este teléfono está agregando a un pedido de equipo. */
+export function GroupModeBanner() {
+  const [g, setG] = useState(activeGroup);
+  if (!g) return null;
+  return (
+    <div className="group-banner" role="status">
+      <span>
+        👥 Agregando al pedido <strong>«{g.name}»</strong> como {g.memberName}
+      </span>
+      <span className="row" style={{ gap: 12 }}>
+        <Link to={`/equipo/${g.code}`}>Ver pedido</Link>
+        <button type="button" className="linkbtn" onClick={() => { setActiveGroup(null); setG(null); }}>Salir</button>
+      </span>
+    </div>
+  );
+}
+
 export function CartBar() {
   const { count, subtotal } = useCart();
+  const g = activeGroup();
+  if (g) {
+    return (
+      <div className="cartbar">
+        <div className="inner">
+          <Link to={`/equipo/${g.code}`} className="btn primary" style={{ justifyContent: 'center' }}>👥 Ver pedido del equipo</Link>
+        </div>
+      </div>
+    );
+  }
   if (count === 0) return null;
   return (
     <div className="cartbar">

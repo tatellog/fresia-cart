@@ -3,7 +3,11 @@ import { iso, isoOrNull } from './db';
 import type { DB } from './db';
 import { HttpError, onlinePaymentReady } from './context';
 import type { Ctx } from './context';
-import { getDelivery, getRules, listProducts, listToppings, nextOrderNumber } from './store';
+import { getDelivery, getRules, getSchedule, listProducts, listToppings, nextOrderNumber } from './store';
+import { groupLinesForOrder } from './groups';
+import { isOpenAt, isValidSlot, nextOpening } from '../shared/schedule';
+import { invoiceErrors, normalizeInvoice } from '../shared/invoice';
+import type { InvoiceData } from '../shared/invoice';
 import { minimumMessage, priceCart } from '../shared/pricing';
 import { distanceM, quoteDelivery } from '../shared/coverage';
 import type {
@@ -18,6 +22,13 @@ export type OrderInput = {
   address: Address | null;
   notes: string;
   items: CartLineInput[];
+  /** QR / edificio de origen (slug). */
+  source?: string | null;
+  invoice?: InvoiceData | null;
+  /** ISO de la hora programada; null = lo antes posible. */
+  scheduledFor?: string | null;
+  /** Pedido de equipo: el servidor toma los productos del grupo. */
+  group?: { code: string; token: string } | null;
 };
 
 export type OrderRow = {
@@ -42,6 +53,11 @@ export type OrderRow = {
   payment_status: PaymentStatus;
   cash_tendered: number | null;
   delivery_photo_at: Date | string | null;
+  source: string | null;
+  invoice: InvoiceData | null;
+  invoice_status: 'no_aplica' | 'solicitada' | 'emitida';
+  scheduled_for: Date | string | null;
+  group_name: string | null;
   order_status: OrderStatus;
   refund_status: RefundStatus;
   needs_review: string | null;
@@ -51,14 +67,17 @@ export type OrderRow = {
 };
 
 /** Cotiza con el catálogo y la cobertura del servidor. Ignora cualquier importe del navegador. */
-export async function quoteOrder(db: DB, input: Pick<OrderInput, 'fulfillment' | 'address' | 'items'>): Promise<Quote> {
+export async function quoteOrder(db: DB, input: Pick<OrderInput, 'fulfillment' | 'address' | 'items'>, opts: { group?: boolean } = {}): Promise<Quote> {
   const [products, toppings, cfg, rules] = await Promise.all([listProducts(db), listToppings(db), getDelivery(db), getRules(db)]);
-  const priced = priceCart(input.items, products, toppings, rules);
+  // En pedidos de equipo cada quien pide de a uno: el mínimo de piezas se revisa en el total.
+  const priced = priceCart(input.items, products, toppings, rules, { ignoreMinQty: opts.group });
   const errors = priced.errors.map((e) => e.message);
   if (input.items.length === 0) errors.push('Tu carrito está vacío.');
   else if (!priced.errors.length) {
     const min = minimumMessage(priced.fresias, rules);
     if (min) errors.push(min);
+    const pieces = priced.lines.reduce((s, l) => s + l.qty, 0);
+    if (opts.group && pieces < rules.minQtyPerItem) errors.push(`El pedido de equipo necesita al menos ${rules.minQtyPerItem} piezas.`);
   }
 
   let delivery: DeliveryQuote;
@@ -109,7 +128,36 @@ export async function createOrder(ctx: Ctx, idempotencyKey: string, input: Order
   const prev = await existing();
   if (prev) return { order: prev, created: false };
 
-  const quote = await quoteOrder(db, input);
+  // Pedido de equipo: los productos salen del grupo, no del navegador.
+  let group: Awaited<ReturnType<typeof groupLinesForOrder>>['group'] | null = null;
+  if (input.group) {
+    const g = await groupLinesForOrder(ctx, input.group.code, input.group.token);
+    group = g.group;
+    input = { ...input, items: g.lines };
+  }
+
+  // Horario: programado en un horario válido, o «lo antes posible» solo si está abierto.
+  const schedule = await getSchedule(db);
+  const now = ctx.now();
+  if (input.scheduledFor) {
+    if (!isValidSlot(input.scheduledFor, now, schedule)) throw new HttpError(422, 'Ese horario ya no está disponible. Elige otro.', { code: 'slot_unavailable' });
+  } else if (!isOpenAt(now, schedule)) {
+    const when = nextOpening(now, schedule);
+    throw new HttpError(422, `Ahora estamos cerrados${when ? `; abrimos ${when}` : ''}. Programa tu pedido.`, { code: 'closed' });
+  }
+
+  let invoice: InvoiceData | null = null;
+  if (input.invoice) {
+    const errs = Object.values(invoiceErrors(input.invoice));
+    if (errs.length) throw new HttpError(422, errs[0]!, { code: 'invoice' });
+    invoice = normalizeInvoice(input.invoice);
+  }
+
+  const source = input.source
+    ? (await db.one<{ slug: string }>('select slug from office.qr_sources where slug = $1', [input.source]))?.slug ?? null
+    : null;
+
+  const quote = await quoteOrder(db, input, { group: !!group });
   if (quote.errors.length) throw new HttpError(422, quote.errors[0], { errors: quote.errors });
   const cfg = await getDelivery(db);
   const cod = input.paymentMethod === 'contra_entrega';
@@ -128,8 +176,10 @@ export async function createOrder(ctx: Ctx, idempotencyKey: string, input: Order
     const number = await nextOrderNumber(q);
     const row = await q.one<OrderRow>(
       `insert into office.orders (id, number, access_token, idempotency_key, request_hash, customer_name, customer_phone,
-         fulfillment, address, notes, items, subtotal, shipping_fee, total, delivery_quote, payment_method, payment_status, order_status, demo, cash_tendered)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11::jsonb, $12, $13, $14, $15::jsonb, $18, $19, $16, $17, $20)
+         fulfillment, address, notes, items, subtotal, shipping_fee, total, delivery_quote, payment_method, payment_status, order_status, demo, cash_tendered,
+         source, invoice, invoice_status, scheduled_for, group_name)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11::jsonb, $12, $13, $14, $15::jsonb, $18, $19, $16, $17, $20,
+         $21, $22::jsonb, $23, $24, $25)
        on conflict (idempotency_key) do nothing
        returning *`,
       [
@@ -137,8 +187,16 @@ export async function createOrder(ctx: Ctx, idempotencyKey: string, input: Order
         input.fulfillment, input.address ? JSON.stringify(input.address) : null, input.notes, JSON.stringify(quote.lines),
         quote.subtotal, quote.shippingFee, quote.total, JSON.stringify(quote.delivery), orderStatus,
         ctx.provider.name === 'demo', input.paymentMethod, cod ? 'por_cobrar' : 'sin_pagar', cashTendered,
+        source, invoice ? JSON.stringify(invoice) : null, invoice ? 'solicitada' : 'no_aplica', input.scheduledFor ?? null, group?.name ?? null,
       ],
     );
+    if (row && group) {
+      const taken = await q.query<{ id: string }>(
+        "update office.group_orders set status = 'pedido', order_id = $2 where id = $1 and status = 'abierto' returning id",
+        [group.id, id],
+      );
+      if (!taken.length) throw new HttpError(409, 'Este pedido de equipo ya se envió.');
+    }
     if (row) {
       await addEvent(q, id, 'creado', `${manual ? 'Requiere cotización de envío' : cod ? 'Recibido' : 'Esperando pago'} · ${cod ? 'paga al recibir' : 'pago en línea'}`, 'cliente');
     }
@@ -197,6 +255,10 @@ export function toPublic(row: OrderRow): PublicOrder {
     paymentStatus: row.payment_status,
     cashTendered: row.cash_tendered ?? null,
     deliveryPhotoAt: isoOrNull(row.delivery_photo_at),
+    scheduledFor: isoOrNull(row.scheduled_for),
+    invoice: row.invoice ?? null,
+    invoiceStatus: row.invoice_status ?? 'no_aplica',
+    groupName: row.group_name ?? null,
     orderStatus: row.order_status,
     refundStatus: row.refund_status,
     demo: row.demo,
@@ -215,6 +277,7 @@ export async function toAdmin(db: DB, row: OrderRow): Promise<AdminOrder> {
   return {
     ...toPublic(row),
     id: row.id,
+    source: row.source ?? null,
     updatedAt: iso(row.updated_at),
     paidAt: isoOrNull(row.paid_at),
     needsReview: row.needs_review,
@@ -306,7 +369,12 @@ export async function markCollected(ctx: Ctx, id: string, actor: string): Promis
   });
 }
 
-export function listOrders(db: DB, filter: 'activos' | 'sin_pagar' | 'todos' | 'revision'): Promise<OrderRow[]> {
+export function listOrders(db: DB, filter: 'activos' | 'sin_pagar' | 'todos' | 'revision' | 'programados'): Promise<OrderRow[]> {
+  if (filter === 'programados') {
+    return db.query<OrderRow>(
+      "select * from office.orders where scheduled_for is not null and order_status not in ('entregado', 'cancelado') order by scheduled_for limit 200",
+    );
+  }
   const where = {
     activos: "where ((payment_status = 'aprobado' or payment_method = 'contra_entrega') and order_status not in ('entregado', 'cancelado')) or order_status = 'cotizando_envio'",
     sin_pagar: "where payment_method = 'online' and order_status = 'esperando_pago' and payment_status <> 'aprobado'",
@@ -388,4 +456,14 @@ export async function saveDeliveryPhoto(ctx: Ctx, id: string, image: Buffer, con
 
 export async function getDeliveryPhoto(db: DB, id: string) {
   return db.one<{ image: Buffer | Uint8Array; content_type: string }>('select image, content_type from office.delivery_photos where order_id = $1', [id]);
+}
+
+export async function setInvoiceStatus(ctx: Ctx, id: string, status: 'solicitada' | 'emitida', actor: string): Promise<OrderRow> {
+  return ctx.db.tx(async (q) => {
+    const row = await q.one<OrderRow>('select * from office.orders where id = $1 for update', [id]);
+    if (!row) throw new HttpError(404, 'Pedido no encontrado.');
+    if (!row.invoice) throw new HttpError(409, 'Este pedido no pidió factura.');
+    await addEvent(q, id, 'factura', status, actor);
+    return (await q.one<OrderRow>('update office.orders set invoice_status = $2, updated_at = now() where id = $1 returning *', [id, status]))!;
+  });
 }

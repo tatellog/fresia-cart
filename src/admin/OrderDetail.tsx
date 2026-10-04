@@ -9,6 +9,8 @@ import { CollectBox } from './Collect';
 import { StatusFlow } from './StatusFlow';
 import { CourierShare } from './CourierShare';
 import { DeliveryProof } from './DeliveryProof';
+import { slotLabel } from '../../shared/schedule';
+import { CFDI_USES, REGIMES } from '../../shared/invoice';
 import type { AdminOrder, OrderStatus, RefundStatus } from '../../shared/types';
 
 
@@ -93,6 +95,12 @@ export default function OrderDetail() {
         <span className="price" style={{ fontSize: '1.25rem' }}>{order.total != null ? money(order.total) : 'Envío por cotizar'}</span>
       </div>
 
+      {order.scheduledFor && order.orderStatus !== 'entregado' && order.orderStatus !== 'cancelado' && (
+        <div className="notice warn" role="status" style={{ fontSize: '1.05rem' }}>
+          🗓 <strong>Programado para {slotLabel(order.scheduledFor)}</strong> · prepáralo para esa hora.
+        </div>
+      )}
+      {order.groupName && <div className="notice">👥 Pedido de equipo «{order.groupName}» · cada producto dice para quién es.</div>}
       {order.orderStatus !== 'entregado' && <CollectBox order={order} />}
       {order.demo && order.paymentMethod === 'online' && <div className="notice warn">Pago en línea simulado: no hubo cobro real.</div>}
       {order.needsReview && (
@@ -175,6 +183,8 @@ export default function OrderDetail() {
       {order.orderStatus === 'en_camino' && order.fulfillment === 'delivery' && <CourierShare orderId={order.id} autoStart={shareNow} />}
 
       {order.orderStatus === 'cotizando_envio' && <ShippingQuoteForm order={order} busy={busy} onSubmit={(fee, etaText) => act(`orders/${order.id}/shipping`, { fee, etaText })} />}
+
+      {order.invoice && <InvoiceCard order={order} busy={busy} onEmitted={() => act(`orders/${order.id}/invoice`, { status: 'emitida' })} />}
 
       <section className="card stack">
         <h2>Productos</h2>
@@ -324,5 +334,34 @@ function CompletedBox({ order }: { order: AdminOrder }) {
         {order.total != null && (paid ? ` · ${order.paymentMethod === 'online' ? 'Pagado en línea' : 'Cobrado'} ${money(order.total)}` : ` · ⚠️ Falta registrar el cobro de ${money(order.total)}`)}
       </span>
     </div>
+  );
+}
+
+function InvoiceCard({ order, busy, onEmitted }: { order: AdminOrder; busy: boolean; onEmitted: () => void }) {
+  const i = order.invoice!;
+  const [copied, setCopied] = useState(false);
+  const regime = REGIMES.find((r) => r.code === i.regime)?.label ?? i.regime;
+  const use = CFDI_USES.find((u) => u.code === i.use)?.label ?? i.use;
+  const text = `RFC: ${i.rfc}\nRazón social: ${i.name}\nRégimen fiscal: ${regime}\nCP fiscal: ${i.zip}\nUso CFDI: ${use}\nCorreo: ${i.email}\nPedido: ${order.number} · ${order.total != null ? money(order.total) : ''}`;
+  return (
+    <section className="card stack">
+      <div className="row between" style={{ flexWrap: 'wrap' }}>
+        <h2>🧾 Factura</h2>
+        <span className={`badge ${order.invoiceStatus === 'emitida' ? 'ok' : 'warn'}`}>{order.invoiceStatus === 'emitida' ? 'Emitida' : 'Por emitir'}</span>
+      </div>
+      <dl className="kv">
+        <dt>RFC</dt><dd>{i.rfc}</dd>
+        <dt>Razón social</dt><dd>{i.name}</dd>
+        <dt>Régimen</dt><dd>{regime}</dd>
+        <dt>CP fiscal</dt><dd>{i.zip}</dd>
+        <dt>Uso CFDI</dt><dd>{use}</dd>
+        <dt>Correo</dt><dd><a href={`mailto:${i.email}`}>{i.email}</a></dd>
+      </dl>
+      <div className="row" style={{ flexWrap: 'wrap' }}>
+        <button className="btn secondary small" onClick={() => navigator.clipboard.writeText(text).then(() => setCopied(true))}>{copied ? 'Copiado ✓' : 'Copiar datos'}</button>
+        {order.invoiceStatus !== 'emitida' && <button className="btn primary small" disabled={busy} onClick={onEmitted}>Marcar factura emitida</button>}
+      </div>
+      <p className="muted small">Emite el CFDI en tu sistema de facturación con estos datos y márcalo aquí.</p>
+    </section>
   );
 }

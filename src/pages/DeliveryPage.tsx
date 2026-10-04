@@ -7,6 +7,7 @@ import type { CheckoutForm } from '../lib/checkout';
 import { api } from '../lib/api';
 import { money } from '../lib/format';
 import { DemoBanner, Field, Spinner, StickyAction, TopBar } from '../components/ui';
+import { groupCheckout } from '../lib/groupState';
 import { etaText, isPostalCode } from '../../shared/coverage';
 import type { DeliveryQuote } from '../../shared/types';
 
@@ -88,7 +89,7 @@ export default function DeliveryPage() {
     if (!data.delivery.pickupEnabled && form.fulfillment === 'pickup' && data.delivery.deliveryEnabled) setForm((f) => ({ ...f, fulfillment: 'delivery' }));
   }, [data, form.fulfillment, setForm]);
 
-  if (cart.lines.length === 0) return <Navigate to="/carrito" replace />;
+  if (cart.lines.length === 0 && !groupCheckout()) return <Navigate to="/carrito" replace />;
 
   const set = (patch: Partial<CheckoutForm>) => setForm((f) => ({ ...f, ...patch }));
   const setAddr = (k: Exclude<keyof CheckoutForm['address'], 'location'>, v: string) => setForm((f) => ({ ...f, address: { ...f.address, [k]: v } }));

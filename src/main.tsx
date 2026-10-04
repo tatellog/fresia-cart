@@ -7,6 +7,9 @@ import { MenuProvider } from './lib/menu';
 import { CartProvider } from './lib/cart';
 import { Spinner } from './components/ui';
 import { useNewVersion } from './lib/version';
+import { captureSource } from './lib/source';
+
+captureSource();
 import MenuPage from './pages/MenuPage';
 import ProductPage from './pages/ProductPage';
 import CartPage from './pages/CartPage';
@@ -15,6 +18,8 @@ import SummaryPage from './pages/SummaryPage';
 import OrderPage from './pages/OrderPage';
 
 const DemoPayPage = lazy(() => import('./pages/DemoPayPage'));
+const GroupNewPage = lazy(() => import('./pages/GroupNewPage'));
+const GroupPage = lazy(() => import('./pages/GroupPage'));
 const LegalPage = lazy(() => import('./pages/LegalPage'));
 const AdminApp = lazy(() => import('./admin/AdminApp'));
 
@@ -68,6 +73,8 @@ createRoot(document.getElementById('root')!).render(
               <Route path="/resumen" element={<SummaryPage />} />
               <Route path="/pedido/:number" element={<OrderPage />} />
               <Route path="/demo-pago/:id" element={<DemoPayPage />} />
+              <Route path="/equipo/nuevo" element={<GroupNewPage />} />
+              <Route path="/equipo/:code" element={<GroupPage />} />
               <Route path="/legal/:slug" element={<LegalPage />} />
               <Route path="/admin/*" element={<AdminApp />} />
               <Route path="*" element={<NotFound />} />

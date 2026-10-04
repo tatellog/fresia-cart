@@ -50,7 +50,7 @@ function priceCombo(combo: Product, choices: ComboChoiceInput[], byProduct: Map<
       if (!p || !p.available || !size) throw new LineError(`Una opción de ${combo.name} ya no está disponible.`);
       const toppings = priceToppings(p, c.toppingIds, byTopping, rules);
       fresias += p.fresiaUnits;
-      priced.push({ slotId: slot.id, slotLabel: slot.label, productId: p.id, name: p.name, sizeLabel: size.label, toppings, extras: sum(toppings) });
+      priced.push({ slotId: slot.id, slotLabel: slot.label, productId: p.id, sizeId: size.id, name: p.name, sizeLabel: size.label, toppings, extras: sum(toppings) });
     }
   }
   if (choices.some((c) => !slots.some((s) => s.id === c.slotId))) throw new LineError(`Una opción de ${combo.name} no es válida.`);
@@ -67,6 +67,8 @@ export function priceCart(
   products: Product[],
   toppings: Topping[],
   rules: MenuRules,
+  /** Pedido de equipo: cada quien pide de a uno; el mínimo se revisa en el total. */
+  opts: { ignoreMinQty?: boolean } = {},
 ): { lines: PricedLine[]; subtotal: number; fresias: number; errors: PricingError[] } {
   const byProduct = new Map(products.map((p) => [p.id, p]));
   const byTopping = new Map(toppings.map((t) => [t.id, t]));
@@ -80,7 +82,7 @@ export function priceCart(
       if (!Number.isInteger(line.qty) || line.qty < 1 || line.qty > MAX_QTY) throw new LineError(`La cantidad debe estar entre 1 y ${MAX_QTY}.`);
       const forWhom = (line.forWhom ?? '').trim().slice(0, MAX_FOR_WHOM);
       const minQty = minQtyFor(product, rules);
-      if (line.qty < minQty) throw new LineError(`${product.name}: el mínimo es de ${minQty} piezas.`);
+      if (!opts.ignoreMinQty && line.qty < minQty) throw new LineError(`${product.name}: el mínimo es de ${minQty} piezas.`);
 
       if (product.combo) {
         const base = product.sizes[0]?.price ?? 0;

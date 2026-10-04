@@ -37,20 +37,38 @@ export const phoneSchema = z
   .transform((s) => s.replace(/\D/g, ''))
   .refine((s) => s.length === 10 || (s.length === 12 && s.startsWith('52')), 'Escribe un teléfono de 10 dígitos.');
 
+export const groupRefSchema = z.object({ code: z.string().regex(/^[a-z0-9]{6,12}$/), token: z.string().min(10).max(100) });
+
 export const quoteSchema = z.object({
   fulfillment: z.enum(['delivery', 'pickup']),
   address: addressSchema.nullable(),
-  items: z.array(lineSchema).min(1, 'Tu carrito está vacío.').max(30),
+  // En pedidos de equipo los productos vienen del grupo (se ignoran estos).
+  items: z.array(lineSchema).max(120),
+  group: groupRefSchema.nullable().optional(),
+});
+
+export const invoiceSchema = z.object({
+  rfc: text(20).min(12, 'RFC inválido.'),
+  name: text(200).min(2),
+  regime: z.string().regex(/^\d{3}$/),
+  zip: z.string().regex(/^\d{5}$/, 'El código postal fiscal tiene 5 dígitos.'),
+  use: z.string().regex(/^[A-Z]\d{2}$/),
+  email: z.string().trim().email('Correo inválido.').max(120),
 });
 
 export const orderSchema = quoteSchema.extend({
   idempotencyKey: z.string().uuid(),
   paymentMethod: z.enum(['online', 'contra_entrega']).default('online'),
+  source: z.string().regex(/^[a-z0-9-]{1,40}$/).nullable().optional(),
+  invoice: invoiceSchema.nullable().optional(),
+  scheduledFor: z.string().datetime().nullable().optional(),
   /** Efectivo: billete con el que paga, en centavos (null = exacto). */
   cashTendered: z.number().int().min(0).max(5_000_000).nullable().default(null),
   customer: z.object({ name: text(80).min(2, 'Escribe tu nombre.'), phone: phoneSchema }),
   notes: text(300).default(''),
-}).refine((o) => o.fulfillment === 'pickup' || o.address != null, { message: 'Falta la dirección de entrega.' });
+})
+  .refine((o) => o.fulfillment === 'pickup' || o.address != null, { message: 'Falta la dirección de entrega.' })
+  .refine((o) => o.items.length > 0 || o.group, { message: 'Tu carrito está vacío.' });
 
 export const coverageSchema = z.object({
   postalCode: z.string().trim(),
@@ -138,7 +156,7 @@ export const legalSchema = z.object({ title: text(80).min(1), body: text(20000),
 
 export const demoOutcome = z.enum(['approved', 'pending', 'rejected']);
 export const demoPaymentStatus = z.enum(['approved', 'rejected', 'cancelled', 'refunded']);
-export const orderFilter = z.enum(['activos', 'sin_pagar', 'revision', 'todos']);
+export const orderFilter = z.enum(['activos', 'sin_pagar', 'revision', 'todos', 'programados']);
 export const orderStatus = z.enum(['recibido', 'confirmado', 'en_preparacion', 'listo', 'en_camino', 'entregado', 'cancelado']);
 export const refundStatus = z.enum(['no_aplica', 'pendiente', 'reembolsado']);
 export const shippingQuote = z.object({ fee: money, etaText: text(60).min(1, 'Indica el tiempo estimado.') });
@@ -158,3 +176,26 @@ export const courierLocationSchema = z.object({
   accuracyM: z.number().min(0).max(100000),
   mode: z.enum(['walk', 'bike', 'moto']).default('walk'),
 });
+
+export const createGroupSchema = z.object({
+  name: text(60).min(2, 'Ponle nombre al pedido (p. ej. «Equipo de Ventas»).'),
+  organizerName: text(40).min(2, 'Escribe tu nombre.'),
+  closesInMinutes: z.number().int().min(10).max(24 * 60).nullable().default(null),
+});
+export const groupItemSchema = z.object({
+  memberName: text(40).min(2, 'Escribe tu nombre.'),
+  memberKey: z.string().min(10).max(80),
+  line: lineSchema,
+});
+export const qrSourceSchema = z.object({
+  label: text(60).min(2, 'Escribe el nombre del edificio.'),
+  slug: z.string().regex(/^[a-z0-9-]{2,40}$/, 'Usa minúsculas, números y guiones.'),
+});
+const hhmm = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
+export const scheduleSchema = z.object({
+  days: z.array(z.object({ open: hhmm, close: hhmm }).nullable()).length(7),
+  leadMinutes: z.number().int().min(0).max(24 * 60),
+  slotMinutes: z.number().int().min(10).max(120),
+  maxDays: z.number().int().min(1).max(14),
+});
+export const invoiceStatusSchema = z.enum(['solicitada', 'emitida']);

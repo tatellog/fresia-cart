@@ -6,7 +6,8 @@ import type { OrderStatus, PublicOrder } from '../../shared/types';
 import { useMenu } from '../lib/menu';
 import { money } from '../lib/format';
 import { recentOrders } from '../lib/checkout';
-import { CartBar, DemoBanner, Footer, LoadError } from '../components/ui';
+import { CartBar, DemoBanner, Footer, GroupModeBanner, LoadError } from '../components/ui';
+import { isOpenAt, nextOpening } from '../../shared/schedule';
 import type { BusinessInfo, MenuResponse, Product } from '../../shared/types';
 
 export default function MenuPage() {
@@ -17,6 +18,7 @@ export default function MenuPage() {
   return (
     <>
       <DemoBanner />
+      <GroupModeBanner />
       <main className="page wide">
         <section className="hero">
           <img src="/brand/fresia-logo.svg" alt="Frésia, fresas con crema" className="logo" width={132} height={196} />
@@ -25,6 +27,12 @@ export default function MenuPage() {
           {data && (data.rules.minQtyPerItem > 1 || data.rules.minFresias > 1) && (
             <p className="badge" style={{ fontSize: '0.875rem', padding: '6px 14px' }}>
               {data.rules.minQtyPerItem > 1 ? `Desde ${data.rules.minQtyPerItem} piezas por producto · combos desde 1` : `Pedido mínimo: ${data.rules.minFresias} Frésias`}
+            </p>
+          )}
+          <Link to="/equipo/nuevo" className="btn secondary small">👥 Pedido de equipo</Link>
+          {data && !isOpenAt(new Date(), data.schedule) && (
+            <p className="notice closed-banner small">
+              Ahora estamos cerrados{nextOpening(new Date(), data.schedule) ? `; abrimos ${nextOpening(new Date(), data.schedule)}` : ''}. Puedes programar tu pedido.
             </p>
           )}
           {active && (

@@ -10,6 +10,7 @@ import { sendPushToAll } from './push';
 import type { PushPayload } from './push';
 import type { AdminOrder } from '../shared/types';
 import { collectInfo } from '../shared/status';
+import { slotLabel } from '../shared/schedule';
 
 export type NotifyKind = 'pedido_pagado' | 'pedido_contra_entrega' | 'cotizacion_envio' | 'revision';
 
@@ -150,6 +151,7 @@ export function buildWhatsApp(kind: NotifyKind, o: AdminOrder, adminUrl: string,
 
   const text = [
     `🍓 *NUEVO PEDIDO ${o.number}*${kind === 'cotizacion_envio' ? ' — confirmar envío' : kind === 'revision' ? ' — revisar' : ''}`,
+    ...extraLines(o),
     '',
     ...payLines,
     ...deliveryLines,
@@ -192,7 +194,8 @@ export function buildWhatsApp(kind: NotifyKind, o: AdminOrder, adminUrl: string,
 /** Notificación corta para el celular o la laptop: lo esencial para decidir si atender ya. */
 export function buildPush(kind: NotifyKind, o: AdminOrder): PushPayload {
   const lines = paymentLines(o);
-  const pay = lines.map((l) => l.trim()).join(' · ');
+  const when = o.scheduledFor ? `🗓 ${slotLabel(o.scheduledFor)} · ` : '';
+  const pay = when + lines.map((l) => l.trim()).join(' · ');
   const where = o.fulfillment === 'pickup' ? 'Recoge en Frésia' : 'A domicilio';
   const pieces = o.items.reduce((n, l) => n + l.qty * (l.choices?.length ?? 1), 0);
   return {
@@ -218,4 +221,13 @@ export function paymentLines(o: AdminOrder): string[] {
           ? `Paga con ${money(o.cashTendered)} → llevar ${money(c.change)} de cambio`
           : 'Paga con el monto exacto';
   return [`💵 ${c.label}`, `   ${extra}`];
+}
+
+/** Programado, pedido de equipo y factura: lo que cambia cómo se atiende el pedido. */
+function extraLines(o: AdminOrder): string[] {
+  return [
+    ...(o.scheduledFor ? [`🗓 *Programado: ${slotLabel(o.scheduledFor)}*`] : []),
+    ...(o.groupName ? [`👥 Pedido de equipo «${o.groupName}»`] : []),
+    ...(o.invoice ? [`🧾 Requiere factura · RFC ${o.invoice.rfc}`] : []),
+  ];
 }

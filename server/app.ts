@@ -14,12 +14,13 @@ import { DemoProvider } from './payments/demo';
 import { MercadoPagoProvider, verifyMercadoPagoSignature } from './payments/mercadopago';
 import { checkReturnedPayment, handlePaymentNotification, reconcile, startCheckout } from './payments/service';
 import {
-  createOrder, getDeliveryPhoto, getOrderById, getOrderForCustomer, listOrders, markCollected, quoteOrder, saveCourierLocation, saveDeliveryPhoto, setOrderStatus, setRefundStatus, setShippingQuote, toAdmin, toPublic, trackingFor,
+  createOrder, setInvoiceStatus, getDeliveryPhoto, getOrderById, getOrderForCustomer, listOrders, markCollected, quoteOrder, saveCourierLocation, saveDeliveryPhoto, setOrderStatus, setRefundStatus, setShippingQuote, toAdmin, toPublic, trackingFor,
 } from './orders';
 import * as store from './store';
 import * as S from './schemas';
 import { clearSession, isAdmin, passwordMatches, rateLimit, requireAdmin, setSession } from './auth';
 import { whatsappConfigured } from './whatsapp';
+import { addGroupItem, createGroup, groupLinesForOrder, groupView, removeGroupItem } from './groups';
 import { background, sleep } from './background';
 import { listSubscriptions, pushConfigured, removeSubscription, saveSubscription, sendPushToAll } from './push';
 import type { LegalSlug, MenuResponse } from '../shared/types';
@@ -27,11 +28,11 @@ import { ADMIN_FLOW } from '../shared/status';
 
 const LEGAL: LegalSlug[] = ['privacidad', 'entregas', 'cancelaciones'];
 
-export async function createApp(config: Config, opts: { demoWebhookDelayMs?: number; db?: DB } = {}) {
+export async function createApp(config: Config, opts: { demoWebhookDelayMs?: number; db?: DB; now?: () => Date } = {}) {
   const db = opts.db ?? (await openDb({ url: config.databaseUrl || undefined, pglitePath: config.pglitePath, production: config.production }));
   await store.seedIfEmpty(db);
   const provider = config.mpAccessToken ? new MercadoPagoProvider(config.mpAccessToken) : new DemoProvider(db);
-  const ctx: Ctx = { db, config, provider, notifier: new Notifier() };
+  const ctx: Ctx = { db, config, provider, notifier: new Notifier(), now: opts.now ?? (() => new Date()) };
   const demoDelay = opts.demoWebhookDelayMs ?? 1500;
 
   const app = express();
@@ -58,14 +59,15 @@ export async function createApp(config: Config, opts: { demoWebhookDelayMs?: num
   app.get('/api/health', (_req, res) => res.json({ ok: true, payments: provider.name }));
 
   app.get('/api/menu', async (_req, res) => {
-    const [delivery, products, toppings, business, rules] = await Promise.all([
-      store.getDelivery(db), store.listProducts(db), store.listToppings(db), store.getBusiness(db), store.getRules(db),
+    const [delivery, products, toppings, business, rules, schedule] = await Promise.all([
+      store.getDelivery(db), store.listProducts(db), store.listToppings(db), store.getBusiness(db), store.getRules(db), store.getSchedule(db),
     ]);
     const { zones, ...rest } = delivery;
     const body: MenuResponse = {
       products,
       toppings,
       rules,
+      schedule,
       business,
       delivery: { ...rest, onlinePayment: rest.onlinePayment && onlinePaymentReady(ctx), zoneNames: zones.filter((z) => z.active).map((z) => z.name) },
       paymentsMode: provider.name,
@@ -79,7 +81,29 @@ export async function createApp(config: Config, opts: { demoWebhookDelayMs?: num
   });
 
   app.post('/api/quote', rateLimit(120, 60_000), async (req, res) => {
-    res.json(await quoteOrder(db, S.quoteSchema.parse(req.body)));
+    const input = S.quoteSchema.parse(req.body);
+    if (input.group) {
+      const { lines } = await groupLinesForOrder(ctx, input.group.code, input.group.token);
+      return res.json(await quoteOrder(db, { ...input, items: lines }, { group: true }));
+    }
+    res.json(await quoteOrder(db, input));
+  });
+
+  // ── Pedido de equipo ─────────────────────────────────────────────
+  app.post('/api/groups', rateLimit(10, 60_000), async (req, res) => {
+    const g = await createGroup(db, S.createGroupSchema.parse(req.body), ctx.now());
+    res.status(201).json({ code: g.code, adminToken: g.admin_token });
+  });
+  app.get('/api/groups/:code', rateLimit(240, 60_000), async (req, res) => {
+    res.json(await groupView(ctx, String(req.params.code), { memberKey: String(req.query.k ?? ''), adminToken: String(req.query.a ?? '') }));
+  });
+  app.post('/api/groups/:code/items', rateLimit(60, 60_000), async (req, res) => {
+    await addGroupItem(ctx, String(req.params.code), S.groupItemSchema.parse(req.body));
+    res.status(201).json({ ok: true });
+  });
+  app.post('/api/groups/:code/items/:id/delete', rateLimit(60, 60_000), async (req, res) => {
+    await removeGroupItem(ctx, String(req.params.code), String(req.params.id), { memberKey: req.body?.memberKey, adminToken: req.body?.adminToken });
+    res.json({ ok: true });
   });
 
   app.post('/api/orders', rateLimit(20, 60_000), async (req, res) => {
@@ -89,6 +113,10 @@ export async function createApp(config: Config, opts: { demoWebhookDelayMs?: num
       fulfillment: input.fulfillment,
       paymentMethod: input.paymentMethod,
       cashTendered: input.cashTendered,
+      source: input.source ?? null,
+      invoice: input.invoice ?? null,
+      scheduledFor: input.scheduledFor ?? null,
+      group: input.group ?? null,
       address: input.fulfillment === 'delivery' ? input.address : null,
       notes: input.notes,
       items: input.items,
@@ -141,7 +169,8 @@ export async function createApp(config: Config, opts: { demoWebhookDelayMs?: num
   app.get(['/q', '/q/:source'], async (req, res) => {
     const source = String(req.params.source ?? 'volante').replace(/[^a-z0-9-]/gi, '').slice(0, 30) || 'volante';
     await db.query('insert into office.qr_scans (day, source, count) values (current_date, $1, 1) on conflict (day, source) do update set count = office.qr_scans.count + 1', [source]);
-    res.redirect(302, '/');
+    // El slug viaja en la URL para atribuir el pedido al edificio (la tienda lo guarda en el teléfono).
+    res.redirect(302, source === 'volante' ? '/' : `/?src=${encodeURIComponent(source)}`);
   });
 
   // ── Notificaciones de Mercado Pago ─────────────────────────────────
@@ -273,6 +302,10 @@ export async function createApp(config: Config, opts: { demoWebhookDelayMs?: num
     await saveCourierLocation(ctx, String(req.params.id), S.courierLocationSchema.parse(req.body));
     res.json({ ok: true });
   });
+  admin.post('/orders/:id/invoice', async (req, res) => {
+    await orderOr404(String(req.params.id));
+    res.json({ order: await toAdmin(db, await setInvoiceStatus(ctx, String(req.params.id), S.invoiceStatusSchema.parse(req.body?.status), 'panel')) });
+  });
   admin.post('/orders/:id/collected', async (req, res) => {
     await orderOr404(String(req.params.id));
     res.json({ order: await toAdmin(db, await markCollected(ctx, String(req.params.id), 'panel')) });
@@ -353,6 +386,42 @@ export async function createApp(config: Config, opts: { demoWebhookDelayMs?: num
     await store.setRules(db, S.rulesSchema.parse(req.body));
     res.json({ ok: true });
   });
+  admin.get('/schedule', async (_req, res) => res.json(await store.getSchedule(db)));
+  admin.put('/schedule', async (req, res) => {
+    const s = S.scheduleSchema.parse(req.body);
+    if (s.days.some((d) => d && d.close <= d.open)) throw new HttpError(400, 'La hora de cierre debe ser después de la de apertura.');
+    await store.setSchedule(db, s);
+    res.json({ ok: true });
+  });
+
+  // ── QR por edificio: escaneos, pedidos y ventas de cada uno ──
+  admin.get('/qr-sources', async (_req, res) => {
+    const rows = await db.query<{ slug: string; label: string; scans: number; orders: number; sales: number }>(
+      `select s.slug, s.label,
+         coalesce((select sum(count)::int from office.qr_scans q where q.source = s.slug), 0) as scans,
+         coalesce((select count(*)::int from office.orders o where o.source = s.slug and o.order_status <> 'cancelado'), 0) as orders,
+         coalesce((select sum(total)::int from office.orders o where o.source = s.slug and o.order_status = 'entregado'), 0) as sales
+       from office.qr_sources s order by s.created_at`,
+    );
+    res.json({ sources: rows.map((r) => ({ ...r, url: `${config.publicUrl}/q/${r.slug}` })) });
+  });
+  admin.post('/qr-sources', async (req, res) => {
+    const s = S.qrSourceSchema.parse(req.body);
+    if (s.slug === 'volante') throw new HttpError(400, 'Ese nombre está reservado.');
+    await db.query('insert into office.qr_sources (slug, label) values ($1, $2) on conflict (slug) do update set label = excluded.label', [s.slug, s.label]);
+    res.json({ ok: true });
+  });
+  admin.delete('/qr-sources/:slug', async (req, res) => {
+    await db.query('delete from office.qr_sources where slug = $1', [String(req.params.slug)]);
+    res.json({ ok: true });
+  });
+  admin.get('/qr-sources/:slug/svg', async (req, res) => {
+    const slug = String(req.params.slug).replace(/[^a-z0-9-]/g, '');
+    const svg = await QRCode.toString(`${config.publicUrl}/q/${slug}`, { type: 'svg', margin: 1, color: { dark: '#3E2A25', light: '#FFFFFF' } });
+    res.setHeader('Content-Type', 'image/svg+xml');
+    res.send(svg);
+  });
+
   admin.get('/delivery', async (_req, res) => res.json(await store.getDelivery(db)));
   admin.put('/delivery', async (req, res) => {
     const d = S.deliverySchema.parse(req.body);

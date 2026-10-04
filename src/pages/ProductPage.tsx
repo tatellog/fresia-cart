@@ -8,6 +8,9 @@ import { MAX_FOR_WHOM, minQtyFor, priceToppings } from '../../shared/pricing';
 import { ToppingPicker } from '../components/ToppingPicker';
 import { DEFAULT_RULES_CLIENT } from '../lib/rules';
 import ComboBuilder from './ComboBuilder';
+import { activeGroup, memberKey } from '../lib/groupState';
+import { api } from '../lib/api';
+import { GroupModeBanner } from '../components/ui';
 
 export default function ProductPage() {
   const { id } = useParams();
@@ -19,6 +22,11 @@ export default function ProductPage() {
   const editing = editId ? cart.lines.find((l) => l.lineId === editId) : undefined;
 
   const product = data?.products.find((p) => p.id === id);
+  const group = activeGroup();
+  const [adding, setAdding] = useState(false);
+  const [addError, setAddError] = useState<string | null>(null);
+  // En pedido de equipo cada quien pide desde 1 pieza.
+  const minQty = (p: NonNullable<typeof product>) => (group ? 1 : minQtyFor(p, rules));
   const rules = data?.rules ?? DEFAULT_RULES_CLIENT;
   const byTopping = useMemo(() => new Map((data?.toppings ?? []).map((t) => [t.id, t])), [data]);
 
@@ -36,7 +44,7 @@ export default function ProductPage() {
       setForWhom(editing.forWhom ?? '');
     } else {
       setSizeId(product.sizes.length === 1 ? product.sizes[0].id : '');
-      setQty(minQtyFor(product, rules));
+      setQty(minQty(product));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [product?.id, editing?.lineId]);
@@ -66,12 +74,24 @@ export default function ProductPage() {
   }
   const unit = (size?.price ?? 0) + extras;
 
-  function submit() {
+  async function submit() {
     if (!size) {
       document.getElementById('size-legend')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       return;
     }
-    const line = { productId: product!.id, sizeId: size.id, toppingIds: chosen, qty: Math.max(qty, minQtyFor(product!, rules)), forWhom: forWhom.trim() };
+    const line = { productId: product!.id, sizeId: size.id, toppingIds: chosen, qty: Math.max(qty, minQty(product!)), forWhom: forWhom.trim() };
+    if (group && !editing) {
+      setAdding(true);
+      setAddError(null);
+      try {
+        await api(`/api/groups/${group.code}/items`, { body: { memberName: group.memberName, memberKey: memberKey(), line } });
+        navigate(`/equipo/${group.code}`);
+      } catch (e) {
+        setAddError((e as Error).message);
+        setAdding(false);
+      }
+      return;
+    }
     if (editing) {
       cart.update(editing.lineId, line);
       navigate('/carrito');
@@ -86,6 +106,7 @@ export default function ProductPage() {
       <DemoBanner />
       <main className="page">
         <TopBar back={editing ? '/carrito' : '/'} />
+        <GroupModeBanner />
         <div className="product-hero">
           <img src={product.image} alt={product.name} width={600} height={600} />
         </div>
@@ -124,7 +145,7 @@ export default function ProductPage() {
 
           <ToppingPicker product={product} toppings={data.toppings} rules={rules} chosen={chosen} onChange={setChosen} />
 
-          <div className="field">
+          {!group && <div className="field">
             <label htmlFor="for-whom">
               ¿Para quién es? <span className="muted small">(opcional)</span>
             </label>
@@ -138,20 +159,21 @@ export default function ProductPage() {
               autoComplete="off"
             />
             <span className="hint">Te ayuda a repartir los pedidos del equipo.</span>
-          </div>
+          </div>}
+          {addError && <p className="error-text" role="alert">{addError}</p>}
 
           <div className="row between">
             <span className="label">
-              Cantidad {minQtyFor(product, rules) > 1 && <span className="muted small">· mínimo {minQtyFor(product, rules)}</span>}
+              Cantidad {minQty(product) > 1 && <span className="muted small">· mínimo {minQty(product)}</span>}
             </span>
-            <Stepper value={Math.max(qty, minQtyFor(product, rules))} onChange={setQty} min={minQtyFor(product, rules)} label="Cantidad" />
+            <Stepper value={Math.max(qty, minQty(product))} onChange={setQty} min={minQty(product)} label="Cantidad" />
           </div>
         </form>
       </main>
       <StickyAction>
-        <button type="button" className="btn primary block" onClick={submit} style={{ justifyContent: 'space-between' }}>
-          <span>{size ? (editing ? 'Guardar cambios' : 'Agregar al carrito') : 'Elige un tamaño'}</span>
-          {size && <span className="price">{money(unit * Math.max(qty, minQtyFor(product, rules)))}</span>}
+        <button type="button" className="btn primary block" disabled={adding} onClick={() => void submit()} style={{ justifyContent: 'space-between' }}>
+          <span>{adding ? 'Agregando…' : size ? (editing ? 'Guardar cambios' : group ? 'Agregar al pedido del equipo' : 'Agregar al carrito') : 'Elige un tamaño'}</span>
+          {size && <span className="price">{money(unit * Math.max(qty, minQty(product)))}</span>}
         </button>
       </StickyAction>
     </>

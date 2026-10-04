@@ -8,6 +8,7 @@ import { formatDate, money, whatsappLink } from '../lib/format';
 import { DemoBanner, Footer, Spinner, TopBar } from '../components/ui';
 import { OrderLines, Totals } from './parts';
 import { LiveTracking } from '../components/LiveTracking';
+import { slotLabel } from '../../shared/schedule';
 import { PAYMENT_LABEL, REFUND_LABEL } from '../../shared/status';
 import type { OrderStatus, PublicOrder } from '../../shared/types';
 
@@ -64,6 +65,23 @@ export default function OrderPage() {
     const items = JSON.stringify(cart.lines.map(toLineInput));
     if (mine?.cartFingerprint && cart.lines.length && mine.cartFingerprint.includes(items)) cart.clear();
   }, [order, cart]);
+
+  /** Carga los mismos productos al carrito (con los precios de hoy; lo que ya no exista se omite). */
+  function repeat() {
+    const products = menu?.products ?? [];
+    for (const l of order!.items) {
+      if (!products.some((p) => p.id === l.productId && p.available)) continue;
+      cart.add({
+        productId: l.productId,
+        sizeId: l.sizeId,
+        toppingIds: l.toppings.map((t) => t.id),
+        ...(l.choices ? { choices: l.choices.filter((c) => c.sizeId).map((c) => ({ slotId: c.slotId, productId: c.productId, sizeId: c.sizeId, toppingIds: c.toppings.map((t) => t.id) })) } : {}),
+        qty: l.qty,
+        forWhom: l.forWhom,
+      });
+    }
+    navigate('/carrito');
+  }
 
   async function pay() {
     setPaying(true);
@@ -169,6 +187,18 @@ export default function OrderPage() {
           <Totals subtotal={order.subtotal} shippingFee={order.shippingFee} total={order.total} fulfillment={order.fulfillment} />
         </section>
 
+        {(order.scheduledFor || order.groupName || order.invoice) && (
+          <section className="card flat stack" style={{ gap: 6 }}>
+            {order.scheduledFor && <p>🗓 <strong>Programado:</strong> {slotLabel(order.scheduledFor)}</p>}
+            {order.groupName && <p>👥 Pedido de equipo «{order.groupName}»</p>}
+            {order.invoice && (
+              <p>
+                🧾 Factura {order.invoiceStatus === 'emitida' ? 'emitida' : 'solicitada'} · RFC {order.invoice.rfc} · se envía a {order.invoice.email}
+              </p>
+            )}
+          </section>
+        )}
+
         <section className="card flat stack" aria-labelledby="dl-title">
           <h2 id="dl-title">{order.fulfillment === 'delivery' ? 'Entrega' : 'Recoger en Frésia'}</h2>
           <p>{order.customerName}</p>
@@ -195,6 +225,9 @@ export default function OrderPage() {
         )}
 
         <p className="muted small">Guarda esta página para consultar el estado. Solo quien tenga este enlace puede verla.</p>
+        {(order.orderStatus === 'entregado' || order.orderStatus === 'cancelado') && (
+          <button type="button" className="btn primary block" onClick={repeat}>🔁 Repetir este pedido</button>
+        )}
         <Link to="/" className="btn secondary block">Volver al menú</Link>
         <Footer />
       </main>

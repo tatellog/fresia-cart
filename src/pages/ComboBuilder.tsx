@@ -8,6 +8,9 @@ import { DEFAULT_RULES_CLIENT } from '../lib/rules';
 import { DemoBanner, Stepper, StickyAction, TopBar } from '../components/ui';
 import { ToppingPicker } from '../components/ToppingPicker';
 import { COMBO_SIZE_ID, MAX_FOR_WHOM, priceCart } from '../../shared/pricing';
+import { activeGroup, memberKey } from '../lib/groupState';
+import { api } from '../lib/api';
+import { GroupModeBanner } from '../components/ui';
 import type { ComboChoiceInput, Product } from '../../shared/types';
 
 type Pick = ComboChoiceInput & { key: string };
@@ -38,6 +41,9 @@ export default function ComboBuilder({ product, editing }: { product: Product; e
   const [qty, setQty] = useState(editing?.qty ?? 1);
   const [forWhom, setForWhom] = useState(editing?.forWhom ?? '');
   const [showErrors, setShowErrors] = useState(false);
+  const group = activeGroup();
+  const [adding, setAdding] = useState(false);
+  const [addError, setAddError] = useState<string | null>(null);
 
   const complete = picks.every((p) => p.productId && p.sizeId);
   const choices: ComboChoiceInput[] = picks.map(({ slotId, productId, sizeId, toppingIds }) => ({ slotId, productId, sizeId, toppingIds }));
@@ -58,6 +64,18 @@ export default function ComboBuilder({ product, editing }: { product: Product; e
       return;
     }
     const line = { productId: product.id, sizeId: COMBO_SIZE_ID, toppingIds: [], choices, qty, forWhom: forWhom.trim() };
+    if (group && !editing) {
+      setAdding(true);
+      setAddError(null);
+      api(`/api/groups/${group.code}/items`, { body: { memberName: group.memberName, memberKey: memberKey(), line } }).then(
+        () => navigate(`/equipo/${group.code}`),
+        (e: Error) => {
+          setAddError(e.message);
+          setAdding(false);
+        },
+      );
+      return;
+    }
     if (editing) {
       cart.update(editing.lineId, line);
       navigate('/carrito');
@@ -72,6 +90,7 @@ export default function ComboBuilder({ product, editing }: { product: Product; e
       <DemoBanner />
       <main className="page">
         <TopBar back={editing ? '/carrito' : '/'} />
+        <GroupModeBanner />
         {product.image && (
           <div className="product-hero">
             <img src={product.image} alt={product.name} width={600} height={600} />
@@ -162,6 +181,7 @@ export default function ComboBuilder({ product, editing }: { product: Product; e
             </label>
             <input id="for-whom" className="input" value={forWhom} onChange={(e) => setForWhom(e.target.value)} maxLength={MAX_FOR_WHOM} placeholder="Ej. Equipo de Ventas" autoComplete="off" />
           </div>
+          {addError && <p className="error-text" role="alert">{addError}</p>}
           <div className="row between">
             <span className="label">Cantidad de combos</span>
             <Stepper value={qty} onChange={setQty} label="Cantidad de combos" />
@@ -170,7 +190,7 @@ export default function ComboBuilder({ product, editing }: { product: Product; e
       </main>
       <StickyAction>
         <button type="button" className="btn primary block" onClick={submit} style={{ justifyContent: 'space-between' }}>
-          <span>{complete ? (editing ? 'Guardar cambios' : 'Agregar al carrito') : 'Completa tu combo'}</span>
+          <span>{adding ? 'Agregando…' : complete ? (editing ? 'Guardar cambios' : group ? 'Agregar al pedido del equipo' : 'Agregar al carrito') : 'Completa tu combo'}</span>
           <span className="price">{money(unit * qty)}</span>
         </button>
       </StickyAction>

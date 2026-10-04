@@ -3,7 +3,7 @@ import type { Config } from './env';
 import type { PaymentProvider } from './payments/provider';
 import type { Notifier } from './notify';
 
-export type Ctx = { db: DB; config: Config; provider: PaymentProvider; notifier: Notifier };
+export type Ctx = { db: DB; config: Config; provider: PaymentProvider; notifier: Notifier; /** Reloj (en pruebas, fijo). */ now: () => Date };
 
 /**
  * ¿Se puede ofrecer «Pagar en línea»? Con el simulador (sin Mercado Pago) solo fuera de

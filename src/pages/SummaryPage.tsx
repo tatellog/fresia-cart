@@ -7,6 +7,14 @@ import { idempotencyKeyFor, readCheckoutForm, rememberOrder, resetIdempotencyKey
 import { api, ApiError } from '../lib/api';
 import { money } from '../lib/format';
 import { DemoBanner, LoadError, Spinner, StickyAction, TopBar } from '../components/ui';
+import { InvoiceFields, emptyInvoice } from '../components/InvoiceFields';
+import { WhenPicker } from '../components/WhenPicker';
+import { currentSource } from '../lib/source';
+import { groupCheckout, setActiveGroup, setGroupCheckout } from '../lib/groupState';
+import { load as loadStored, save } from '../lib/storage';
+import { invoiceErrors } from '../../shared/invoice';
+import type { InvoiceData } from '../../shared/invoice';
+import { isOpenAt } from '../../shared/schedule';
 import { validate } from './DeliveryPage';
 import { etaText } from '../../shared/coverage';
 import type { PublicOrder, Quote } from '../../shared/types';
@@ -37,20 +45,32 @@ export default function SummaryPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const items = useMemo(() => cart.lines.map(toLineInput), [cart.lines]);
+  // Pedido de equipo: los productos los arma el servidor desde el grupo.
+  const group = useMemo(groupCheckout, []);
+  const items = useMemo(() => (group ? [] : cart.lines.map(toLineInput)), [cart.lines, group]);
+  const [scheduledFor, setScheduledFor] = useState<string | null>(null);
+  const [wantInvoice, setWantInvoiceState] = useState(() => loadStored<boolean>('fo.invoice.on.v1', false));
+  const [invoice, setInvoiceState] = useState<InvoiceData>(() => loadStored<InvoiceData>('fo.invoice.v1', emptyInvoice));
+  const [invoiceTried, setInvoiceTried] = useState(false);
+  const setWantInvoice = (v: boolean) => { setWantInvoiceState(v); save('fo.invoice.on.v1', v); };
+  const setInvoice = (v: InvoiceData) => { setInvoiceState(v); save('fo.invoice.v1', v); };
+  const invoiceInvalid = wantInvoice && Object.keys(invoiceErrors(invoice)).length > 0;
   const address = form.fulfillment === 'delivery' ? { ...form.address, postalCode: form.address.postalCode.trim(), location: form.address.location ?? null } : null;
   const formInvalid = Object.keys(validate(form)).length > 0;
 
   const load = () => {
     setLoadError(null);
-    api<Quote>('/api/quote', { body: { fulfillment: form.fulfillment, address, items } }).then(setQuote, (e: Error) => setLoadError(e.message));
+    api<Quote>('/api/quote', { body: { fulfillment: form.fulfillment, address, items, group: group ? { code: group.code, token: group.token } : null } }).then(
+      setQuote,
+      (e: Error) => setLoadError(e.message),
+    );
   };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     load();
   }, [items]);
 
-  if (cart.lines.length === 0) return <Navigate to="/carrito" replace />;
+  if (cart.lines.length === 0 && !group) return <Navigate to="/carrito" replace />;
   if (formInvalid) return <Navigate to="/entrega" replace />;
 
   const manual = quote?.delivery.status === 'manual';
@@ -62,13 +82,24 @@ export default function SummaryPage() {
   const total = quote?.total ?? null;
   const cashValue = cash === 'exacto' ? total : cash;
   const cashInvalid = cashDelivery && (cashValue == null || (total != null && cashValue < total));
-  const blocked = !quote || quote.errors.length > 0 || cashInvalid;
+  const closedNow = data ? !isOpenAt(new Date(), data.schedule) : false;
+  const needsSlot = closedNow && !scheduledFor;
+  const blocked = !quote || quote.errors.length > 0 || cashInvalid || needsSlot;
 
   async function submit() {
     if (!quote || busy) return;
     setBusy(true);
     setError(null);
+    if (invoiceInvalid) {
+      setInvoiceTried(true);
+      document.getElementById('invoice-title')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      return;
+    }
     const body = {
+      source: currentSource(),
+      invoice: wantInvoice ? invoice : null,
+      scheduledFor,
+      group: group ? { code: group.code, token: group.token } : null,
       customer: { name: form.name.trim(), phone: form.phone },
       fulfillment: form.fulfillment,
       paymentMethod: effective,
@@ -89,6 +120,10 @@ export default function SummaryPage() {
         } else throw e;
       }
       rememberOrder({ number: created.number, token: created.token, at: new Date().toISOString(), cartFingerprint: fingerprint });
+      if (group) {
+        setGroupCheckout(null);
+        setActiveGroup(null);
+      }
 
       if (!created.order.canPay) {
         navigate(`/pedido/${created.number}?t=${created.token}`);
@@ -166,6 +201,33 @@ export default function SummaryPage() {
             </section>
 
             <Totals subtotal={quote.subtotal} shippingFee={quote.shippingFee} total={quote.total} fulfillment={form.fulfillment} />
+
+            {data && (
+              <WhenPicker
+                schedule={data.schedule}
+                value={scheduledFor}
+                onChange={setScheduledFor}
+                asapLabel={
+                  form.fulfillment === 'pickup'
+                    ? `Listo en ${data.delivery.pickupPrepText || 'unos minutos'}`
+                    : quote.delivery.status === 'covered'
+                      ? `Llega en ${etaText(quote.delivery.etaMin, quote.delivery.etaMax)}`
+                      : 'En cuanto confirmemos el envío'
+                }
+              />
+            )}
+
+            <section className="stack" aria-labelledby="invoice-title">
+              <label className="option">
+                <input type="checkbox" checked={wantInvoice} onChange={(e) => setWantInvoice(e.target.checked)} />
+                <span className="mark" aria-hidden="true" />
+                <span className="grow">
+                  <strong id="invoice-title">🧾 Necesito factura</strong>
+                  <span className="muted small" style={{ display: 'block' }}>Para gastos de la empresa (CFDI 4.0).</span>
+                </span>
+              </label>
+              {wantInvoice && <InvoiceFields value={invoice} onChange={setInvoice} showErrors={invoiceTried} />}
+            </section>
 
             {online && cod && (
               <fieldset>

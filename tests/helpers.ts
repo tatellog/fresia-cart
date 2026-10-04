@@ -14,12 +14,16 @@ export function testConfig(over: Partial<Config> = {}): Config {
   };
 }
 
-export async function start(over: Partial<Config> = {}) {
-  const cfg = testConfig(over);
+export const NOW = '2026-10-07T20:00:00.000Z';
+
+export async function start(over: Partial<Config> & { now?: string } = {}) {
+  const { now: _now, ...cfgOver } = over;
+  const cfg = testConfig(cfgOver);
   // Igual que en producción: el servidor opera con el rol de mínimo privilegio.
   const db = await openDb({ pglitePath: cfg.pglitePath });
   await db.query('set role fresia_office_app');
-  const { app, ctx } = await createApp(cfg, { demoWebhookDelayMs: 0, db });
+  // Reloj fijo: miércoles 7 oct 2026, 2:00 p.m. en CDMX (abierto).
+  const { app, ctx } = await createApp(cfg, { demoWebhookDelayMs: 0, db, now: () => new Date(over.now ?? NOW) });
   const server: Server = await new Promise((r) => {
     const s = app.listen(0, () => r(s));
   });
