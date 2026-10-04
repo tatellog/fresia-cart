@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../lib/api';
 import { formatDate, money } from '../lib/format';
@@ -8,6 +8,7 @@ import { LineDetails } from '../pages/parts';
 import { CollectBox } from './Collect';
 import { StatusFlow } from './StatusFlow';
 import { CourierShare } from './CourierShare';
+import { DeliveryProof } from './DeliveryProof';
 import type { AdminOrder, OrderStatus, RefundStatus } from '../../shared/types';
 
 
@@ -21,6 +22,9 @@ export default function OrderDetail() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const [shareNow, setShareNow] = useState(params.get('compartir') === '1');
+  // Paso de foto de entrega abierto (pedidos a domicilio); guarda si además hay que cobrar.
+  const [delivering, setDelivering] = useState<{ collect: boolean } | null>(null);
+  const askedDeliver = useRef(params.get('entregar') === '1');
 
   const load = useCallback(() => {
     api<{ order: AdminOrder }>(`/api/admin/orders/${id}`).then((r) => setOrder(r.order), (e: Error) => setError(e.message));
@@ -48,13 +52,27 @@ export default function OrderDetail() {
     return ok;
   }
 
-  async function setStatus(status: OrderStatus, collect: boolean) {
+  async function setStatus(status: OrderStatus, collect: boolean, photoConfirmed = false) {
+    // A domicilio: antes de entregar hay que tomar la foto.
+    if (status === 'entregado' && order!.fulfillment === 'delivery' && !photoConfirmed) {
+      setDelivering({ collect });
+      return;
+    }
     if (status === 'en_camino') setShareNow(true);
     if (!(await act(`orders/${order!.id}/status`, { status }))) return;
     if (collect && !(await act(`orders/${order!.id}/collected`, {}))) return;
     // Pedido terminado: de vuelta a la lista.
     if (status === 'entregado') navigate('/admin', { state: { completed: { number: order!.number, collected: collect ? order!.total : null } } });
   }
+
+  // Desde la lista («Entregado») o un enlace ?entregar=1: abre directo el paso de la foto.
+  useEffect(() => {
+    if (!order || !askedDeliver.current) return;
+    askedDeliver.current = false;
+    if (order.orderStatus === 'en_camino' || order.orderStatus === 'listo') {
+      setDelivering({ collect: order.paymentMethod === 'contra_entrega' && order.paymentStatus !== 'aprobado' });
+    }
+  }, [order]);
 
   if (error) return <LoadError message={error} retry={load} />;
   if (!order) return <Spinner label="Cargando…" />;
@@ -136,6 +154,23 @@ export default function OrderDetail() {
           </details>
         )}
       </section>
+
+      {delivering && order.orderStatus !== 'entregado' && (
+        <DeliveryProof
+          order={order}
+          collect={delivering.collect}
+          busy={busy}
+          onCancel={() => setDelivering(null)}
+          onConfirm={() => setStatus('entregado', delivering.collect, true)}
+        />
+      )}
+
+      {order.deliveryPhotoAt && order.orderStatus === 'entregado' && (
+        <section className="card stack">
+          <h2>📷 Foto de entrega</h2>
+          <img src={`/api/admin/orders/${order.id}/delivery-photo?v=${order.deliveryPhotoAt}`} alt="Foto de entrega" className="proof-img" />
+        </section>
+      )}
 
       {order.orderStatus === 'en_camino' && order.fulfillment === 'delivery' && <CourierShare orderId={order.id} autoStart={shareNow} />}
 

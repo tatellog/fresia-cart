@@ -1,4 +1,8 @@
+import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
+import { api } from '../lib/api';
+import { ORDER_LABEL } from '../../shared/status';
+import type { OrderStatus, PublicOrder } from '../../shared/types';
 import { useMenu } from '../lib/menu';
 import { money } from '../lib/format';
 import { recentOrders } from '../lib/checkout';
@@ -8,7 +12,7 @@ import type { BusinessInfo, MenuResponse, Product } from '../../shared/types';
 export default function MenuPage() {
   const { data, error, reload } = useMenu();
   const added = (useLocation().state as { added?: string } | null)?.added;
-  const recent = recentOrders().find((o) => Date.now() - Date.parse(o.at) < 24 * 3600 * 1000);
+  const active = useActiveOrder();
 
   return (
     <>
@@ -23,9 +27,9 @@ export default function MenuPage() {
               {data.rules.minQtyPerItem > 1 ? `Desde ${data.rules.minQtyPerItem} piezas por producto · combos desde 1` : `Pedido mínimo: ${data.rules.minFresias} Frésias`}
             </p>
           )}
-          {recent && (
-            <Link to={`/pedido/${recent.number}?t=${recent.token}`} className="btn ghost small">
-              Ver mi pedido {recent.number}
+          {active && (
+            <Link to={`/pedido/${active.number}?t=${active.token}`} className="btn ghost small">
+              Ver mi pedido {active.number} · {ORDER_LABEL[active.status]}
             </Link>
           )}
         </section>
@@ -175,4 +179,32 @@ function BusinessSection({ business: b, delivery: d }: { business: BusinessInfo;
       </dl>
     </section>
   );
+}
+
+const FINISHED: OrderStatus[] = ['entregado', 'cancelado'];
+
+/** Pedido reciente de este celular que sigue en curso (los entregados o cancelados no se muestran). */
+function useActiveOrder() {
+  const [active, setActive] = useState<{ number: string; token: string; status: OrderStatus } | null>(null);
+  useEffect(() => {
+    const candidates = recentOrders().filter((o) => Date.now() - Date.parse(o.at) < 24 * 3600 * 1000);
+    let alive = true;
+    (async () => {
+      for (const o of candidates) {
+        try {
+          const r = await api<{ order: PublicOrder }>(`/api/orders/${encodeURIComponent(o.number)}?t=${encodeURIComponent(o.token)}`);
+          if (!FINISHED.includes(r.order.orderStatus)) {
+            if (alive) setActive({ number: o.number, token: o.token, status: r.order.orderStatus });
+            return;
+          }
+        } catch {
+          /* pedido de otra base o sin conexión: se omite */
+        }
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+  return active;
 }

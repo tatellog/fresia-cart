@@ -41,6 +41,7 @@ export type OrderRow = {
   payment_method: PaymentMethod;
   payment_status: PaymentStatus;
   cash_tendered: number | null;
+  delivery_photo_at: Date | string | null;
   order_status: OrderStatus;
   refund_status: RefundStatus;
   needs_review: string | null;
@@ -195,6 +196,7 @@ export function toPublic(row: OrderRow): PublicOrder {
     paymentMethod: row.payment_method,
     paymentStatus: row.payment_status,
     cashTendered: row.cash_tendered ?? null,
+    deliveryPhotoAt: isoOrNull(row.delivery_photo_at),
     orderStatus: row.order_status,
     refundStatus: row.refund_status,
     demo: row.demo,
@@ -247,6 +249,9 @@ export async function setOrderStatus(ctx: Ctx, id: string, status: OrderStatus, 
     const codReady = row.payment_method === 'contra_entrega' && row.order_status !== 'cotizando_envio';
     if (row.payment_status !== 'aprobado' && !codReady) throw new HttpError(409, 'Solo puedes avanzar pedidos con pago recibido.');
     if (status === 'en_camino' && row.fulfillment !== 'delivery') throw new HttpError(409, 'Este pedido es para recoger.');
+    if (status === 'entregado' && row.fulfillment === 'delivery' && !row.delivery_photo_at) {
+      throw new HttpError(409, 'Toma la foto de entrega antes de marcarlo como entregado.', { code: 'photo_required' });
+    }
     // Al dejar de ir en camino, se borra la ubicación del repartidor (privacidad).
     if (status !== 'en_camino') await q.query('delete from office.order_tracking where order_id = $1', [id]);
     await addEvent(q, id, 'estado', status, actor);
@@ -352,4 +357,35 @@ export async function trackingFor(ctx: Ctx, row: OrderRow): Promise<TrackingInfo
     destination,
     store,
   };
+}
+
+// ── Foto de entrega ─────────────────────────────────────────────────────
+
+const PHOTO_TYPES: Record<string, (b: Buffer) => boolean> = {
+  'image/jpeg': (b) => b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff,
+  'image/png': (b) => b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])),
+  'image/webp': (b) => b.subarray(0, 4).toString('latin1') === 'RIFF' && b.subarray(8, 12).toString('latin1') === 'WEBP',
+};
+
+export async function saveDeliveryPhoto(ctx: Ctx, id: string, image: Buffer, contentType: string) {
+  const row = await getOrderById(ctx.db, id);
+  if (!row) throw new HttpError(404, 'Pedido no encontrado.');
+  if (row.fulfillment !== 'delivery') throw new HttpError(409, 'Solo los pedidos a domicilio llevan foto de entrega.');
+  if (row.order_status === 'cancelado') throw new HttpError(409, 'Este pedido está cancelado.');
+  const type = contentType.split(';')[0].trim();
+  // Se revisan los primeros bytes: no basta con lo que diga el encabezado.
+  if (!PHOTO_TYPES[type] || !PHOTO_TYPES[type](image)) throw new HttpError(415, 'La foto debe ser JPG, PNG o WebP.');
+  await ctx.db.tx(async (q) => {
+    await q.query(
+      `insert into office.delivery_photos (order_id, image, content_type) values ($1, $2, $3)
+       on conflict (order_id) do update set image = excluded.image, content_type = excluded.content_type, created_at = now()`,
+      [id, image, type],
+    );
+    await q.query('update office.orders set delivery_photo_at = now(), updated_at = now() where id = $1', [id]);
+    await addEvent(q, id, 'foto_entrega', `${Math.round(image.length / 1024)} KB`, 'panel');
+  });
+}
+
+export async function getDeliveryPhoto(db: DB, id: string) {
+  return db.one<{ image: Buffer | Uint8Array; content_type: string }>('select image, content_type from office.delivery_photos where order_id = $1', [id]);
 }

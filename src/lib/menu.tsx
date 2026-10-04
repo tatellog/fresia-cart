@@ -13,7 +13,9 @@ export function MenuProvider({ children }: { children: ReactNode }) {
     setError(null);
     api<MenuResponse>('/api/menu').then(setData, (e: Error) => setError(e.message));
   }, []);
-  useEffect(reload, [reload]);
+  useEffect(() => {
+    reload();
+  }, [reload]);
   return <Ctx.Provider value={{ data, error, reload }}>{children}</Ctx.Provider>;
 }
 

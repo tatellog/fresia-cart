@@ -14,7 +14,7 @@ import { DemoProvider } from './payments/demo';
 import { MercadoPagoProvider, verifyMercadoPagoSignature } from './payments/mercadopago';
 import { checkReturnedPayment, handlePaymentNotification, reconcile, startCheckout } from './payments/service';
 import {
-  createOrder, getOrderById, getOrderForCustomer, listOrders, markCollected, quoteOrder, saveCourierLocation, setOrderStatus, setRefundStatus, setShippingQuote, toAdmin, toPublic, trackingFor,
+  createOrder, getDeliveryPhoto, getOrderById, getOrderForCustomer, listOrders, markCollected, quoteOrder, saveCourierLocation, saveDeliveryPhoto, setOrderStatus, setRefundStatus, setShippingQuote, toAdmin, toPublic, trackingFor,
 } from './orders';
 import * as store from './store';
 import * as S from './schemas';
@@ -108,6 +108,16 @@ export async function createApp(config: Config, opts: { demoWebhookDelayMs?: num
     }
     order = (await getOrderById(db, order.id))!;
     res.json({ order: toPublic(order) });
+  });
+
+  // Foto de entrega: el cliente la ve con el token de su pedido.
+  app.get('/api/orders/:number/delivery-photo', rateLimit(60, 60_000), async (req, res) => {
+    const order = await getOrderForCustomer(db, String(req.params.number), String(req.query.t ?? ''));
+    const photo = await getDeliveryPhoto(db, order.id);
+    if (!photo) throw new HttpError(404, 'Sin foto de entrega.');
+    res.setHeader('Content-Type', photo.content_type);
+    res.setHeader('Cache-Control', 'private, max-age=3600');
+    res.send(Buffer.from(photo.image));
   });
 
   // Seguimiento en vivo: solo con el token del pedido y solo mientras va en camino.
@@ -248,6 +258,17 @@ export async function createApp(config: Config, opts: { demoWebhookDelayMs?: num
     await orderOr404(String(req.params.id));
     res.json({ order: await toAdmin(db, await setShippingQuote(ctx, String(req.params.id), fee, etaText, 'panel')) });
   });
+  admin.post('/orders/:id/delivery-photo', express.raw({ type: 'image/*', limit: '3mb' }), async (req, res) => {
+    if (!Buffer.isBuffer(req.body) || req.body.length === 0) throw new HttpError(400, 'Falta la foto.');
+    await saveDeliveryPhoto(ctx, String(req.params.id), req.body, req.header('content-type') ?? '');
+    res.json({ order: await toAdmin(db, (await getOrderById(db, String(req.params.id)))!) });
+  });
+  admin.get('/orders/:id/delivery-photo', async (req, res) => {
+    const photo = await getDeliveryPhoto(db, String(req.params.id));
+    if (!photo) throw new HttpError(404, 'Sin foto de entrega.');
+    res.setHeader('Content-Type', photo.content_type);
+    res.send(Buffer.from(photo.image));
+  });
   admin.post('/orders/:id/tracking', async (req, res) => {
     await saveCourierLocation(ctx, String(req.params.id), S.courierLocationSchema.parse(req.body));
     res.json({ ok: true });
@@ -387,6 +408,7 @@ export async function createApp(config: Config, opts: { demoWebhookDelayMs?: num
     }
     if (err instanceof HttpError) return res.status(err.status).json({ error: err.message, ...(err.details as object) });
     if ((err as { type?: string }).type === 'entity.parse.failed') return res.status(400).json({ error: 'Solicitud inválida.' });
+    if ((err as { type?: string }).type === 'entity.too.large') return res.status(413).json({ error: 'El archivo es demasiado grande.' });
     console.error(err);
     res.status(500).json({ error: 'Algo salió mal. Intenta de nuevo.' });
   });

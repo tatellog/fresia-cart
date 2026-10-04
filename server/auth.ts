@@ -54,7 +54,7 @@ export function requireAdmin(cfg: Config) {
   return (req: Request, _res: Response, next: NextFunction) => {
     if (!isAdmin(cfg, req)) return next(new HttpError(401, 'Inicia sesión para continuar.'));
     // Defensa CSRF adicional a SameSite=strict: los cambios deben venir como JSON desde la app.
-    if (req.method !== 'GET' && !req.is('application/json')) return next(new HttpError(415, 'Formato no soportado.'));
+    if (req.method !== 'GET' && !req.is('application/json') && !req.is('image/*')) return next(new HttpError(415, 'Formato no soportado.'));
     next();
   };
 }

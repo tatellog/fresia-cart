@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { address, orderBody, start, tick } from './helpers';
+import { TINY_JPEG, address, orderBody, start, tick } from './helpers';
 
 let t: Awaited<ReturnType<typeof start>>;
 beforeEach(async () => { t = await start(); });
@@ -21,9 +21,11 @@ describe('pagar al recibir', () => {
     const r = await t.api('POST', '/api/orders', orderBody({ paymentMethod: 'contra_entrega' }));
     await login();
     const o = await adminOrder(r.body.number);
-    for (const s of ['confirmado', 'en_preparacion', 'listo', 'en_camino', 'entregado']) {
+    for (const s of ['confirmado', 'en_preparacion', 'listo', 'en_camino']) {
       expect((await t.api('POST', `/api/admin/orders/${o.id}/status`, { status: s })).body.order.orderStatus).toBe(s);
     }
+    expect((await t.upload(`/api/admin/orders/${o.id}/delivery-photo`, TINY_JPEG)).status).toBe(200);
+    expect((await t.api('POST', `/api/admin/orders/${o.id}/status`, { status: 'entregado' })).body.order.orderStatus).toBe('entregado');
     const c = await t.api('POST', `/api/admin/orders/${o.id}/collected`, {});
     expect(c.body.order.paymentStatus).toBe('aprobado');
   });

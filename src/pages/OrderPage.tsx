@@ -147,6 +147,18 @@ export default function OrderPage() {
 
         {order.orderStatus === 'en_camino' && order.fulfillment === 'delivery' && <LiveTracking number={order.number} token={token} />}
 
+        {order.orderStatus === 'entregado' && order.deliveryPhotoAt && (
+          <section className="card stack" aria-labelledby="proof-title">
+            <h2 id="proof-title">📷 Foto de entrega</h2>
+            <img
+              src={`/api/orders/${encodeURIComponent(order.number)}/delivery-photo?t=${encodeURIComponent(token)}`}
+              alt="Foto de tu pedido entregado"
+              style={{ width: '100%', borderRadius: 'var(--radius-sm)', background: 'var(--cream)' }}
+              loading="lazy"
+            />
+          </section>
+        )}
+
         {(order.paymentStatus === 'aprobado' || (order.paymentMethod === 'contra_entrega' && order.orderStatus !== 'cotizando_envio' && order.orderStatus !== 'cancelado')) && (
           <Progress order={order} />
         )}
@@ -222,7 +234,7 @@ function headline(o: PublicOrder, verifying: boolean): { title: string; body: st
     const when = o.fulfillment === 'pickup' ? 'al recoger (efectivo o tarjeta)' : 'en efectivo al recibir';
     const change = o.cashTendered != null && o.total != null && o.cashTendered > o.total ? ` Te llevamos ${money(o.cashTendered - o.total)} de cambio.` : '';
     return {
-      title: o.paymentStatus === 'aprobado' ? 'Pagado' : o.orderStatus === 'recibido' ? 'Pedido recibido' : nextTitle(o.orderStatus),
+      title: o.orderStatus === 'entregado' ? '¡Entregado!' : o.orderStatus === 'recibido' ? 'Pedido recibido' : nextTitle(o.orderStatus),
       body: `${nextStep(o.orderStatus, o.fulfillment === 'delivery')} ${o.paymentStatus === 'aprobado' ? '' : `Pagas ${o.total != null ? money(o.total) : ''} ${when}.${change}`}`.trim(),
     };
   }

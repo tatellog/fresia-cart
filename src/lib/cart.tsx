@@ -32,7 +32,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const [lines, setLines] = useState<CartLine[]>(() => load<CartLine[]>(KEY, []));
   const { data } = useMenu();
 
-  useEffect(() => save(KEY, lines), [lines]);
+  useEffect(() => {
+    save(KEY, lines);
+  }, [lines]);
 
   // Sincroniza entre pestañas.
   useEffect(() => {

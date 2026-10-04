@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { nextAction } from '../shared/flow';
-import { orderBody, start } from './helpers';
+import { TINY_JPEG, orderBody, start } from './helpers';
 
 const base = { fulfillment: 'delivery' as const, paymentMethod: 'contra_entrega' as const, paymentStatus: 'por_cobrar' as const, total: 33000 };
 
@@ -53,6 +53,7 @@ describe('seguimiento en vivo', () => {
     expect(tr.body.destination).toMatchObject({ lng: -99.1712 });
     expect((await t.api('GET', `/api/orders/${r.body.number}/tracking?t=otro`)).status).toBe(404);
 
+    await t.upload(`/api/admin/orders/${id}/delivery-photo`, TINY_JPEG);
     await t.api('POST', `/api/admin/orders/${id}/status`, { status: 'entregado' });
     const after = await t.api('GET', `/api/orders/${r.body.number}/tracking?t=${r.body.token}`);
     expect(after.body).toMatchObject({ active: false, courier: null });
@@ -76,5 +77,56 @@ describe('seguimiento en vivo', () => {
 
   it('el cliente no puede mandar ubicaciones del repartidor', async () => {
     expect((await t.api('POST', '/api/admin/orders/x/tracking', { lat: 1, lng: 1, accuracyM: 1 })).status).toBe(401);
+  });
+});
+
+describe('foto de entrega', () => {
+  let t: Awaited<ReturnType<typeof start>>;
+  beforeEach(async () => { t = await start(); });
+  afterEach(async () => { await t.close(); });
+
+  async function enCamino(fulfillment: 'delivery' | 'pickup' = 'delivery') {
+    const r = await t.api('POST', '/api/orders', orderBody({ paymentMethod: 'contra_entrega', ...(fulfillment === 'pickup' ? { fulfillment, address: null } : {}) }));
+    await t.api('POST', '/api/admin/login', { password: 'secreto-de-prueba' });
+    const id = (await t.api('GET', '/api/admin/orders?filter=todos')).body.orders.find((o: any) => o.number === r.body.number).id;
+    await t.api('POST', `/api/admin/orders/${id}/status`, { status: fulfillment === 'delivery' ? 'en_camino' : 'listo' });
+    return { id, number: r.body.number, token: r.body.token };
+  }
+
+  it('a domicilio no se puede marcar entregado sin foto', async () => {
+    const { id } = await enCamino();
+    const r = await t.api('POST', `/api/admin/orders/${id}/status`, { status: 'entregado' });
+    expect(r.status).toBe(409);
+    expect(r.body.code).toBe('photo_required');
+  });
+
+  it('con foto sí; el cliente la ve con su token y nadie más', async () => {
+    const { id, number, token } = await enCamino();
+    const up = await t.upload(`/api/admin/orders/${id}/delivery-photo`, TINY_JPEG);
+    expect(up.body.order.deliveryPhotoAt).toBeTruthy();
+    expect((await t.api('POST', `/api/admin/orders/${id}/status`, { status: 'entregado' })).body.order.orderStatus).toBe('entregado');
+    const res = await fetch(`${t.base}/api/orders/${number}/delivery-photo?t=${token}`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toBe('image/jpeg');
+    expect(new Uint8Array(await res.arrayBuffer())).toEqual(TINY_JPEG);
+    expect((await fetch(`${t.base}/api/orders/${number}/delivery-photo?t=otro`)).status).toBe(404);
+  });
+
+  it('rechaza archivos que no son imagen aunque digan serlo', async () => {
+    const { id } = await enCamino();
+    const fake = new TextEncoder().encode('<script>alert(1)</script>');
+    expect((await t.upload(`/api/admin/orders/${id}/delivery-photo`, fake)).status).toBe(415);
+  });
+
+  it('para recoger no se pide foto', async () => {
+    const { id } = await enCamino('pickup');
+    expect((await t.api('POST', `/api/admin/orders/${id}/status`, { status: 'entregado' })).status).toBe(200);
+  });
+
+  it('sin sesión no se puede subir foto', async () => {
+    const r = await t.api('POST', '/api/orders', orderBody({ paymentMethod: 'contra_entrega' }));
+    expect(r.status).toBe(201);
+    const res = await fetch(`${t.base}/api/admin/orders/x/delivery-photo`, { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: TINY_JPEG });
+    expect(res.status).toBe(401);
   });
 });

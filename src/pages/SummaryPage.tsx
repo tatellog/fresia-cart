@@ -46,7 +46,9 @@ export default function SummaryPage() {
     api<Quote>('/api/quote', { body: { fulfillment: form.fulfillment, address, items } }).then(setQuote, (e: Error) => setLoadError(e.message));
   };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(load, [items]);
+  useEffect(() => {
+    load();
+  }, [items]);
 
   if (cart.lines.length === 0) return <Navigate to="/carrito" replace />;
   if (formInvalid) return <Navigate to="/entrega" replace />;

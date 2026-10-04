@@ -13,7 +13,9 @@ export default function LegalPage() {
     api<LegalDoc>(`/api/legal/${encodeURIComponent(slug)}`).then(setDoc, (e: Error) => setError(e.message));
   };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(load, [slug]);
+  useEffect(() => {
+    load();
+  }, [slug]);
 
   return (
     <>

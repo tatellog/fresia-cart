@@ -37,7 +37,12 @@ export async function start(over: Partial<Config> = {}) {
     const json = await res.json().catch(() => null);
     return { status: res.status, body: json as any, headers: res.headers };
   }
-  return { api, ctx, base, close: async () => { await new Promise<void>((r) => server.close(() => r())); await ctx.db.close(); } };
+  /** Sube una imagen como lo hace el panel (cuerpo binario). */
+  async function upload(path: string, bytes: Uint8Array, type = 'image/jpeg') {
+    const res = await fetch(base + path, { method: 'POST', headers: { 'Content-Type': type, ...(cookie ? { cookie } : {}) }, body: bytes });
+    return { status: res.status, body: (await res.json().catch(() => null)) as any };
+  }
+  return { api, upload, ctx, base, close: async () => { await new Promise<void>((r) => server.close(() => r())); await ctx.db.close(); } };
 }
 
 // Frésia está en 19.39725, -99.1712. 1 m de latitud ≈ 1/111195 grados.
@@ -65,3 +70,6 @@ export function orderBody(over: Record<string, unknown> = {}) {
 }
 
 export const tick = (ms = 30) => new Promise((r) => setTimeout(r, ms));
+
+/** JPEG mínimo válido (cabecera FF D8 FF … FF D9). */
+export const TINY_JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01, 0x01, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0xff, 0xd9]);

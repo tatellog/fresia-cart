@@ -126,6 +126,8 @@ function OrderRow({ o, onChanged }: { o: AdminOrder; onChanged: () => void }) {
   const next = nextAction(o);
   async function advance() {
     if (!next) return;
+    // A domicilio, «Entregado» necesita la foto: abre el pedido en ese paso.
+    if (next.status === 'entregado' && o.fulfillment === 'delivery') return navigate(`/admin/pedidos/${o.id}?entregar=1`);
     setBusy(true);
     setErr(null);
     try {

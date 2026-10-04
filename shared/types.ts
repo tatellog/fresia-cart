@@ -215,6 +215,8 @@ export type PublicOrder = {
   paymentStatus: PaymentStatus;
   /** Efectivo al recibir: billete con el que paga (centavos); null = exacto o no indicó. */
   cashTendered: number | null;
+  /** Cuándo se subió la foto de entrega (comprobante); null si no hay. */
+  deliveryPhotoAt: string | null;
   orderStatus: OrderStatus;
   refundStatus: RefundStatus;
   demo: boolean;

@@ -136,7 +136,9 @@ export default function LiveMap({
     }
   }
 
-  useEffect(update, [store, courier, destination, trail, mode]);
+  useEffect(() => {
+    update();
+  }, [store, courier, destination, trail, mode]);
 
   return <div ref={box} className="live-map" role="img" aria-label="Mapa con la ubicación del repartidor" />;
 }

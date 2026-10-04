@@ -27,7 +27,9 @@ export const emptyCheckout: CheckoutForm = {
 
 export function useCheckoutForm() {
   const [form, setForm] = useState<CheckoutForm>(() => ({ ...emptyCheckout, ...load<Partial<CheckoutForm>>(KEY, {}) }));
-  useEffect(() => save(KEY, form), [form]);
+  useEffect(() => {
+    save(KEY, form);
+  }, [form]);
   return [form, setForm] as const;
 }
 

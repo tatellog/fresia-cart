@@ -3,7 +3,9 @@ import { useEffect, useState } from 'react';
 /** Importe en pesos; guarda centavos. */
 export function MoneyInput({ value, onChange, label, id }: { value: number; onChange: (cents: number) => void; label: string; id?: string }) {
   const [text, setText] = useState(String(value / 100));
-  useEffect(() => setText(String(value / 100)), [value]);
+  useEffect(() => {
+    setText(String(value / 100));
+  }, [value]);
   return (
     <input
       id={id}
