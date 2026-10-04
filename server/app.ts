@@ -446,7 +446,8 @@ export async function createApp(config: Config, opts: { demoWebhookDelayMs?: num
   admin.get('/delivery', async (_req, res) => res.json(await store.getDelivery(db)));
   admin.put('/delivery', async (req, res) => {
     const d = S.deliverySchema.parse(req.body);
-    if (d.zones.some((z) => z.etaMax < z.etaMin) || d.radiusEtaMax < d.radiusEtaMin) throw new HttpError(400, 'El tiempo máximo debe ser mayor o igual al mínimo.');
+    if ((d.prepMin == null) !== (d.prepMax == null)) throw new HttpError(400, 'Captura el tiempo de preparación completo (desde y hasta) o déjalo vacío.');
+    if (d.zones.some((z) => z.etaMax < z.etaMin) || (d.prepMin != null && d.prepMax != null && d.prepMax < d.prepMin)) throw new HttpError(400, 'El tiempo máximo debe ser mayor o igual al mínimo.');
     if (!d.cashOnDelivery && (!d.onlinePayment || !onlinePaymentReady(ctx))) {
       throw new HttpError(400, onlinePaymentReady(ctx) ? 'Activa al menos un método de pago.' : 'Mientras no esté configurado Mercado Pago, deja activo el pago al recibir.');
     }

@@ -121,12 +121,15 @@ export type DeliveryConfig = {
   origin: LatLng | null;
   radiusM: number;
   radiusFee: number;
-  radiusEtaMin: number;
-  radiusEtaMax: number;
+  /** Minutos de preparación (desde–hasta). null = sin capturar: no se muestra ningún tiempo. */
+  prepMin: number | null;
+  prepMax: number | null;
+  /** Minutos para subir a la oficina (recepción, elevador). */
+  handoffMin: number;
+  /** Cómo va el repartidor normalmente; define la velocidad del trayecto. */
+  courierMode: CourierMode;
   deliveryEnabled: boolean;
   pickupEnabled: boolean;
-  /** Texto libre, p. ej. "Listo en 20–30 min". Vacío = pendiente. */
-  pickupPrepText: string;
   outOfZone: 'reject' | 'manual';
   zones: Zone[];
   /** Métodos de pago disponibles para el cliente. */
@@ -179,7 +182,7 @@ export type Fulfillment = 'delivery' | 'pickup';
 
 export type DeliveryQuote =
   | { status: 'pickup' }
-  | { status: 'covered'; zoneId: string; zoneName: string; fee: number; etaMin: number; etaMax: number; distanceM?: number }
+  | { status: 'covered'; zoneId: string; zoneName: string; fee: number; etaMin: number | null; etaMax: number | null; distanceM?: number }
   | { status: 'manual'; reason: string; zoneName?: string; distanceM?: number; needsLocation?: boolean }
   | { status: 'not_covered'; distanceM?: number }
   | { status: 'quoted'; fee: number; etaText: string };

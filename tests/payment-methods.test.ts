@@ -65,7 +65,7 @@ describe('aviso por WhatsApp al negocio', () => {
     expect(msg.text).toContain('💵 COBRAR EN EFECTIVO $756\n   Monto con el que paga: no indicado'); // $726 + $30 de envío
     expect(msg.text).toContain('*1) 3 × Frésia Clásica · Mediano 16 oz* — $414\n   Para: Ana\n   Toppings: nuez picada, coco rallado, granola artesanal');
     expect(msg.text).toContain('*2) 3 × Waffle Frésia* — $312\n   Toppings: chocolate Turín');
-    expect(msg.text).toContain('🛵 *Entrega a domicilio* · 15–25 min\n   Calle de ejemplo 123, Piso 4, oficina 402\n   Del Valle Norte, CP 03103\n   Ref: Recepción\n   📍 https://maps.google.com/?q=');
+    expect(msg.text).toContain('🛵 *Entrega a domicilio*\n   Calle de ejemplo 123, Piso 4, oficina 402\n   Del Valle Norte, CP 03103\n   Ref: Recepción\n   📍 https://maps.google.com/?q=');
     expect(msg.text).toContain('👤 Ana Prueba · 55 1234 5678');
     expect(msg.text).toContain('/admin/pedidos/');
     // Plantilla de Meta: 6 variables de una sola línea + id para el botón.

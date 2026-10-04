@@ -8,7 +8,7 @@ import { api } from '../lib/api';
 import { money } from '../lib/format';
 import { DemoBanner, Field, SelectField, Spinner, StickyAction, TopBar } from '../components/ui';
 import { groupCheckout } from '../lib/groupState';
-import { etaText, isPostalCode, normalizeText } from '../../shared/coverage';
+import { isPostalCode, normalizeText, prepText, quoteEtaText } from '../../shared/coverage';
 import { POSTAL_NOT_FOUND, usePostalCode } from '../lib/postal';
 import type { DeliveryQuote } from '../../shared/types';
 
@@ -235,7 +235,7 @@ export default function DeliveryPage() {
               <h2 id="pickup-title">Recoger en Frésia</h2>
               <p>{data?.business.address || 'Dirección pendiente de confirmar'}</p>
               <p className="muted small">
-                Tiempo de preparación: {data?.delivery.pickupPrepText || 'pendiente de confirmar'}. Te avisaremos cuando esté listo.
+                {data && prepText(data.delivery) ? `Tiempo de preparación: ${prepText(data.delivery)}. ` : ''}Te avisaremos cuando esté listo.
               </p>
             </section>
           )}
@@ -265,7 +265,7 @@ function CoverageNotice({ coverage }: { coverage: { state: string; quote?: Deliv
   if (q.status === 'covered') {
     return (
       <div className="notice ok" role="status">
-        <strong>Sí llegamos{q.distanceM != null ? ` · estás a ${q.distanceM} m` : ''}.</strong> Envío {q.fee ? money(q.fee) : 'sin costo'} · {etaText(q.etaMin, q.etaMax)} aprox.
+        <strong>Sí llegamos{q.distanceM != null ? ` · estás a ${q.distanceM} m` : ''}.</strong> Envío {q.fee ? money(q.fee) : 'sin costo'}{quoteEtaText(q) ? ` · llega en ${quoteEtaText(q)} aprox.` : '.'}
       </div>
     );
   }

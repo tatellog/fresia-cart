@@ -1,3 +1,4 @@
+import { quoteEtaText } from '../shared/coverage';
 import type { Ctx } from './context';
 import { addEvent, toAdmin } from './orders';
 import type { OrderRow } from './orders';
@@ -119,7 +120,7 @@ export function buildWhatsApp(kind: NotifyKind, o: AdminOrder, adminUrl: string,
 
   const a = o.address;
   const eta =
-    o.deliveryQuote.status === 'covered' ? ` · ${o.deliveryQuote.etaMin}–${o.deliveryQuote.etaMax} min`
+    o.deliveryQuote.status === 'covered' ? (quoteEtaText(o.deliveryQuote) ? ` · ${quoteEtaText(o.deliveryQuote)}` : '')
     : o.deliveryQuote.status === 'quoted' ? ` · ${o.deliveryQuote.etaText}`
     : o.deliveryQuote.status === 'manual' ? ' · ⚠️ confirmar envío' : '';
   const map = a?.location ? `https://maps.google.com/?q=${a.location.lat.toFixed(6)},${a.location.lng.toFixed(6)}` : '';

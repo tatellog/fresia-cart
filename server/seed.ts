@@ -107,13 +107,15 @@ export const DEMO_DELIVERY: DeliveryConfig = {
   mode: 'radius',
   origin: FRESIA_LOCATION,
   radiusM: 300,
-  // Tarifa y tiempos de ejemplo: el negocio debe confirmarlos.
+  // Tarifa de ejemplo: el negocio debe confirmarla.
   radiusFee: 3000,
-  radiusEtaMin: 15,
-  radiusEtaMax: 25,
+  // Tiempos: sin capturar hasta que Frésia los mida (no se muestra ningún tiempo inventado).
+  prepMin: null,
+  prepMax: null,
+  handoffMin: 0,
+  courierMode: 'walk',
   deliveryEnabled: true,
   pickupEnabled: true,
-  pickupPrepText: '15–20 min (ejemplo)',
   outOfZone: 'reject',
   onlinePayment: true,
   cashOnDelivery: true,
@@ -121,7 +123,7 @@ export const DEMO_DELIVERY: DeliveryConfig = {
   cashOnDeliveryNote: '',
   example: true,
   zones: [
-    { id: 'z-ejemplo-1', name: 'Zona de ejemplo A', postalCodes: ['03103'], colonias: [], fee: 3000, etaMin: 25, etaMax: 40, mode: 'auto', active: true },
+    { id: 'z-ejemplo-1', name: 'Zona de ejemplo A', postalCodes: ['03103'], colonias: [], fee: 3000, etaMin: 0, etaMax: 0, mode: 'auto', active: true },
     { id: 'z-ejemplo-2', name: 'Zona de ejemplo B', postalCodes: ['03100', '03104'], colonias: [], fee: 0, etaMin: 0, etaMax: 0, mode: 'manual', active: true },
   ],
 };
@@ -161,7 +163,7 @@ Fuera de zona: si no podemos confirmar tu dirección automáticamente, te confir
 
 Horario: lunes a jueves de 12:00 a 20:30, viernes y sábado de 12:00 a 20:00; domingo cerrado. Puedes programar tu pedido para más tarde o para otro día.
 
-Tiempos estimados: ${PENDING}.
+Tiempos estimados: se calculan para tu dirección (preparación, distancia desde Frésia y subida a tu oficina) y se muestran antes de pagar. Son aproximados.
 
 Seguimiento: cuando tu pedido sale, puedes ver al repartidor en el mapa desde la página de tu pedido. Al entregarlo tomamos una foto como comprobante, que solo ve quien tiene el enlace del pedido.
 
