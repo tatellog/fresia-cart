@@ -868,3 +868,20 @@ legend {
   to { transform: scale(1.9); opacity: 0; }
 }
 .maplibregl-ctrl-attrib { font-size: 10px; }
+
+.update-banner {
+  position: fixed;
+  left: 50%;
+  bottom: calc(16px + var(--safe-b));
+  transform: translateX(-50%);
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px 10px 18px;
+  border-radius: 999px;
+  background: var(--choc);
+  color: var(--ivory);
+  font-size: 0.9375rem;
+  box-shadow: var(--shadow);
+}

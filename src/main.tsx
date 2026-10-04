@@ -6,6 +6,7 @@ import './styles.css';
 import { MenuProvider } from './lib/menu';
 import { CartProvider } from './lib/cart';
 import { Spinner } from './components/ui';
+import { useNewVersion } from './lib/version';
 import MenuPage from './pages/MenuPage';
 import ProductPage from './pages/ProductPage';
 import CartPage from './pages/CartPage';
@@ -16,6 +17,23 @@ import OrderPage from './pages/OrderPage';
 const DemoPayPage = lazy(() => import('./pages/DemoPayPage'));
 const LegalPage = lazy(() => import('./pages/LegalPage'));
 const AdminApp = lazy(() => import('./admin/AdminApp'));
+
+/** Versión nueva publicada: la tienda se recarga sola; el panel avisa (puede haber algo a medio escribir). */
+function VersionWatcher() {
+  const stale = useNewVersion();
+  const { pathname } = useLocation();
+  const admin = pathname.startsWith('/admin');
+  useEffect(() => {
+    if (stale && !admin) window.location.reload();
+  }, [stale, admin]);
+  if (!stale || !admin) return null;
+  return (
+    <div className="update-banner" role="status">
+      Hay una versión nueva del panel.
+      <button className="btn small ghost" onClick={() => window.location.reload()}>Actualizar</button>
+    </div>
+  );
+}
 
 function ScrollTop() {
   const { pathname } = useLocation();
@@ -38,6 +56,7 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <BrowserRouter>
       <ScrollTop />
+      <VersionWatcher />
       <MenuProvider>
         <CartProvider>
           <Suspense fallback={<main className="page" style={{ paddingTop: 40 }}><Spinner label="Cargando…" /></main>}>
