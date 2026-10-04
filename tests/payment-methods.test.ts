@@ -60,7 +60,7 @@ describe('aviso por WhatsApp al negocio', () => {
     await tick(50);
     const msg = t.ctx.notifier.whatsappOutbox.find((m) => m.text.includes(r.body.number))!;
     expect(msg.to).toBe('525582330124');
-    expect(msg.text).toContain('💵 Paga al recibir: $756'); // $726 + $30 de envío
+    expect(msg.text).toContain('💵 COBRAR EN EFECTIVO $756\n   Monto con el que paga: no indicado'); // $726 + $30 de envío
     expect(msg.text).toContain('*1) 3 × Frésia Clásica · Mediano 16 oz* — $414\n   Para: Ana\n   Toppings: nuez picada, coco rallado, granola artesanal');
     expect(msg.text).toContain('*2) 3 × Waffle Frésia* — $312\n   Toppings: chocolate Turín');
     expect(msg.text).toContain('🛵 *Entrega a domicilio* · 15–25 min\n   Calle de ejemplo 123, Piso 4, oficina 402\n   Del Valle Norte, CP 03103\n   Ref: Recepción\n   📍 https://maps.google.com/?q=');
@@ -80,7 +80,7 @@ describe('aviso por WhatsApp al negocio', () => {
     await t.api('POST', `/api/demo/preferences/${co.body.checkoutUrl.split('/').pop()}/pay`, { outcome: 'approved' });
     await tick(80);
     const msg = t.ctx.notifier.whatsappOutbox.find((m) => m.text.includes(c.body.number))!;
-    expect(msg.text).toContain('✅ Pagado en línea: $');
+    expect(msg.text).toContain('✅ PAGADO en línea: $');
   });
 
   it('los combos muestran qué lleva cada pieza', async () => {
@@ -91,10 +91,48 @@ describe('aviso por WhatsApp al negocio', () => {
     }));
     await tick(50);
     const msg = t.ctx.notifier.whatsappOutbox.find((m) => m.text.includes(r.body.number))!;
-    expect(msg.text).toContain('💵 Paga al recoger');
+    expect(msg.text).toContain('💵 COBRAR AL RECOGER $500\n   Efectivo o terminal en el local');
     expect(msg.text).toContain('🏪 *Recoge en Frésia*');
     expect(msg.text).toContain('*1) Combo Dulce Tradición* — $500\n   Para: Equipo\n   • 3 Pan relleno Frésia: cajeta\n   • 2 Pan relleno Frésia');
     expect(msg.text).not.toContain('Pieza');
     expect(msg.text).not.toContain('📍'); // recoge en tienda: sin ubicación
+  });
+});
+
+describe('efectivo al recibir: ¿cobrar o ya está pagado?', () => {
+  it('con cuánto paga y cuánto cambio llevar', async () => {
+    const r = await t.api('POST', '/api/orders', orderBody({ paymentMethod: 'contra_entrega', cashTendered: 80000 }));
+    expect(r.status).toBe(201);
+    expect(r.body.order.cashTendered).toBe(80000);
+    await tick(50);
+    const msg = t.ctx.notifier.whatsappOutbox.find((m) => m.text.includes(r.body.number))!;
+    expect(msg.text).toContain('💵 COBRAR EN EFECTIVO $756\n   Paga con $800 → llevar $44 de cambio');
+  });
+
+  it('monto exacto', async () => {
+    const r = await t.api('POST', '/api/orders', orderBody({ paymentMethod: 'contra_entrega', cashTendered: 75600 }));
+    await tick(50);
+    expect(t.ctx.notifier.whatsappOutbox.find((m) => m.text.includes(r.body.number))!.text).toContain('Paga con el monto exacto');
+  });
+
+  it('no acepta un billete menor al total', async () => {
+    const r = await t.api('POST', '/api/orders', orderBody({ paymentMethod: 'contra_entrega', cashTendered: 50000 }));
+    expect(r.status).toBe(422);
+  });
+
+  it('al recoger no se guarda billete (puede pagar con terminal en el local)', async () => {
+    const r = await t.api('POST', '/api/orders', orderBody({ paymentMethod: 'contra_entrega', fulfillment: 'pickup', address: null, cashTendered: 100000 }));
+    expect(r.body.order.cashTendered).toBeNull();
+  });
+
+  it('después de «Marcar cobrado» el panel dice COBRADO', async () => {
+    const r = await t.api('POST', '/api/orders', orderBody({ paymentMethod: 'contra_entrega', cashTendered: 80000 }));
+    await login();
+    const o = await adminOrder(r.body.number);
+    const { collectInfo } = await import('../shared/status');
+    const { money } = await import('../shared/money');
+    expect(collectInfo(o, money)).toMatchObject({ tone: 'collect', label: 'COBRAR EN EFECTIVO $756', change: 4400 });
+    const c = (await t.api('POST', `/api/admin/orders/${o.id}/collected`, {})).body.order;
+    expect(collectInfo(c, money)).toMatchObject({ tone: 'paid', label: 'COBRADO' });
   });
 });

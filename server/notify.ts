@@ -9,6 +9,7 @@ import { background } from './background';
 import { sendPushToAll } from './push';
 import type { PushPayload } from './push';
 import type { AdminOrder } from '../shared/types';
+import { collectInfo } from '../shared/status';
 
 export type NotifyKind = 'pedido_pagado' | 'pedido_contra_entrega' | 'cotizacion_envio' | 'revision';
 
@@ -113,13 +114,7 @@ const mask = (n: string) => n.replace(/\d(?=\d{4})/g, '•');
 
 /** Texto del aviso: lo que la cocina y el repartidor necesitan, sin datos de pago. */
 export function buildWhatsApp(kind: NotifyKind, o: AdminOrder, adminUrl: string, to: string): WhatsAppMessage {
-  const total = o.total != null ? money(o.total) : 'envío por cotizar';
-  const cod = o.paymentMethod === 'contra_entrega';
-  const pay = cod
-    ? `${o.paymentStatus === 'aprobado' ? '✅ Cobrado' : '💵 Paga ' + (o.fulfillment === 'pickup' ? 'al recoger' : 'al recibir')}: ${total}`
-    : o.paymentStatus === 'aprobado'
-      ? `✅ Pagado en línea: ${total}`
-      : `⏳ Pago en línea pendiente: ${total}`;
+  const payLines = paymentLines(o);
 
   const a = o.address;
   const eta =
@@ -156,7 +151,7 @@ export function buildWhatsApp(kind: NotifyKind, o: AdminOrder, adminUrl: string,
   const text = [
     `🍓 *NUEVO PEDIDO ${o.number}*${kind === 'cotizacion_envio' ? ' — confirmar envío' : kind === 'revision' ? ' — revisar' : ''}`,
     '',
-    pay,
+    ...payLines,
     ...deliveryLines,
     `👤 ${o.customerName} · ${phone}`,
     '',
@@ -184,7 +179,7 @@ export function buildWhatsApp(kind: NotifyKind, o: AdminOrder, adminUrl: string,
     text,
     params: [
       o.number,
-      pay.replace(/^\S+\s/, ''),
+      payLines.map((l) => l.trim()).join(' · ').replace(/^\S+\s/, ''),
       flat(deliveryLines).replace(/^\S+\s/, ''),
       `${o.customerName} · ${phone}`,
       products,
@@ -196,14 +191,31 @@ export function buildWhatsApp(kind: NotifyKind, o: AdminOrder, adminUrl: string,
 
 /** Notificación corta para el celular o la laptop: lo esencial para decidir si atender ya. */
 export function buildPush(kind: NotifyKind, o: AdminOrder): PushPayload {
-  const total = o.total != null ? money(o.total) : 'envío por cotizar';
-  const pay = o.paymentMethod === 'contra_entrega' ? (o.fulfillment === 'pickup' ? 'Paga al recoger' : 'Paga al recibir') : o.paymentStatus === 'aprobado' ? 'Pagado' : 'Pago pendiente';
+  const lines = paymentLines(o);
+  const pay = lines.map((l) => l.trim()).join(' · ');
   const where = o.fulfillment === 'pickup' ? 'Recoge en Frésia' : 'A domicilio';
   const pieces = o.items.reduce((n, l) => n + l.qty * (l.choices?.length ?? 1), 0);
   return {
     title: `🍓 ${TITLES[kind]} · ${o.number}`,
-    body: `${pay} ${total} · ${where} · ${pieces} pieza${pieces === 1 ? '' : 's'} · ${o.customerName}`,
+    body: `${pay} · ${where} · ${pieces} pieza${pieces === 1 ? '' : 's'} · ${o.customerName}`,
     url: `/admin/pedidos/${o.id}`,
     tag: `pedido-${o.number}`,
   };
+}
+
+/** «¿Ya está pagado o hay que cobrar?» en una o dos líneas, igual que en el panel. */
+export function paymentLines(o: AdminOrder): string[] {
+  const c = collectInfo(o, money);
+  if (c.tone === 'paid') return [`✅ ${c.label}: ${o.total != null ? money(o.total) : ''}`.trim()];
+  if (c.tone === 'pending') return [`⏳ ${c.label}`];
+  if (c.tone === 'none') return [`— ${c.label}`];
+  const extra =
+    o.fulfillment === 'pickup'
+      ? 'Efectivo o terminal en el local'
+      : o.cashTendered == null
+        ? 'Monto con el que paga: no indicado'
+        : c.change
+          ? `Paga con ${money(o.cashTendered)} → llevar ${money(c.change)} de cambio`
+          : 'Paga con el monto exacto';
+  return [`💵 ${c.label}`, `   ${extra}`];
 }

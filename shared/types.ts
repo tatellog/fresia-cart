@@ -201,6 +201,8 @@ export type PublicOrder = {
   deliveryQuote: DeliveryQuote;
   paymentMethod: PaymentMethod;
   paymentStatus: PaymentStatus;
+  /** Efectivo al recibir: billete con el que paga (centavos); null = exacto o no indicó. */
+  cashTendered: number | null;
   orderStatus: OrderStatus;
   refundStatus: RefundStatus;
   demo: boolean;

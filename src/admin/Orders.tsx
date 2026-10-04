@@ -3,9 +3,10 @@ import { Link } from 'react-router-dom';
 import { api } from '../lib/api';
 import { formatDate, money } from '../lib/format';
 import { LoadError, Spinner } from '../components/ui';
-import { ORDER_LABEL, PAYMENT_LABEL } from '../../shared/status';
+import { ORDER_LABEL } from '../../shared/status';
 import type { AdminOrder } from '../../shared/types';
 import { DeskControls, PushSetup, chime } from './Alerts';
+import { CollectPill } from './Collect';
 
 type Filter = 'activos' | 'sin_pagar' | 'revision' | 'todos';
 const FILTERS: { key: Filter; label: string }[] = [
@@ -94,13 +95,13 @@ export default function Orders() {
           <Link key={o.id} to={`/admin/pedidos/${o.id}`} className={`order-row ${o.orderStatus === 'recibido' ? 'new' : ''}`}>
             <div className="row" style={{ flexWrap: 'wrap', gap: 8 }}>
               <strong>{o.number}</strong>
-              <span className={`badge ${o.paymentStatus === 'aprobado' ? 'ok' : 'warn'}`}>{PAYMENT_LABEL[o.paymentStatus]}</span>
               <span className={`badge ${o.orderStatus === 'recibido' ? 'red' : ''}`}>{ORDER_LABEL[o.orderStatus]}</span>
               {o.needsReview && <span className="badge example">Revisar</span>}
               {o.refundStatus === 'pendiente' && <span className="badge example">Reembolso pendiente</span>}
-              {o.demo && <span className="badge">Demo</span>}
+              {o.demo && o.paymentMethod === 'online' && <span className="badge">Demo</span>}
             </div>
             <span className="price">{o.total != null ? money(o.total) : 'Envío por cotizar'}</span>
+            <span style={{ gridColumn: '1 / -1' }}><CollectPill order={o} /></span>
             <span className="muted small">
               {o.customerName} · {o.fulfillment === 'delivery' ? `Domicilio · CP ${o.address?.postalCode}` : 'Recoge'} · {o.items.reduce((s, l) => s + l.qty, 0)} productos
             </span>

@@ -64,6 +64,8 @@ async function setup() {
   const u = new URL(adminUrl);
   const ref = u.username.includes('.') ? u.username.split('.')[1] : u.hostname.split('.')[1];
   u.username = u.hostname.includes('pooler.supabase.com') ? `${APP_ROLE}.${ref}` : APP_ROLE;
+  // El servidor usa el pooler en modo transacción (6543): aguanta muchas conexiones de funciones serverless.
+  if (u.hostname.includes('pooler.supabase.com')) u.port = '6543';
   u.password = password;
   const appUrl = u.toString();
 

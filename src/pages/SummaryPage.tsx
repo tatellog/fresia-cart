@@ -22,6 +22,12 @@ export default function SummaryPage() {
   const form = useMemo(readCheckoutForm, []);
   const [, setStoredForm] = useCheckoutForm();
   const [method, setMethodState] = useState<PaymentMethod>(form.paymentMethod ?? 'online');
+  const [cash, setCashState] = useState<number | 'exacto' | null>(form.cashTendered ?? null);
+  const [cashOther, setCashOther] = useState('');
+  const setCash = (c: number | 'exacto' | null) => {
+    setCashState(c);
+    setStoredForm((f) => ({ ...f, cashTendered: c }));
+  };
   const setMethod = (m: PaymentMethod) => {
     setMethodState(m);
     setStoredForm((f) => ({ ...f, paymentMethod: m }));
@@ -50,7 +56,11 @@ export default function SummaryPage() {
   const cod = data?.delivery.cashOnDelivery ?? false;
   const effective: PaymentMethod = !cod ? 'online' : !online ? 'contra_entrega' : method;
   const payLater = effective === 'contra_entrega';
-  const blocked = !quote || quote.errors.length > 0;
+  const cashDelivery = payLater && form.fulfillment === 'delivery' && !manual;
+  const total = quote?.total ?? null;
+  const cashValue = cash === 'exacto' ? total : cash;
+  const cashInvalid = cashDelivery && (cashValue == null || (total != null && cashValue < total));
+  const blocked = !quote || quote.errors.length > 0 || cashInvalid;
 
   async function submit() {
     if (!quote || busy) return;
@@ -60,6 +70,7 @@ export default function SummaryPage() {
       customer: { name: form.name.trim(), phone: form.phone },
       fulfillment: form.fulfillment,
       paymentMethod: effective,
+      cashTendered: cashDelivery ? cashValue : null,
       address,
       notes: form.notes.trim(),
       items,
@@ -144,7 +155,7 @@ export default function SummaryPage() {
                 <p className="muted">{data?.business.address}</p>
               )}
               {quote.delivery.status === 'covered' && (
-                <p className="small">Tiempo estimado: {etaText(quote.delivery.etaMin, quote.delivery.etaMax)} después de confirmar el pago.</p>
+                <p className="small">Tiempo estimado: {etaText(quote.delivery.etaMin, quote.delivery.etaMax)} después de confirmar {payLater ? 'tu pedido' : 'el pago'}.</p>
               )}
               {quote.delivery.status === 'pickup' && data?.delivery.pickupPrepText && (
                 <p className="small">Preparación: {data.delivery.pickupPrepText}.</p>
@@ -170,14 +181,54 @@ export default function SummaryPage() {
                     <input type="radio" name="pay" checked={effective === 'contra_entrega'} onChange={() => setMethod('contra_entrega')} />
                     <span className="mark" aria-hidden="true" />
                     <span className="grow">
-                      <strong>{form.fulfillment === 'pickup' ? 'Pagar al recoger' : 'Pagar al recibir'}</strong>
+                      <strong>{form.fulfillment === 'pickup' ? 'Pagar al recoger' : 'Efectivo al recibir'}</strong>
                       <span className="muted small" style={{ display: 'block' }}>
-                        {form.fulfillment === 'pickup' ? 'Pagas en Frésia al recoger tu pedido.' : 'Pagas al repartidor al recibir tu pedido.'}
+                        {form.fulfillment === 'pickup' ? 'Efectivo o tarjeta en Frésia.' : 'Pagas en efectivo al repartidor; no lleva terminal.'}
                         {data?.delivery.cashOnDeliveryNote && ` ${data.delivery.cashOnDeliveryNote}`}
                       </span>
                     </span>
                   </label>
                 </div>
+              </fieldset>
+            )}
+
+            {cashDelivery && total != null && (
+              <fieldset className="stack" style={{ gap: 10 }}>
+                <legend className="label" style={{ marginBottom: 10 }}>¿Con cuánto vas a pagar? <span className="muted small">· para llevarte cambio</span></legend>
+                <div className="tabs" role="group" aria-label="Billete con el que pagas">
+                  <button type="button" aria-pressed={cash === 'exacto'} onClick={() => setCash('exacto')}>Exacto</button>
+                  {bills(total).map((b) => (
+                    <button key={b} type="button" aria-pressed={cash === b} onClick={() => setCash(b)}>{money(b)}</button>
+                  ))}
+                  <button
+                    type="button"
+                    aria-pressed={cash !== null && cash !== 'exacto' && !bills(total).includes(cash)}
+                    onClick={() => setCash(cashOther ? Math.round(parseFloat(cashOther) * 100) || null : null)}
+                  >
+                    Otro
+                  </button>
+                </div>
+                {cash !== 'exacto' && (cash === null || !bills(total).includes(cash)) && (
+                  <div className="field" style={{ maxWidth: 220 }}>
+                    <label htmlFor="cash-other">Otro monto</label>
+                    <input
+                      id="cash-other"
+                      className="input"
+                      inputMode="decimal"
+                      placeholder={`Mínimo ${money(total)}`}
+                      value={cashOther}
+                      onChange={(e) => {
+                        setCashOther(e.target.value);
+                        const v = Math.round(parseFloat(e.target.value.replace(/[$,\s]/g, '')) * 100);
+                        setCash(Number.isFinite(v) ? v : null);
+                      }}
+                    />
+                  </div>
+                )}
+                {cashValue != null && total != null && cashValue >= total && (
+                  <p className="small" role="status">{cashValue > total ? `Te llevamos ${money(cashValue - total)} de cambio.` : 'Pagas con el monto exacto.'}</p>
+                )}
+                {cashValue != null && total != null && cashValue < total && <p className="error-text">Debe ser al menos {money(total)}.</p>}
               </fieldset>
             )}
 
@@ -194,7 +245,10 @@ export default function SummaryPage() {
             ) : payLater ? (
               <div className="notice stack" style={{ gap: 6 }}>
                 <p>
-                  <strong>Pagas {quote.total != null ? money(quote.total) : ''} {form.fulfillment === 'pickup' ? 'al recoger' : 'al recibir'}.</strong> Tu pedido entra a la cocina en cuanto lo confirmes.
+                  <strong>
+                    {form.fulfillment === 'pickup' ? `Pagas ${quote.total != null ? money(quote.total) : ''} al recoger.` : `Pagas ${quote.total != null ? money(quote.total) : ''} en efectivo al recibir.`}
+                  </strong>{' '}
+                  Tu pedido entra a la cocina en cuanto lo confirmes.
                 </p>
               </div>
             ) : (
@@ -230,4 +284,14 @@ export default function SummaryPage() {
       </StickyAction>
     </>
   );
+}
+
+/** Billetes probables con los que se paga un total: siguiente múltiplo de 100, 200, 500 y 1,000. */
+function bills(total: number): number[] {
+  const out = new Set<number>();
+  for (const step of [10000, 20000, 50000, 100000]) {
+    const v = Math.ceil(total / step) * step;
+    if (v > total) out.add(v);
+  }
+  return [...out].sort((a, b) => a - b).slice(0, 3);
 }

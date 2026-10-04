@@ -30,25 +30,6 @@
   color: var(--choc);
   border-bottom-color: var(--red);
 }
-.tabs {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-.tabs button {
-  min-height: 40px;
-  padding: 0 16px;
-  border-radius: 999px;
-  border: 1.5px solid var(--line);
-  background: #fff;
-  font-weight: 600;
-  cursor: pointer;
-}
-.tabs button[aria-pressed='true'] {
-  background: var(--choc);
-  border-color: var(--choc);
-  color: var(--ivory);
-}
 .order-row {
   display: grid;
   grid-template-columns: 1fr auto;
@@ -142,3 +123,25 @@ details.editor > summary::-webkit-details-marker {
   from { transform: scale(0.97); opacity: 0; }
   to { transform: scale(1); opacity: 1; }
 }
+
+.collect {
+  display: inline-block;
+  font-weight: 700;
+  font-size: 0.875rem;
+  letter-spacing: 0.01em;
+  padding: 5px 12px;
+  border-radius: 999px;
+}
+.collect-paid { background: var(--ok-bg); color: var(--ok); }
+.collect-collect { background: #fde7b0; color: #5c3a00; }
+.collect-pending { background: var(--cream); color: var(--choc-2); }
+.collect-none { background: var(--cream); color: var(--choc-2); }
+.collect-box {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 18px 20px;
+  border-radius: var(--radius);
+  font-size: 1.05rem;
+}
+.collect-box strong { font-size: 1.35rem; }

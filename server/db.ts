@@ -66,7 +66,7 @@ export function postgres(url: string): Sql {
   const pool = new pg.Pool({
     connectionString: url.replace(/[?&]sslmode=[^&]*/, ''),
     // Pocas conexiones por instancia: en Vercel hay varias instancias contra el pooler de Supabase.
-    max: Number(process.env.DB_POOL_MAX ?? (process.env.VERCEL ? 3 : 5)),
+    max: Number(process.env.DB_POOL_MAX ?? 3),
     idleTimeoutMillis: 10_000,
     ssl: sslFor(url),
   });
@@ -98,13 +98,20 @@ export function postgres(url: string): Sql {
         client.release();
       }
     },
+    // Candado dentro de una transacción (pg_advisory_xact_lock): se libera solo al terminar y
+    // funciona igual con el pooler de Supabase en modo sesión o en modo transacción.
     async withLock(key, fn) {
       const client = await pool.connect();
       try {
-        await client.query('select pg_advisory_lock(hashtext($1))', [key]);
-        return await fn();
+        await client.query('begin');
+        await client.query('select pg_advisory_xact_lock(hashtext($1))', [key]);
+        const out = await fn();
+        await client.query('commit');
+        return out;
+      } catch (e) {
+        await client.query('rollback').catch(() => undefined);
+        throw e;
       } finally {
-        await client.query('select pg_advisory_unlock(hashtext($1))', [key]).catch(() => undefined);
         client.release();
       }
     },

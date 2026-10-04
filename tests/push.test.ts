@@ -14,7 +14,7 @@ describe('notificaciones push del panel', () => {
     await tick(50);
     const p = t.ctx.notifier.pushOutbox.find((x) => x.title.includes(r.body.number))!;
     expect(p.title).toBe(`🍓 Nuevo pedido · paga al recibir · ${r.body.number}`);
-    expect(p.body).toBe('Paga al recibir $756 · A domicilio · 6 piezas · Ana Prueba');
+    expect(p.body).toBe('💵 COBRAR EN EFECTIVO $756 · Monto con el que paga: no indicado · A domicilio · 6 piezas · Ana Prueba');
     expect(p.url).toMatch(/^\/admin\/pedidos\/[0-9a-f-]{36}$/);
   });
 

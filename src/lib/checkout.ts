@@ -10,6 +10,8 @@ export type CheckoutForm = {
   address: Address;
   notes: string;
   paymentMethod: PaymentMethod;
+  /** Efectivo: billete con el que paga (centavos); 'exacto' = el total. */
+  cashTendered: number | 'exacto' | null;
 };
 
 const KEY = 'fo.checkout.v1';
@@ -20,6 +22,7 @@ export const emptyCheckout: CheckoutForm = {
   address: { street: '', number: '', colonia: '', postalCode: '', office: '', references: '' },
   notes: '',
   paymentMethod: 'online',
+  cashTendered: null,
 };
 
 export function useCheckoutForm() {

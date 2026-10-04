@@ -216,10 +216,11 @@ function headline(o: PublicOrder, verifying: boolean): { title: string; body: st
     return { title: 'Pedido guardado', body: 'Confirmaremos el costo de envío y te avisaremos. Podrás pagar desde esta página; aún no te cobramos nada.' };
   }
   if (o.paymentMethod === 'contra_entrega') {
-    const when = o.fulfillment === 'pickup' ? 'al recoger' : 'al recibir';
+    const when = o.fulfillment === 'pickup' ? 'al recoger (efectivo o tarjeta)' : 'en efectivo al recibir';
+    const change = o.cashTendered != null && o.total != null && o.cashTendered > o.total ? ` Te llevamos ${money(o.cashTendered - o.total)} de cambio.` : '';
     return {
       title: o.paymentStatus === 'aprobado' ? 'Pagado' : o.orderStatus === 'recibido' ? 'Pedido recibido' : nextTitle(o.orderStatus),
-      body: `${nextStep(o.orderStatus, o.fulfillment === 'delivery')} ${o.paymentStatus === 'aprobado' ? '' : `Pagas ${o.total != null ? money(o.total) : ''} ${when}.`}`.trim(),
+      body: `${nextStep(o.orderStatus, o.fulfillment === 'delivery')} ${o.paymentStatus === 'aprobado' ? '' : `Pagas ${o.total != null ? money(o.total) : ''} ${when}.${change}`}`.trim(),
     };
   }
   switch (o.paymentStatus) {

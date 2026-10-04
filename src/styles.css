@@ -801,3 +801,23 @@ legend {
   max-width: 100%;
   text-align: center;
 }
+
+.tabs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.tabs button {
+  min-height: 40px;
+  padding: 0 16px;
+  border-radius: 999px;
+  border: 1.5px solid var(--line);
+  background: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
+.tabs button[aria-pressed='true'] {
+  background: var(--choc);
+  border-color: var(--choc);
+  color: var(--ivory);
+}

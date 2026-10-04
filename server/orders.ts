@@ -14,6 +14,7 @@ export type OrderInput = {
   customer: { name: string; phone: string };
   fulfillment: Fulfillment;
   paymentMethod: PaymentMethod;
+  cashTendered: number | null;
   address: Address | null;
   notes: string;
   items: CartLineInput[];
@@ -39,6 +40,7 @@ export type OrderRow = {
   delivery_quote: DeliveryQuote;
   payment_method: PaymentMethod;
   payment_status: PaymentStatus;
+  cash_tendered: number | null;
   order_status: OrderStatus;
   refund_status: RefundStatus;
   needs_review: string | null;
@@ -112,6 +114,11 @@ export async function createOrder(ctx: Ctx, idempotencyKey: string, input: Order
   const cod = input.paymentMethod === 'contra_entrega';
   if (cod ? !cfg.cashOnDelivery : !cfg.onlinePayment) throw new HttpError(422, 'Ese método de pago no está disponible.');
 
+  const cashTendered = cod && input.fulfillment === 'delivery' ? input.cashTendered : null;
+  if (cashTendered != null && quote.total != null && cashTendered < quote.total) {
+    throw new HttpError(422, 'El monto con el que pagas debe ser mayor o igual al total.');
+  }
+
   const manual = quote.delivery.status === 'manual';
   // Contra entrega: el pedido entra directo a la cocina (no hay pago que esperar).
   const orderStatus: OrderStatus = manual ? 'cotizando_envio' : cod ? 'recibido' : 'esperando_pago';
@@ -120,15 +127,15 @@ export async function createOrder(ctx: Ctx, idempotencyKey: string, input: Order
     const number = await nextOrderNumber(q);
     const row = await q.one<OrderRow>(
       `insert into office.orders (id, number, access_token, idempotency_key, request_hash, customer_name, customer_phone,
-         fulfillment, address, notes, items, subtotal, shipping_fee, total, delivery_quote, payment_method, payment_status, order_status, demo)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11::jsonb, $12, $13, $14, $15::jsonb, $18, $19, $16, $17)
+         fulfillment, address, notes, items, subtotal, shipping_fee, total, delivery_quote, payment_method, payment_status, order_status, demo, cash_tendered)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11::jsonb, $12, $13, $14, $15::jsonb, $18, $19, $16, $17, $20)
        on conflict (idempotency_key) do nothing
        returning *`,
       [
         id, number, randomBytes(24).toString('base64url'), idempotencyKey, hash, input.customer.name, input.customer.phone,
         input.fulfillment, input.address ? JSON.stringify(input.address) : null, input.notes, JSON.stringify(quote.lines),
         quote.subtotal, quote.shippingFee, quote.total, JSON.stringify(quote.delivery), orderStatus,
-        ctx.provider.name === 'demo', input.paymentMethod, cod ? 'por_cobrar' : 'sin_pagar',
+        ctx.provider.name === 'demo', input.paymentMethod, cod ? 'por_cobrar' : 'sin_pagar', cashTendered,
       ],
     );
     if (row) {
@@ -187,6 +194,7 @@ export function toPublic(row: OrderRow): PublicOrder {
     deliveryQuote: row.delivery_quote,
     paymentMethod: row.payment_method,
     paymentStatus: row.payment_status,
+    cashTendered: row.cash_tendered ?? null,
     orderStatus: row.order_status,
     refundStatus: row.refund_status,
     demo: row.demo,

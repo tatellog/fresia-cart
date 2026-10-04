@@ -46,6 +46,8 @@ export const quoteSchema = z.object({
 export const orderSchema = quoteSchema.extend({
   idempotencyKey: z.string().uuid(),
   paymentMethod: z.enum(['online', 'contra_entrega']).default('online'),
+  /** Efectivo: billete con el que paga, en centavos (null = exacto). */
+  cashTendered: z.number().int().min(0).max(5_000_000).nullable().default(null),
   customer: z.object({ name: text(80).min(2, 'Escribe tu nombre.'), phone: phoneSchema }),
   notes: text(300).default(''),
 }).refine((o) => o.fulfillment === 'pickup' || o.address != null, { message: 'Falta la dirección de entrega.' });

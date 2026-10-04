@@ -5,6 +5,7 @@ import { formatDate, money } from '../lib/format';
 import { parseMoney } from '../../shared/money';
 import { LoadError, Spinner } from '../components/ui';
 import { LineDetails } from '../pages/parts';
+import { CollectBox } from './Collect';
 import { ORDER_LABEL, PAYMENT_LABEL, REFUND_LABEL } from '../../shared/status';
 import type { AdminOrder, OrderStatus, RefundStatus } from '../../shared/types';
 
@@ -63,7 +64,8 @@ export default function OrderDetail() {
         <span className="price" style={{ fontSize: '1.25rem' }}>{order.total != null ? money(order.total) : 'Envío por cotizar'}</span>
       </div>
 
-      {order.demo && <div className="notice">Pedido de demostración: no hubo cobro real.</div>}
+      <CollectBox order={order} />
+      {order.demo && order.paymentMethod === 'online' && <div className="notice">Pago en línea simulado (demostración): no hubo cobro real.</div>}
       {order.needsReview && (
         <div className="notice error stack" role="alert">
           <p><strong>Requiere revisión:</strong> {order.needsReview}</p>
@@ -95,7 +97,7 @@ export default function OrderDetail() {
             ))}
             {cod && !paid && order.orderStatus !== 'cotizando_envio' && (
               <button className="btn secondary small" disabled={busy} onClick={() => act(`orders/${order.id}/collected`, {})}>
-                Marcar cobrado {order.total != null && money(order.total)}
+                {order.fulfillment === 'pickup' ? 'Marcar cobrado' : 'Marcar cobrado en efectivo'} {order.total != null && money(order.total)}
               </button>
             )}
             {!confirmCancel ? (
