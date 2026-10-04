@@ -13,11 +13,13 @@ export function DemoBanner() {
     data.delivery.example && 'tarifa y tiempo de envío',
     data.business.example && 'datos de contacto',
   ].filter(Boolean) as string[];
-  if (data.paymentsMode !== 'demo' && pending.length === 0) return null;
+  // «Demostración» solo si se ofrece el pago en línea simulado (nunca en la tienda pública).
+  const demoPay = data.paymentsMode === 'demo' && data.delivery.onlinePayment;
+  if (!demoPay && pending.length === 0) return null;
   const list = pending.length > 1 ? `${pending.slice(0, -1).join(', ')} y ${pending.at(-1)}` : pending[0];
   return (
     <div className="demo-banner" role="note">
-      {data.paymentsMode === 'demo' && <strong>Demostración: no se realizan cobros.</strong>}{' '}
+      {demoPay && <strong>Demostración: el pago en línea es simulado.</strong>}{' '}
       {list && <span>{list[0].toUpperCase() + list.slice(1)} de ejemplo.</span>}
     </div>
   );

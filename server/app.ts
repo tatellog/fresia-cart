@@ -7,7 +7,7 @@ import { ZodError } from 'zod';
 import { openDb, iso } from './db';
 import type { DB } from './db';
 import type { Config } from './env';
-import { HttpError } from './context';
+import { HttpError, onlinePaymentReady } from './context';
 import type { Ctx } from './context';
 import { Notifier } from './notify';
 import { DemoProvider } from './payments/demo';
@@ -67,7 +67,7 @@ export async function createApp(config: Config, opts: { demoWebhookDelayMs?: num
       toppings,
       rules,
       business,
-      delivery: { ...rest, zoneNames: zones.filter((z) => z.active).map((z) => z.name) },
+      delivery: { ...rest, onlinePayment: rest.onlinePayment && onlinePaymentReady(ctx), zoneNames: zones.filter((z) => z.active).map((z) => z.name) },
       paymentsMode: provider.name,
     };
     res.json(body);
@@ -216,7 +216,7 @@ export async function createApp(config: Config, opts: { demoWebhookDelayMs?: num
     clearSession(res);
     res.json({ ok: true });
   });
-  app.get('/api/admin/me', (req, res) => res.json({ admin: isAdmin(config, req), payments: provider.name }));
+  app.get('/api/admin/me', (req, res) => res.json({ admin: isAdmin(config, req), payments: provider.name, onlinePaymentReady: onlinePaymentReady(ctx) }));
 
   const admin = express.Router();
   admin.use(requireAdmin(config));
@@ -357,7 +357,9 @@ export async function createApp(config: Config, opts: { demoWebhookDelayMs?: num
   admin.put('/delivery', async (req, res) => {
     const d = S.deliverySchema.parse(req.body);
     if (d.zones.some((z) => z.etaMax < z.etaMin) || d.radiusEtaMax < d.radiusEtaMin) throw new HttpError(400, 'El tiempo máximo debe ser mayor o igual al mínimo.');
-    if (!d.onlinePayment && !d.cashOnDelivery) throw new HttpError(400, 'Activa al menos un método de pago.');
+    if (!d.cashOnDelivery && (!d.onlinePayment || !onlinePaymentReady(ctx))) {
+      throw new HttpError(400, onlinePaymentReady(ctx) ? 'Activa al menos un método de pago.' : 'Mientras no esté configurado Mercado Pago, deja activo el pago al recibir.');
+    }
     await store.setDelivery(db, d);
     res.json({ ok: true });
   });
@@ -382,6 +384,7 @@ export async function createApp(config: Config, opts: { demoWebhookDelayMs?: num
   admin.get('/system', async (_req, res) => {
     res.json({
       payments: provider.name,
+      onlinePaymentReady: onlinePaymentReady(ctx),
       webhookSecret: Boolean(config.mpWebhookSecret),
       notifyWebhook: Boolean(config.notifyWebhookUrl),
       whatsapp: whatsappConfigured(config) ? config.whatsappProvider : '',

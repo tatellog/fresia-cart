@@ -82,6 +82,7 @@ export function DeliverySettings() {
       <section className="card stack">
         <h2>Métodos de pago</h2>
         <Toggle checked={d.onlinePayment} onChange={(onlinePayment) => set({ onlinePayment })} label="Pagar en línea (Mercado Pago)" />
+        <OnlineNote />
         <Toggle checked={d.cashOnDelivery} onChange={(cashOnDelivery) => set({ cashOnDelivery })} label="Pagar al recibir / al recoger" />
         <div className="field">
           <label htmlFor="codnote">Detalle para «pagar al recibir» <span className="muted small">(opcional)</span></label>
@@ -265,7 +266,7 @@ function LegalEditor({ doc, onChange }: { doc: LegalDoc; onChange: (d: LegalDoc)
 
 // ── QR y estado del sistema ──────────────────────────────────────────
 
-type SystemRes = { payments: string; webhookSecret: boolean; notifyWebhook: boolean; whatsapp: string; publicUrl: string; httpsPublicUrl: boolean; lastWebhooks: { at: string; verified: number; result: string }[] };
+type SystemRes = { payments: string; onlinePaymentReady: boolean; webhookSecret: boolean; notifyWebhook: boolean; whatsapp: string; publicUrl: string; httpsPublicUrl: boolean; lastWebhooks: { at: string; verified: number; result: string }[] };
 type QrRes = { url: string; svg: string; scans: { day: string; source: string; count: number }[] };
 
 export function SystemSettings() {
@@ -307,8 +308,8 @@ export function SystemSettings() {
       <section className="card stack">
         <h2>Configuración</h2>
         <dl className="kv">
-          <dt>Pagos</dt>
-          <dd>{check(sys.payments === 'mercadopago', 'Mercado Pago activo', 'Demostración (sin cobros)')}</dd>
+          <dt>Pago en línea</dt>
+          <dd>{check(sys.payments === 'mercadopago', 'Mercado Pago activo', 'Falta configurar Mercado Pago · la tienda solo ofrece pago al recibir')}</dd>
           <dt>Firma de notificaciones</dt>
           <dd>{check(sys.webhookSecret, 'Configurada', 'Falta MP_WEBHOOK_SECRET')}</dd>
           <dt>URL pública</dt>
@@ -329,4 +330,14 @@ export function SystemSettings() {
       </section>
     </div>
   );
+}
+
+/** Aviso si «Pagar en línea» está marcado pero aún no se puede ofrecer (falta Mercado Pago). */
+function OnlineNote() {
+  const [ready, setReady] = useState<boolean | null>(null);
+  useEffect(() => {
+    void api<{ onlinePaymentReady: boolean }>('/api/admin/me').then((r) => setReady(r.onlinePaymentReady));
+  }, []);
+  if (ready !== false) return null;
+  return <p className="muted small">Se mostrará a los clientes cuando configures Mercado Pago. Mientras tanto solo ven «pago al recibir».</p>;
 }

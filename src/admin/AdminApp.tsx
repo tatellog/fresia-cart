@@ -9,8 +9,9 @@ import { BusinessSettings, DeliverySettings, LegalSettings, SystemSettings } fro
 import './admin.css';
 
 export default function AdminApp() {
-  const [state, setState] = useState<{ admin: boolean; payments: string } | null>(null);
-  const check = () => api<{ admin: boolean; payments: string }>('/api/admin/me').then(setState, () => setState({ admin: false, payments: '' }));
+  const [state, setState] = useState<{ admin: boolean; payments: string; onlinePaymentReady: boolean } | null>(null);
+  const check = () =>
+    api<{ admin: boolean; payments: string; onlinePaymentReady: boolean }>('/api/admin/me').then(setState, () => setState({ admin: false, payments: '', onlinePaymentReady: false }));
   useEffect(() => {
     void check();
     document.title = 'Panel · Frésia Office';
@@ -35,9 +36,9 @@ export default function AdminApp() {
 
   return (
     <div className="admin">
-      {state.payments === 'demo' && (
+      {state.payments === 'demo' && state.onlinePaymentReady && (
         <div className="demo-banner">
-          <strong>Demostración: no se realizan cobros.</strong> Los pagos son simulados hasta configurar Mercado Pago.
+          <strong>Entorno de prueba:</strong> el pago en línea es simulado.
         </div>
       )}
       <header className="admin-header">

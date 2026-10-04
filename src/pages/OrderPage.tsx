@@ -116,7 +116,7 @@ export default function OrderPage() {
             <span className={`badge ${order.paymentStatus === 'aprobado' ? 'ok' : ['rechazado', 'cancelado'].includes(order.paymentStatus) ? 'example' : order.paymentStatus === 'por_cobrar' ? '' : 'warn'}`}>
               {PAYMENT_LABEL[order.paymentStatus]}
             </span>
-            {order.demo && <span className="badge">Demostración · sin cobro real</span>}
+            {order.demo && order.paymentMethod === 'online' && <span className="badge">Pago simulado · sin cobro real</span>}
           </div>
         </section>
 

@@ -1,7 +1,7 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { iso, isoOrNull } from './db';
 import type { DB } from './db';
-import { HttpError } from './context';
+import { HttpError, onlinePaymentReady } from './context';
 import type { Ctx } from './context';
 import { getDelivery, getRules, listProducts, listToppings, nextOrderNumber } from './store';
 import { minimumMessage, priceCart } from '../shared/pricing';
@@ -113,7 +113,7 @@ export async function createOrder(ctx: Ctx, idempotencyKey: string, input: Order
   if (quote.errors.length) throw new HttpError(422, quote.errors[0], { errors: quote.errors });
   const cfg = await getDelivery(db);
   const cod = input.paymentMethod === 'contra_entrega';
-  if (cod ? !cfg.cashOnDelivery : !cfg.onlinePayment) throw new HttpError(422, 'Ese método de pago no está disponible.');
+  if (cod ? !cfg.cashOnDelivery : !cfg.onlinePayment || !onlinePaymentReady(ctx)) throw new HttpError(422, 'Ese método de pago no está disponible.');
 
   const cashTendered = cod && input.fulfillment === 'delivery' ? input.cashTendered : null;
   if (cashTendered != null && quote.total != null && cashTendered < quote.total) {

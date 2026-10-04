@@ -94,7 +94,7 @@ export default function OrderDetail() {
       </div>
 
       {order.orderStatus !== 'entregado' && <CollectBox order={order} />}
-      {order.demo && order.paymentMethod === 'online' && <div className="notice">Pago en línea simulado (demostración): no hubo cobro real.</div>}
+      {order.demo && order.paymentMethod === 'online' && <div className="notice warn">Pago en línea simulado: no hubo cobro real.</div>}
       {order.needsReview && (
         <div className="notice error stack" role="alert">
           <p><strong>Requiere revisión:</strong> {order.needsReview}</p>

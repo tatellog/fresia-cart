@@ -138,3 +138,26 @@ describe('efectivo al recibir: ¿cobrar o ya está pagado?', () => {
     expect(collectInfo(c, money)).toMatchObject({ tone: 'paid', label: 'COBRADO' });
   });
 });
+
+describe('producción sin Mercado Pago', () => {
+  let p: Awaited<ReturnType<typeof start>>;
+  beforeEach(async () => { p = await start({ production: true }); });
+  afterEach(async () => { await p.close(); });
+
+  it('no ofrece ni acepta el pago en línea simulado', async () => {
+    const menu = (await p.api('GET', '/api/menu')).body;
+    expect(menu.delivery.onlinePayment).toBe(false);
+    expect(menu.delivery.cashOnDelivery).toBe(true);
+    const r = await p.api('POST', '/api/orders', orderBody({ paymentMethod: 'online' }));
+    expect(r.status).toBe(422);
+    expect((await p.api('POST', '/api/orders', orderBody({ paymentMethod: 'contra_entrega' }))).status).toBe(201);
+  });
+
+  it('no deja apagar el pago al recibir mientras no haya Mercado Pago', async () => {
+    await p.api('POST', '/api/admin/login', { password: 'secreto-de-prueba' });
+    const d = (await p.api('GET', '/api/admin/delivery')).body;
+    const r = await p.api('PUT', '/api/admin/delivery', { ...d, cashOnDelivery: false });
+    expect(r.status).toBe(400);
+    expect(r.body.error).toMatch(/Mercado Pago/);
+  });
+});
