@@ -795,3 +795,9 @@ legend {
   min-height: 0;
   padding: 0;
 }
+
+.hero .badge {
+  white-space: normal;
+  max-width: 100%;
+  text-align: center;
+}
