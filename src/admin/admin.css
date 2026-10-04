@@ -1,0 +1,120 @@
+.admin-header {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: var(--ivory);
+  border-bottom: 1px solid var(--line);
+  padding-top: 12px;
+}
+.admin-header .page {
+  padding-bottom: 0;
+}
+.admin-nav {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-top: 8px !important;
+}
+.admin-nav a {
+  flex: none;
+  padding: 10px 14px;
+  min-height: 44px;
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 0.9375rem;
+  color: var(--choc-2);
+  border-bottom: 3px solid transparent;
+}
+.admin-nav a.active {
+  color: var(--choc);
+  border-bottom-color: var(--red);
+}
+.tabs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.tabs button {
+  min-height: 40px;
+  padding: 0 16px;
+  border-radius: 999px;
+  border: 1.5px solid var(--line);
+  background: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
+.tabs button[aria-pressed='true'] {
+  background: var(--choc);
+  border-color: var(--choc);
+  color: var(--ivory);
+}
+.order-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px 16px;
+  padding: 16px 20px;
+  background: #fff;
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow);
+  text-decoration: none;
+}
+.order-row.new {
+  outline: 2px solid var(--red);
+}
+.kv {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 6px 16px;
+}
+.kv dt {
+  color: var(--choc-2);
+}
+.kv dd {
+  margin: 0;
+}
+.admin table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9375rem;
+}
+.admin th,
+.admin td {
+  text-align: left;
+  padding: 8px 6px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+.admin .input.sm,
+.admin .select.sm {
+  min-height: 42px;
+  padding: 8px 12px;
+}
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  cursor: pointer;
+}
+.toggle input {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--red);
+}
+.qr svg {
+  width: 220px;
+  height: 220px;
+}
+.status-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+details.editor > summary {
+  list-style: none;
+  cursor: pointer;
+}
+details.editor > summary::-webkit-details-marker {
+  display: none;
+}
