@@ -8,7 +8,7 @@
   },
   "scripts": {
     "dev": "concurrently -k -n api,web -c red,magenta \"tsx watch server/index.ts\" \"vite\"",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && vite build && npm run build:server",
     "start": "NODE_ENV=production tsx server/index.ts",
     "preview": "npm run build && npm start",
     "test": "vitest run",
@@ -17,7 +17,8 @@
     "db:setup": "tsx scripts/db.ts setup",
     "db:check": "tsx scripts/db.ts check",
     "db:catalog": "tsx scripts/db.ts catalog",
-    "whatsapp:avisar": "tsx scripts/whatsapp.ts"
+    "whatsapp:avisar": "tsx scripts/whatsapp.ts",
+    "build:server": "esbuild server/vercel.ts --bundle --platform=node --format=esm --packages=external --target=node22 --outfile=build/server.mjs --log-level=warning"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.8",
@@ -40,6 +41,7 @@
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^4.7.0",
     "concurrently": "^10.0.5",
+    "esbuild": "^0.28.2",
     "typescript": "5.8",
     "vite": "^6.4.3",
     "vitest": "^3.2.7"

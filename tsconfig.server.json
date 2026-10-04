@@ -22,7 +22,6 @@
     "server",
     "shared",
     "tests",
-    "scripts",
-    "api"
+    "scripts"
   ]
 }

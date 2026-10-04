@@ -4,28 +4,54 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "functions": {
-    "api/index.ts": {
+    "api/index.mjs": {
       "maxDuration": 30,
-      "includeFiles": "{server/certs/**,public/images/**}"
+      "includeFiles": "{build/**,server/certs/**,public/images/**,supabase/migrations/**}"
     }
   },
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api" },
-    { "source": "/q", "destination": "/api" },
-    { "source": "/q/(.*)", "destination": "/api" },
-    { "source": "/((?!assets/|images/|brand/|favicon|apple-touch-icon).*)", "destination": "/index.html" }
+    {
+      "source": "/api/(.*)",
+      "destination": "/api"
+    },
+    {
+      "source": "/q",
+      "destination": "/api"
+    },
+    {
+      "source": "/q/(.*)",
+      "destination": "/api"
+    },
+    {
+      "source": "/((?!assets/|images/|brand/|favicon|apple-touch-icon).*)",
+      "destination": "/index.html"
+    }
   ],
   "headers": [
     {
       "source": "/assets/(.*)",
-      "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }]
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
     },
     {
       "source": "/(.*)",
       "headers": [
-        { "key": "X-Content-Type-Options", "value": "nosniff" },
-        { "key": "Referrer-Policy", "value": "same-origin" },
-        { "key": "X-Frame-Options", "value": "DENY" },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "same-origin"
+        },
+        {
+          "key": "X-Frame-Options",
+          "value": "DENY"
+        },
         {
           "key": "Content-Security-Policy",
           "value": "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' https://vercel.live; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
