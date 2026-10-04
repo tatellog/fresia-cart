@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
+import type { PaymentMethod } from '../../shared/types';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
-import { useCart } from '../lib/cart';
+import { toLineInput, useCart } from '../lib/cart';
 import { useMenu } from '../lib/menu';
-import { idempotencyKeyFor, readCheckoutForm, rememberOrder, resetIdempotencyKey } from '../lib/checkout';
+import { idempotencyKeyFor, readCheckoutForm, rememberOrder, resetIdempotencyKey, useCheckoutForm } from '../lib/checkout';
 import { api, ApiError } from '../lib/api';
 import { money } from '../lib/format';
 import { DemoBanner, LoadError, Spinner, StickyAction, TopBar } from '../components/ui';
@@ -19,13 +20,19 @@ export default function SummaryPage() {
   const { data } = useMenu();
   const navigate = useNavigate();
   const form = useMemo(readCheckoutForm, []);
+  const [, setStoredForm] = useCheckoutForm();
+  const [method, setMethodState] = useState<PaymentMethod>(form.paymentMethod ?? 'online');
+  const setMethod = (m: PaymentMethod) => {
+    setMethodState(m);
+    setStoredForm((f) => ({ ...f, paymentMethod: m }));
+  };
   const [quote, setQuote] = useState<Quote | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const items = useMemo(() => cart.lines.map(({ productId, sizeId, toppingIds, qty, forWhom }) => ({ productId, sizeId, toppingIds, qty, forWhom: forWhom ?? '' })), [cart.lines]);
-  const address = form.fulfillment === 'delivery' ? { ...form.address, postalCode: form.address.postalCode.trim() } : null;
+  const items = useMemo(() => cart.lines.map(toLineInput), [cart.lines]);
+  const address = form.fulfillment === 'delivery' ? { ...form.address, postalCode: form.address.postalCode.trim(), location: form.address.location ?? null } : null;
   const formInvalid = Object.keys(validate(form)).length > 0;
 
   const load = () => {
@@ -39,6 +46,10 @@ export default function SummaryPage() {
   if (formInvalid) return <Navigate to="/entrega" replace />;
 
   const manual = quote?.delivery.status === 'manual';
+  const online = data?.delivery.onlinePayment ?? true;
+  const cod = data?.delivery.cashOnDelivery ?? false;
+  const effective: PaymentMethod = !cod ? 'online' : !online ? 'contra_entrega' : method;
+  const payLater = effective === 'contra_entrega';
   const blocked = !quote || quote.errors.length > 0;
 
   async function submit() {
@@ -48,6 +59,7 @@ export default function SummaryPage() {
     const body = {
       customer: { name: form.name.trim(), phone: form.phone },
       fulfillment: form.fulfillment,
+      paymentMethod: effective,
       address,
       notes: form.notes.trim(),
       items,
@@ -142,12 +154,48 @@ export default function SummaryPage() {
 
             <Totals subtotal={quote.subtotal} shippingFee={quote.shippingFee} total={quote.total} fulfillment={form.fulfillment} />
 
+            {online && cod && (
+              <fieldset>
+                <legend className="label" style={{ marginBottom: 10 }}>¿Cómo quieres pagar?</legend>
+                <div className="options">
+                  <label className="option">
+                    <input type="radio" name="pay" checked={effective === 'online'} onChange={() => setMethod('online')} />
+                    <span className="mark" aria-hidden="true" />
+                    <span className="grow">
+                      <strong>Pagar en línea</strong>
+                      <span className="muted small" style={{ display: 'block' }}>Mercado Pago: tarjeta de crédito o débito, saldo Mercado Pago u OXXO</span>
+                    </span>
+                  </label>
+                  <label className="option">
+                    <input type="radio" name="pay" checked={effective === 'contra_entrega'} onChange={() => setMethod('contra_entrega')} />
+                    <span className="mark" aria-hidden="true" />
+                    <span className="grow">
+                      <strong>{form.fulfillment === 'pickup' ? 'Pagar al recoger' : 'Pagar al recibir'}</strong>
+                      <span className="muted small" style={{ display: 'block' }}>
+                        {form.fulfillment === 'pickup' ? 'Pagas en Frésia al recoger tu pedido.' : 'Pagas al repartidor al recibir tu pedido.'}
+                        {data?.delivery.cashOnDeliveryNote && ` ${data.delivery.cashOnDeliveryNote}`}
+                      </span>
+                    </span>
+                  </label>
+                </div>
+              </fieldset>
+            )}
+
             {manual ? (
               <div className="notice warn stack">
                 <p>
                   <strong>Necesitamos confirmar el costo de envío.</strong> {quote.delivery.status === 'manual' && quote.delivery.reason}
                 </p>
-                <p>Guardaremos tu pedido sin cobrarte. Cuando confirmemos el envío podrás pagarlo desde la página de tu pedido.</p>
+                <p>
+                  Guardaremos tu pedido sin cobrarte.{' '}
+                  {payLater ? 'Cuando confirmemos el envío lo empezaremos a preparar.' : 'Cuando confirmemos el envío podrás pagarlo desde la página de tu pedido.'}
+                </p>
+              </div>
+            ) : payLater ? (
+              <div className="notice stack" style={{ gap: 6 }}>
+                <p>
+                  <strong>Pagas {quote.total != null ? money(quote.total) : ''} {form.fulfillment === 'pickup' ? 'al recoger' : 'al recibir'}.</strong> Tu pedido entra a la cocina en cuanto lo confirmes.
+                </p>
               </div>
             ) : (
               <div className="notice stack" style={{ gap: 6 }}>
@@ -170,9 +218,11 @@ export default function SummaryPage() {
       <StickyAction>
         <button type="button" className="btn primary block" onClick={submit} disabled={blocked || busy} aria-busy={busy}>
           {busy ? (
-            <Spinner label={manual ? 'Guardando pedido…' : 'Preparando pago…'} />
+            <Spinner label={manual || payLater ? 'Guardando pedido…' : 'Preparando pago…'} />
           ) : manual ? (
             'Enviar pedido y confirmar envío'
+          ) : payLater ? (
+            <>Confirmar pedido · {quote?.total != null ? money(quote.total) : ''}</>
           ) : (
             <>Pagar {quote?.total != null ? money(quote.total) : ''}</>
           )}

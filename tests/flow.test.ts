@@ -2,14 +2,14 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { address, orderBody, start, tick } from './helpers';
+import { address, near, orderBody, start, tick } from './helpers';
 
 let t: Awaited<ReturnType<typeof start>>;
 beforeEach(async () => { t = await start(); });
 afterEach(async () => { await t.close(); });
 
-// Precios de ejemplo del seed: Clásica mediana 80.00, nuez 15, coco 10, Waffle 95, envío zona A 30.
-const EXPECTED_SUBTOTAL = (8000 + 1500 + 1000) * 2 + 9500; // 30,500
+// Menú en línea: Clásica mediano $120, adicional $18, Waffle $104; envío de ejemplo $30.
+const EXPECTED_SUBTOTAL = (12000 + 1800) * 3 + 10400 * 3; // $726 (mínimo 3 piezas por producto)
 const EXPECTED_TOTAL = EXPECTED_SUBTOTAL + 3000;
 
 async function createPaidReadyOrder(body = orderBody()) {
@@ -30,18 +30,23 @@ describe('totales', () => {
     expect(r.body.order.subtotal).toBe(EXPECTED_SUBTOTAL);
     expect(r.body.order.shippingFee).toBe(3000);
     expect(r.body.order.total).toBe(EXPECTED_TOTAL);
-    expect(r.body.order.items[0].unitPrice).toBe(10500);
+    expect(r.body.order.items[0].unitPrice).toBe(13800);
   });
 
-  it('rechaza productos agotados, toppings no permitidos y exceso de toppings', async () => {
-    let r = await t.api('POST', '/api/orders', orderBody({ items: [{ productId: 'granada', sizeId: 'chica', toppingIds: [], qty: 1 }] }));
-    expect(r.status).toBe(422);
-    r = await t.api('POST', '/api/orders', orderBody({ items: [{ productId: 'brulee', sizeId: 'mediana', toppingIds: ['oreo'], qty: 1 }] }));
-    expect(r.status).toBe(422);
-    r = await t.api('POST', '/api/orders', orderBody({ items: [{ productId: 'brulee', sizeId: 'mediana', toppingIds: ['nuez', 'granola', 'nuez'], qty: 1 }] }));
-    expect(r.status).toBe(201); // duplicados se consolidan
-    r = await t.api('POST', '/api/orders', orderBody({ items: [{ productId: 'clasica', sizeId: 'chica', toppingIds: [], qty: 0 }] }));
-    expect(r.status).toBe(400);
+  it('rechaza productos fuera del menú, tamaños inexistentes y cantidades inválidas', async () => {
+    const one = (item: object) => orderBody({ items: [{ qty: 3, ...item }, { productId: 'clasica', sizeId: 'chico', toppingIds: [], qty: 3 }] });
+    // La Brûlée solo existe en el local.
+    expect((await t.api('POST', '/api/orders', one({ productId: 'brulee', sizeId: 'mediano', toppingIds: [] }))).status).toBe(422);
+    // Chocolate sin crema solo en chico.
+    expect((await t.api('POST', '/api/orders', one({ productId: 'chocolate-sin-crema', sizeId: 'mediano', toppingIds: [] }))).status).toBe(422);
+    expect((await t.api('POST', '/api/orders', one({ productId: 'chocolate-sin-crema', sizeId: 'chico', toppingIds: [] }))).status).toBe(201);
+    // Productos que no están en el menú en línea.
+    for (const id of ['granada', 'nogada', 'te-frutal', 'agua']) {
+      expect((await t.api('POST', '/api/orders', one({ productId: id, sizeId: 'chico', toppingIds: [] }))).status).toBe(422);
+    }
+    // Topping que no existe.
+    expect((await t.api('POST', '/api/orders', one({ productId: 'clasica', sizeId: 'chico', toppingIds: ['inventado'] }))).status).toBe(422);
+    expect((await t.api('POST', '/api/orders', one({ productId: 'clasica', sizeId: 'chico', toppingIds: [], qty: 0 }))).status).toBe(400);
   });
 
   it('recoger en tienda no cobra envío', async () => {
@@ -50,25 +55,43 @@ describe('totales', () => {
   });
 });
 
-describe('cobertura', () => {
-  it('zona automática, zona manual y fuera de zona', async () => {
-    expect((await t.api('POST', '/api/coverage', { postalCode: '03103', colonia: 'x' })).body).toMatchObject({ status: 'covered', fee: 3000, etaMin: 25, etaMax: 40 });
-    expect((await t.api('POST', '/api/coverage', { postalCode: '03100', colonia: 'x' })).body.status).toBe('manual');
-    expect((await t.api('POST', '/api/coverage', { postalCode: '99999', colonia: 'x' })).body.status).toBe('manual');
-    expect((await t.api('POST', '/api/coverage', { postalCode: '123', colonia: 'x' })).status).toBe(400);
+describe('cobertura: 300 m alrededor de Frésia', () => {
+  const check = (location: object | null) => t.api('POST', '/api/coverage', { postalCode: '', colonia: '', location });
+
+  it('dentro del radio: tarifa y tiempo', async () => {
+    expect((await check(near(100))).body).toMatchObject({ status: 'covered', fee: 3000, etaMin: 15, etaMax: 25, distanceM: 100 });
+    expect((await check(near(280, 15))).body.status).toBe('covered'); // 280 + 15 ≤ 300
   });
 
-  it('si el negocio rechaza fuera de zona, no se crea el pedido', async () => {
-    await t.api('POST', '/api/admin/login', { password: 'secreto-de-prueba' });
-    const d = (await t.api('GET', '/api/admin/delivery')).body;
-    await t.api('PUT', '/api/admin/delivery', { ...d, outOfZone: 'reject' });
-    const r = await t.api('POST', '/api/orders', orderBody({ address: { ...address, postalCode: '99999' } }));
+  it('fuera del radio: no se acepta y no se crea el pedido', async () => {
+    expect((await check(near(600))).body).toMatchObject({ status: 'not_covered', distanceM: 600 });
+    const r = await t.api('POST', '/api/orders', orderBody({ address: { ...address, location: near(600) } }));
     expect(r.status).toBe(422);
     expect(r.body.error).toMatch(/no llegamos/i);
   });
 
+  it('en el límite o con GPS impreciso lo confirma una persona', async () => {
+    expect((await check(near(290, 30))).body.status).toBe('manual');
+    expect((await check(near(100, 200))).body.status).toBe('manual');
+    // Lejos aunque sea impreciso: no se acepta.
+    expect((await check(near(2000, 200))).body.status).toBe('not_covered');
+  });
+
+  it('sin ubicación: pide compartirla y, si no, se confirma por WhatsApp', async () => {
+    expect((await check(null)).body).toMatchObject({ status: 'manual', needsLocation: true });
+  });
+
+  it('el negocio puede cambiar el radio o usar códigos postales', async () => {
+    await t.api('POST', '/api/admin/login', { password: 'secreto-de-prueba' });
+    const d = (await t.api('GET', '/api/admin/delivery')).body;
+    await t.api('PUT', '/api/admin/delivery', { ...d, radiusM: 700 });
+    expect((await check(near(600))).body.status).toBe('covered');
+    await t.api('PUT', '/api/admin/delivery', { ...d, mode: 'zones' });
+    expect((await t.api('POST', '/api/coverage', { postalCode: '03103', colonia: 'x' })).body).toMatchObject({ status: 'covered', fee: 3000 });
+  });
+
   it('cotización manual: detiene el pago hasta que el negocio fija el envío', async () => {
-    const r = await t.api('POST', '/api/orders', orderBody({ address: { ...address, postalCode: '03100' } }));
+    const r = await t.api('POST', '/api/orders', orderBody({ address: { ...address, location: null } }));
     expect(r.body.order.orderStatus).toBe('cotizando_envio');
     expect(r.body.order.total).toBeNull();
     expect(r.body.order.canPay).toBe(false);
@@ -83,6 +106,11 @@ describe('cobertura', () => {
     const view = await t.api('GET', `/api/orders/${r.body.number}?t=${r.body.token}`);
     expect(view.body.order.canPay).toBe(true);
     expect((await t.api('POST', `/api/orders/${r.body.number}/checkout`, { t: r.body.token })).status).toBe(200);
+  });
+
+  it('la ubicación del cliente queda en el pedido para el repartidor', async () => {
+    const r = await t.api('POST', '/api/orders', orderBody());
+    expect(r.body.order.address.location).toMatchObject({ accuracyM: 15 });
   });
 });
 
@@ -219,9 +247,12 @@ describe('panel', () => {
     await t.api('POST', '/api/admin/login', { password: 'secreto-de-prueba' });
     const { products } = (await t.api('GET', '/api/admin/catalog')).body;
     const waffle = products.find((p: any) => p.id === 'waffle');
-    await t.api('PUT', '/api/admin/products/waffle', { ...waffle, sizes: [{ id: 'unico', label: 'Pieza', price: 12000 }] });
-    const r = await t.api('POST', '/api/orders', orderBody({ fulfillment: 'pickup', address: null, items: [{ productId: 'waffle', sizeId: 'unico', toppingIds: [], qty: 1 }] }));
-    expect(r.body.order.total).toBe(12000);
+    await t.api('PUT', '/api/admin/products/waffle', { ...waffle, sizes: [{ id: 'pieza', label: 'Pieza', price: 12000 }] });
+    const r = await t.api('POST', '/api/orders', orderBody({ fulfillment: 'pickup', address: null, items: [
+      { productId: 'waffle', sizeId: 'pieza', toppingIds: [], qty: 3 },
+      { productId: 'clasica', sizeId: 'chico', toppingIds: [], qty: 3 },
+    ] }));
+    expect(r.body.order.total).toBe(12000 * 3 + 10000 * 3);
   });
 
   it('el QR permanente redirige al menú y cuenta escaneos', async () => {

@@ -8,12 +8,17 @@ import { money } from '../lib/format';
 export function DemoBanner() {
   const { data } = useMenu();
   if (!data) return null;
-  const exampleContent = data.business.example || data.delivery.example || data.products.some((p) => p.example);
-  if (data.paymentsMode !== 'demo' && !exampleContent) return null;
+  const pending = [
+    data.products.some((p) => p.example) && 'menú',
+    data.delivery.example && 'tarifa y tiempo de envío',
+    data.business.example && 'datos de contacto',
+  ].filter(Boolean) as string[];
+  if (data.paymentsMode !== 'demo' && pending.length === 0) return null;
+  const list = pending.length > 1 ? `${pending.slice(0, -1).join(', ')} y ${pending.at(-1)}` : pending[0];
   return (
     <div className="demo-banner" role="note">
       {data.paymentsMode === 'demo' && <strong>Demostración: no se realizan cobros.</strong>}{' '}
-      {exampleContent && <span>Menú, precios y cobertura de ejemplo.</span>}
+      {list && <span>{list[0].toUpperCase() + list.slice(1)} de ejemplo.</span>}
     </div>
   );
 }

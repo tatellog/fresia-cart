@@ -5,8 +5,63 @@ Tienda web móvil para que oficinas de Del Valle Norte pidan fresas con crema de
 
 React + TypeScript (Vite) · servidor Node/Express · Postgres en **Supabase** · Mercado Pago Checkout Pro.
 
-> ⚠️ **Estado actual: DEMOSTRACIÓN.** No se realizan cobros. Menú, precios, toppings, zonas, tarifas y tiempos
-> son **de ejemplo** y aparecen marcados así en la tienda. Las fotos y el logo sí son de Frésia.
+> ⚠️ **Estado actual: DEMOSTRACIÓN.** No se realizan cobros. El menú y sus precios son los definidos por Frésia
+> para oficinas; las reglas de toppings vienen de Frésia OS (punto de venta). La tarifa y el tiempo de entrega siguen **de ejemplo** y aparecen marcados así.
+
+### Cobertura: 300 m alrededor de Frésia
+
+Frésia: Av. Insurgentes Sur 612, local C, esq. Valle de Arizpe, Del Valle Norte (≈ 19.39725, −99.1712; ajustable en el panel).
+El cliente toca **«Usar mi ubicación»** desde el lugar de entrega y el servidor mide la distancia:
+- dentro aun con el margen de error del GPS → se acepta con tarifa y tiempo;
+- fuera aun con el margen → no se acepta (se ofrece recoger);
+- en el límite, GPS impreciso (> 80 m) o sin permiso de ubicación → se guarda el pedido y se confirma por WhatsApp.
+
+Por qué GPS y no la dirección escrita: los geocodificadores gratuitos solo ubican la calle en esta zona (error de cientos de metros).
+Si se agrega una clave de Google Maps, se puede validar también la dirección. La ubicación requiere HTTPS (o `localhost`).
+El repartidor ve en el panel el punto GPS del cliente para compararlo con la dirección.
+
+### Datos del negocio
+
+- **Horario:** lunes a jueves 12:00–20:30 · viernes y sábado 12:00–20:00 · domingo cerrado.
+- **WhatsApp para confirmar pedidos:** +52 55 8233 0124 (temporal; se cambia en *Panel → Negocio*).
+
+### Pago
+
+El cliente elige en el resumen:
+- **Pagar en línea** con Mercado Pago Checkout Pro: tarjeta de crédito/débito, saldo Mercado Pago u OXXO.
+  (Apple Pay y Google Pay no aparecen documentados para Checkout Pro en México; no se anuncian.)
+- **Pagar al recibir / al recoger:** el pedido entra directo a la cocina; en el panel se marca «cobrado» al entregar.
+
+### Aviso a tu WhatsApp
+
+Cada pedido pagado en línea (al confirmarse el pago), cada pedido «pagar al recibir» y cada pedido que necesita
+cotización de envío se envía al WhatsApp del negocio (o a `WHATSAPP_NOTIFY_TO`) con productos, toppings, para quién,
+entrega, cliente y enlace al panel. El servidor lo envía aunque el cliente cierre la página.
+
+Configura **una** opción en `.env`:
+- **Meta WhatsApp Cloud API (oficial):** `WHATSAPP_PROVIDER=meta`, `META_WHATSAPP_TOKEN`, `META_WHATSAPP_PHONE_NUMBER_ID`,
+  `META_WHATSAPP_TEMPLATE` (plantilla aprobada de 4 variables: «Nuevo pedido {{1}}. {{2}}. Total: {{3}}. Ver detalle: {{4}} — Frésia Office»).
+  Necesita un número dedicado para enviar, distinto del que recibe.
+- **CallMeBot (rápida, gratuita):** `WHATSAPP_PROVIDER=callmebot`, `CALLMEBOT_APIKEY`. Se activa desde tu WhatsApp siguiendo
+  https://www.callmebot.com/blog/free-api-whatsapp-messages/. Es un servicio de terceros: el texto del aviso pasa por sus servidores.
+
+Sin configurar, el pedido igual llega al panel y su historial dice «WhatsApp no configurado».
+
+### Reglas del menú
+
+- **Mínimo 3 piezas por producto:** cada producto suelto se agrega desde 3 (el selector no baja de ahí); los combos desde 1.
+- Sin mínimo de Frésias por pedido (se puede activar en *Panel → Menú → Reglas*).
+- **Menú:** Frésia Clásica, Uvas y Mix Frésia ($100/$120/$140), Frésia Balance ($110/$130/$150), Frésia Choco Crema ($120/$140/$160),
+  Chocolate sin crema (solo chico, $140), Pan tradicional ($45), Pan relleno Frésia ($100), Waffle Frésia ($104).
+- **Toppings:** 2 incluidos (1 en Frésia en Nogada y pan relleno), cada adicional $18; los premium (+$25) no gastan incluidos.
+  En el Waffle el Turín y las mermeladas cuentan como incluidos.
+- **Combos** (precio = suma de sus productos; los toppings extra de cada pieza se cobran aparte):
+  - *Pausa Frésia* $640: 3 Clásicas medianas + 2 Chocolate sin crema chicos → cuenta 5 Frésias.
+  - *Dulce Tradición* $500: 5 panes rellenos Frésia → cuenta 0 Frésias.
+  - *Cumple con Frésia* $564: 1 Clásica mediana + 1 Chocolate sin crema chico + 2 panes rellenos + 1 waffle → cuenta 2 Frésias.
+- **Frèsia Brûlée:** no se vende en línea (solo en el local).
+- **Combos:** se crean en *Panel → Menú → Combos*: precio fijo y partes («3 Frésias chicas a elegir entre…»); el cliente arma cada pieza
+  con sus toppings. `npm run db:catalog` recarga el catálogo base de `server/seed.ts` (reemplaza el menú).
 
 ## Correr
 
@@ -47,7 +102,7 @@ Panel: `/admin` (contraseña = `ADMIN_PASSWORD`).
    - `PUBLIC_URL` debe ser tu dominio **https** (sin https Mercado Pago no puede notificar).
    - Haz una compra con usuarios de prueba, revisa *Panel → QR y sistema → Últimas notificaciones*, y luego cambia a credenciales de producción.
 2. **Base de datos Supabase** (ver abajo). Sin `DATABASE_URL` el servidor usa un Postgres embebido local (PGlite) — solo para desarrollo.
-3. **Contenido del negocio:** menú real, precios, toppings, zonas/CP, tarifas, tiempos, horario, dirección exacta, WhatsApp y correo.
+3. **Contenido del negocio:** combos, tarifa y tiempo de entrega dentro de los 270 m, horario, WhatsApp y correo.
    Todo se captura en el panel; al terminar, desmarca «ejemplo» en cada sección y desaparecen los avisos.
 4. **Textos legales:** aviso de privacidad, entregas y cancelaciones son **borradores** con huecos `[Pendiente…]`. Revísalos con tu asesor y márcalos como aprobados en el panel.
 5. **Aviso al negocio fuera del panel** (opcional): `NOTIFY_WEBHOOK_URL` recibe un POST por cada pedido pagado o por cotizar
@@ -91,5 +146,5 @@ shared/     tipos, cálculo de precios y cobertura (los usan navegador y servido
 server/     Express: pedidos, pagos (demo + Mercado Pago), panel, avisos
 supabase/   migraciones SQL
 src/        React: tienda (pages/) y panel (admin/)
-tests/      pruebas de flujo: totales, cobertura, duplicados, pagos, panel, persistencia
+tests/      pruebas: totales, mínimo, toppings, combos, cobertura, duplicados, pagos, panel, permisos, persistencia
 ```

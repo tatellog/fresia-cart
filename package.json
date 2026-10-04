@@ -15,7 +15,9 @@
     "typecheck": "tsc -b",
     "db:migrate": "tsx scripts/db.ts migrate",
     "db:setup": "tsx scripts/db.ts setup",
-    "db:check": "tsx scripts/db.ts check"
+    "db:check": "tsx scripts/db.ts check",
+    "db:catalog": "tsx scripts/db.ts catalog",
+    "whatsapp:avisar": "tsx scripts/whatsapp.ts"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.8",

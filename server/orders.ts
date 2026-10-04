@@ -3,16 +3,17 @@ import { iso, isoOrNull } from './db';
 import type { DB } from './db';
 import { HttpError } from './context';
 import type { Ctx } from './context';
-import { getDelivery, listProducts, listToppings, nextOrderNumber } from './store';
-import { priceCart } from '../shared/pricing';
+import { getDelivery, getRules, listProducts, listToppings, nextOrderNumber } from './store';
+import { minimumMessage, priceCart } from '../shared/pricing';
 import { quoteDelivery } from '../shared/coverage';
 import type {
-  Address, AdminOrder, CartLineInput, DeliveryQuote, Fulfillment, OrderStatus, PaymentStatus, PricedLine, PublicOrder, Quote, RefundStatus,
+  Address, AdminOrder, CartLineInput, Quote, DeliveryQuote, Fulfillment, OrderStatus, PaymentMethod, PaymentStatus, PricedLine, PublicOrder, RefundStatus,
 } from '../shared/types';
 
 export type OrderInput = {
   customer: { name: string; phone: string };
   fulfillment: Fulfillment;
+  paymentMethod: PaymentMethod;
   address: Address | null;
   notes: string;
   items: CartLineInput[];
@@ -36,6 +37,7 @@ export type OrderRow = {
   shipping_fee: number | null;
   total: number | null;
   delivery_quote: DeliveryQuote;
+  payment_method: PaymentMethod;
   payment_status: PaymentStatus;
   order_status: OrderStatus;
   refund_status: RefundStatus;
@@ -47,10 +49,14 @@ export type OrderRow = {
 
 /** Cotiza con el catálogo y la cobertura del servidor. Ignora cualquier importe del navegador. */
 export async function quoteOrder(db: DB, input: Pick<OrderInput, 'fulfillment' | 'address' | 'items'>): Promise<Quote> {
-  const [products, toppings, cfg] = await Promise.all([listProducts(db), listToppings(db), getDelivery(db)]);
-  const priced = priceCart(input.items, products, toppings);
+  const [products, toppings, cfg, rules] = await Promise.all([listProducts(db), listToppings(db), getDelivery(db), getRules(db)]);
+  const priced = priceCart(input.items, products, toppings, rules);
   const errors = priced.errors.map((e) => e.message);
   if (input.items.length === 0) errors.push('Tu carrito está vacío.');
+  else if (!priced.errors.length) {
+    const min = minimumMessage(priced.fresias, rules);
+    if (min) errors.push(min);
+  }
 
   let delivery: DeliveryQuote;
   if (input.fulfillment === 'pickup') {
@@ -71,6 +77,7 @@ export async function quoteOrder(db: DB, input: Pick<OrderInput, 'fulfillment' |
   return {
     lines: priced.lines,
     subtotal: priced.subtotal,
+    fresias: priced.fresias,
     delivery,
     shippingFee,
     total: shippingFee == null ? null : priced.subtotal + shippingFee,
@@ -101,25 +108,32 @@ export async function createOrder(ctx: Ctx, idempotencyKey: string, input: Order
 
   const quote = await quoteOrder(db, input);
   if (quote.errors.length) throw new HttpError(422, quote.errors[0], { errors: quote.errors });
+  const cfg = await getDelivery(db);
+  const cod = input.paymentMethod === 'contra_entrega';
+  if (cod ? !cfg.cashOnDelivery : !cfg.onlinePayment) throw new HttpError(422, 'Ese método de pago no está disponible.');
 
   const manual = quote.delivery.status === 'manual';
+  // Contra entrega: el pedido entra directo a la cocina (no hay pago que esperar).
+  const orderStatus: OrderStatus = manual ? 'cotizando_envio' : cod ? 'recibido' : 'esperando_pago';
   const id = randomUUID();
   const inserted = await db.tx(async (q) => {
     const number = await nextOrderNumber(q);
     const row = await q.one<OrderRow>(
       `insert into office.orders (id, number, access_token, idempotency_key, request_hash, customer_name, customer_phone,
-         fulfillment, address, notes, items, subtotal, shipping_fee, total, delivery_quote, payment_status, order_status, demo)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11::jsonb, $12, $13, $14, $15::jsonb, 'sin_pagar', $16, $17)
+         fulfillment, address, notes, items, subtotal, shipping_fee, total, delivery_quote, payment_method, payment_status, order_status, demo)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11::jsonb, $12, $13, $14, $15::jsonb, $18, $19, $16, $17)
        on conflict (idempotency_key) do nothing
        returning *`,
       [
         id, number, randomBytes(24).toString('base64url'), idempotencyKey, hash, input.customer.name, input.customer.phone,
         input.fulfillment, input.address ? JSON.stringify(input.address) : null, input.notes, JSON.stringify(quote.lines),
-        quote.subtotal, quote.shippingFee, quote.total, JSON.stringify(quote.delivery), manual ? 'cotizando_envio' : 'esperando_pago',
-        ctx.provider.name === 'demo',
+        quote.subtotal, quote.shippingFee, quote.total, JSON.stringify(quote.delivery), orderStatus,
+        ctx.provider.name === 'demo', input.paymentMethod, cod ? 'por_cobrar' : 'sin_pagar',
       ],
     );
-    if (row) await addEvent(q, id, 'creado', manual ? 'Requiere cotización de envío' : 'Esperando pago', 'cliente');
+    if (row) {
+      await addEvent(q, id, 'creado', `${manual ? 'Requiere cotización de envío' : cod ? 'Recibido' : 'Esperando pago'} · ${cod ? 'paga al recibir' : 'pago en línea'}`, 'cliente');
+    }
     return row;
   });
 
@@ -128,6 +142,7 @@ export async function createOrder(ctx: Ctx, idempotencyKey: string, input: Order
     return { order: (await existing())!, created: false };
   }
   if (manual) ctx.notifier.notify(ctx, 'cotizacion_envio', inserted);
+  else if (cod) ctx.notifier.notify(ctx, 'pedido_contra_entrega', inserted);
   return { order: inserted, created: true };
 }
 
@@ -153,7 +168,7 @@ function safeEqual(a: string, b: string) {
 }
 
 export function canPay(row: OrderRow): boolean {
-  return row.order_status === 'esperando_pago' && row.total != null && ['sin_pagar', 'rechazado', 'cancelado'].includes(row.payment_status);
+  return row.payment_method === 'online' && row.order_status === 'esperando_pago' && row.total != null && ['sin_pagar', 'rechazado', 'cancelado'].includes(row.payment_status);
 }
 
 export function toPublic(row: OrderRow): PublicOrder {
@@ -170,6 +185,7 @@ export function toPublic(row: OrderRow): PublicOrder {
     shippingFee: row.shipping_fee,
     total: row.total,
     deliveryQuote: row.delivery_quote,
+    paymentMethod: row.payment_method,
     paymentStatus: row.payment_status,
     orderStatus: row.order_status,
     refundStatus: row.refund_status,
@@ -219,7 +235,8 @@ export async function setOrderStatus(ctx: Ctx, id: string, status: OrderStatus, 
     }
 
     if (!PAID_FLOW.includes(status)) throw new HttpError(400, 'Estado no válido.');
-    if (row.payment_status !== 'aprobado') throw new HttpError(409, 'Solo puedes avanzar pedidos con pago recibido.');
+    const codReady = row.payment_method === 'contra_entrega' && row.order_status !== 'cotizando_envio';
+    if (row.payment_status !== 'aprobado' && !codReady) throw new HttpError(409, 'Solo puedes avanzar pedidos con pago recibido.');
     if (status === 'en_camino' && row.fulfillment !== 'delivery') throw new HttpError(409, 'Este pedido es para recoger.');
     await addEvent(q, id, 'estado', status, actor);
     return (await q.one<OrderRow>('update office.orders set order_status = $2, updated_at = now() where id = $1 returning *', [id, status]))!;
@@ -245,18 +262,38 @@ export async function setShippingQuote(ctx: Ctx, id: string, fee: number, etaTex
     if (!row) throw new HttpError(404, 'Pedido no encontrado.');
     if (row.order_status !== 'cotizando_envio') throw new HttpError(409, 'Este pedido no está esperando cotización.');
     const quote: DeliveryQuote = { status: 'quoted', fee, etaText };
+    const next: OrderStatus = row.payment_method === 'contra_entrega' ? 'recibido' : 'esperando_pago';
     await addEvent(q, id, 'envio_cotizado', `${fee / 100} MXN · ${etaText}`, actor);
     return (await q.one<OrderRow>(
-      "update office.orders set shipping_fee = $2, total = subtotal + $2, delivery_quote = $3::jsonb, order_status = 'esperando_pago', updated_at = now() where id = $1 returning *",
-      [id, fee, JSON.stringify(quote)],
+      'update office.orders set shipping_fee = $2, total = subtotal + $2, delivery_quote = $3::jsonb, order_status = $4, updated_at = now() where id = $1 returning *',
+      [id, fee, JSON.stringify(quote), next],
+    ))!;
+  }).then((updated) => {
+    if (updated.payment_method === 'contra_entrega') ctx.notifier.notify(ctx, 'pedido_contra_entrega', updated);
+    return updated;
+  });
+}
+
+/** Contra entrega: el negocio registra que ya cobró al entregar. */
+export async function markCollected(ctx: Ctx, id: string, actor: string): Promise<OrderRow> {
+  return ctx.db.tx(async (q) => {
+    const row = await q.one<OrderRow>('select * from office.orders where id = $1 for update', [id]);
+    if (!row) throw new HttpError(404, 'Pedido no encontrado.');
+    if (row.payment_method !== 'contra_entrega') throw new HttpError(409, 'Este pedido se paga en línea.');
+    if (row.payment_status === 'aprobado') return row;
+    if (row.order_status === 'cancelado' || row.order_status === 'cotizando_envio') throw new HttpError(409, 'Este pedido no se puede cobrar.');
+    await addEvent(q, id, 'pago', 'por_cobrar → aprobado (cobrado al entregar)', actor);
+    return (await q.one<OrderRow>(
+      "update office.orders set payment_status = 'aprobado', paid_at = now(), updated_at = now() where id = $1 returning *",
+      [id],
     ))!;
   });
 }
 
 export function listOrders(db: DB, filter: 'activos' | 'sin_pagar' | 'todos' | 'revision'): Promise<OrderRow[]> {
   const where = {
-    activos: "where (payment_status = 'aprobado' and order_status not in ('entregado', 'cancelado')) or order_status = 'cotizando_envio'",
-    sin_pagar: "where order_status = 'esperando_pago' and payment_status <> 'aprobado'",
+    activos: "where ((payment_status = 'aprobado' or payment_method = 'contra_entrega') and order_status not in ('entregado', 'cancelado')) or order_status = 'cotizando_envio'",
+    sin_pagar: "where payment_method = 'online' and order_status = 'esperando_pago' and payment_status <> 'aprobado'",
     revision: "where needs_review is not null or refund_status = 'pendiente'",
     todos: '',
   }[filter];

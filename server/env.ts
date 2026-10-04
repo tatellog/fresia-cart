@@ -21,6 +21,15 @@ export type Config = {
   mpAccessToken: string;
   mpWebhookSecret: string;
   notifyWebhookUrl: string;
+  /** Aviso de pedidos a tu WhatsApp: '', 'meta' o 'callmebot'. */
+  whatsappProvider: '' | 'meta' | 'callmebot';
+  /** Número que recibe los avisos; si está vacío se usa el WhatsApp del negocio (panel). */
+  whatsappNotifyTo: string;
+  callmebotApiKey: string;
+  metaWhatsappToken: string;
+  metaWhatsappPhoneNumberId: string;
+  metaWhatsappTemplate: string;
+  metaWhatsappTemplateLang: string;
 };
 
 export function loadConfig(overrides: Partial<Config> = {}): Config {
@@ -37,6 +46,13 @@ export function loadConfig(overrides: Partial<Config> = {}): Config {
     mpAccessToken: process.env.MP_ACCESS_TOKEN || '',
     mpWebhookSecret: process.env.MP_WEBHOOK_SECRET || '',
     notifyWebhookUrl: process.env.NOTIFY_WEBHOOK_URL || '',
+    whatsappProvider: (['meta', 'callmebot'].includes(process.env.WHATSAPP_PROVIDER ?? '') ? process.env.WHATSAPP_PROVIDER : '') as Config['whatsappProvider'],
+    whatsappNotifyTo: process.env.WHATSAPP_NOTIFY_TO || '',
+    callmebotApiKey: process.env.CALLMEBOT_APIKEY || '',
+    metaWhatsappToken: process.env.META_WHATSAPP_TOKEN || '',
+    metaWhatsappPhoneNumberId: process.env.META_WHATSAPP_PHONE_NUMBER_ID || '',
+    metaWhatsappTemplate: process.env.META_WHATSAPP_TEMPLATE || '',
+    metaWhatsappTemplateLang: process.env.META_WHATSAPP_TEMPLATE_LANG || 'es_MX',
     ...overrides,
   };
   if (!cfg.databaseUrl) {

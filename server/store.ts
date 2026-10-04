@@ -1,6 +1,6 @@
 import type { DB } from './db';
-import type { BusinessInfo, DeliveryConfig, LegalDoc, LegalSlug, Product, Topping } from '../shared/types';
-import { DEMO_BUSINESS, DEMO_DELIVERY, DEMO_PRODUCTS, DEMO_TOPPINGS, LEGAL_DRAFTS } from './seed';
+import type { BusinessInfo, DeliveryConfig, LegalDoc, LegalSlug, MenuRules, Product, Topping } from '../shared/types';
+import { DEFAULT_RULES, DEMO_BUSINESS, DEMO_DELIVERY, DEMO_PRODUCTS, DEMO_TOPPINGS, LEGAL_DRAFTS } from './seed';
 
 // ── Ajustes (clave → JSON) ──────────────────────────────────────────────
 
@@ -18,7 +18,9 @@ async function setSetting(db: DB, key: string, value: unknown) {
 
 export const getBusiness = (db: DB) => getSetting<BusinessInfo>(db, 'business', DEMO_BUSINESS);
 export const setBusiness = (db: DB, v: BusinessInfo) => setSetting(db, 'business', v);
-export const getDelivery = (db: DB) => getSetting<DeliveryConfig>(db, 'delivery', DEMO_DELIVERY);
+export const getRules = async (db: DB) => ({ ...DEFAULT_RULES, ...(await getSetting<Partial<MenuRules>>(db, 'rules', {})) });
+export const setRules = (db: DB, v: MenuRules) => setSetting(db, 'rules', v);
+export const getDelivery = async (db: DB): Promise<DeliveryConfig> => ({ ...DEMO_DELIVERY, ...(await getSetting<Partial<DeliveryConfig>>(db, 'delivery', {})) });
 export const setDelivery = (db: DB, v: DeliveryConfig) => setSetting(db, 'delivery', v);
 
 export const getLegal = (db: DB, slug: LegalSlug) => getSetting<LegalDoc>(db, `legal:${slug}`, LEGAL_DRAFTS[slug]);
@@ -34,7 +36,7 @@ export async function nextOrderNumber(db: DB): Promise<string> {
 
 export async function listProducts(db: DB): Promise<Product[]> {
   const rows = await db.query<{ data: Product }>('select data from office.products');
-  return rows.map((r) => r.data).sort((a, b) => a.sort - b.sort || a.name.localeCompare(b.name));
+  return rows.map((r) => normalizeProduct(r.data)).sort((a, b) => a.sort - b.sort || a.name.localeCompare(b.name));
 }
 export async function saveProduct(db: DB, p: Product) {
   await db.query('insert into office.products (id, data) values ($1, $2::jsonb) on conflict (id) do update set data = excluded.data', [p.id, JSON.stringify(p)]);
@@ -45,7 +47,7 @@ export async function deleteProduct(db: DB, id: string) {
 
 export async function listToppings(db: DB): Promise<Topping[]> {
   const rows = await db.query<{ data: Topping }>('select data from office.toppings');
-  return rows.map((r) => r.data).sort((a, b) => a.sort - b.sort || a.name.localeCompare(b.name));
+  return rows.map((r) => ({ ...r.data, premium: r.data.premium ?? false })).sort((a, b) => a.sort - b.sort || a.name.localeCompare(b.name));
 }
 export async function saveTopping(db: DB, t: Topping) {
   await db.query('insert into office.toppings (id, data) values ($1, $2::jsonb) on conflict (id) do update set data = excluded.data', [t.id, JSON.stringify(t)]);
@@ -54,10 +56,30 @@ export async function deleteTopping(db: DB, id: string) {
   await db.query('delete from office.toppings where id = $1', [id]);
 }
 
-/** Primera ejecución: carga contenido de ejemplo claramente marcado. */
+/** Primera ejecución: carga el catálogo base. */
 export async function seedIfEmpty(db: DB) {
   const row = await db.one<{ n: number }>('select count(*)::int as n from office.products');
   if (row!.n > 0) return;
-  for (const t of DEMO_TOPPINGS) await saveTopping(db, t);
-  for (const p of DEMO_PRODUCTS) await saveProduct(db, p);
+  await loadBaseCatalog(db);
+}
+
+/**
+ * Reemplaza el catálogo por el catálogo base de seed.ts (borra lo que no esté ahí).
+ * Solo se usa con `npm run db:catalog`; los cambios del panel posteriores se respetan.
+ */
+export async function loadBaseCatalog(db: DB) {
+  await db.tx(async (q) => {
+    await q.query('delete from office.products where not (id = any($1))', [DEMO_PRODUCTS.map((p) => p.id)]);
+    await q.query('delete from office.toppings where not (id = any($1))', [DEMO_TOPPINGS.map((t) => t.id)]);
+    for (const t of DEMO_TOPPINGS) await saveTopping(q, t);
+    for (const p of DEMO_PRODUCTS) await saveProduct(q, p);
+  });
+}
+
+/** Normaliza productos guardados con el formato anterior. */
+export function normalizeProduct(p: Partial<Product> & Pick<Product, 'id' | 'name'>): Product {
+  return {
+    description: '', image: '', section: 'Menú', sizes: [], toppingIds: [], includedToppings: 0, freePremiumIds: [], maxToppings: null,
+    fresiaUnits: 0, combo: null, available: false, sort: 0, example: true, ...p,
+  } as Product;
 }

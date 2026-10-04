@@ -778,3 +778,20 @@ legend {
 .legal-body {
   white-space: pre-wrap;
 }
+
+.toppings-toggle > summary {
+  list-style: none;
+  cursor: pointer;
+  min-height: 44px;
+  padding: 8px 14px;
+  border-radius: var(--radius-sm);
+  background: var(--cream);
+  font-size: 0.9375rem;
+}
+.toppings-toggle > summary::-webkit-details-marker {
+  display: none;
+}
+.toppings-toggle > summary .linkbtn {
+  min-height: 0;
+  padding: 0;
+}

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api, ApiError } from '../lib/api';
 import { useMenu } from '../lib/menu';
-import { useCart } from '../lib/cart';
+import { toLineInput, useCart } from '../lib/cart';
 import { recentOrders } from '../lib/checkout';
 import { formatDate, money, whatsappLink } from '../lib/format';
 import { DemoBanner, Footer, Spinner, TopBar } from '../components/ui';
@@ -60,7 +60,7 @@ export default function OrderPage() {
   useEffect(() => {
     if (!order || !(order.paymentStatus === 'aprobado' || order.orderStatus === 'cotizando_envio')) return;
     const mine = recentOrders().find((o) => o.number === order.number);
-    const items = JSON.stringify(cart.lines.map(({ productId, sizeId, toppingIds, qty, forWhom }) => ({ productId, sizeId, toppingIds, qty, forWhom: forWhom ?? '' })));
+    const items = JSON.stringify(cart.lines.map(toLineInput));
     if (mine?.cartFingerprint && cart.lines.length && mine.cartFingerprint.includes(items)) cart.clear();
   }, [order, cart]);
 
@@ -112,7 +112,7 @@ export default function OrderPage() {
           <p className="muted small">Pedido</p>
           <p className="big-number">{order.number}</p>
           <div className="row" style={{ flexWrap: 'wrap', gap: 8 }}>
-            <span className={`badge ${order.paymentStatus === 'aprobado' ? 'ok' : ['rechazado', 'cancelado'].includes(order.paymentStatus) ? 'example' : 'warn'}`}>
+            <span className={`badge ${order.paymentStatus === 'aprobado' ? 'ok' : ['rechazado', 'cancelado'].includes(order.paymentStatus) ? 'example' : order.paymentStatus === 'por_cobrar' ? '' : 'warn'}`}>
               {PAYMENT_LABEL[order.paymentStatus]}
             </span>
             {order.demo && <span className="badge">Demostración · sin cobro real</span>}
@@ -144,7 +144,9 @@ export default function OrderPage() {
           )}
         </section>
 
-        {order.paymentStatus === 'aprobado' && <Progress order={order} />}
+        {(order.paymentStatus === 'aprobado' || (order.paymentMethod === 'contra_entrega' && order.orderStatus !== 'cotizando_envio' && order.orderStatus !== 'cancelado')) && (
+          <Progress order={order} />
+        )}
 
         <section className="card stack" aria-labelledby="sum-title">
           <h2 id="sum-title">Resumen</h2>
@@ -172,7 +174,7 @@ export default function OrderPage() {
           <div className="stack" style={{ gap: 8 }}>
             <WhatsAppButton href={wa(`Hola Frésia, quiero consultar mi pedido ${order.number}.`)} label="Consultar mi pedido por WhatsApp" />
             <p className="muted small" style={{ textAlign: 'center' }}>
-              Opcional. {order.paymentStatus === 'aprobado' ? 'Tu pedido ya nos llegó; no necesitas escribirnos.' : ''}
+              Opcional. {order.paymentStatus === 'aprobado' || order.paymentMethod === 'contra_entrega' ? 'Tu pedido ya nos llegó; no necesitas escribirnos.' : ''}
             </p>
           </div>
         )}
@@ -213,6 +215,13 @@ function headline(o: PublicOrder, verifying: boolean): { title: string; body: st
   if (o.orderStatus === 'cotizando_envio') {
     return { title: 'Pedido guardado', body: 'Confirmaremos el costo de envío y te avisaremos. Podrás pagar desde esta página; aún no te cobramos nada.' };
   }
+  if (o.paymentMethod === 'contra_entrega') {
+    const when = o.fulfillment === 'pickup' ? 'al recoger' : 'al recibir';
+    return {
+      title: o.paymentStatus === 'aprobado' ? 'Pagado' : o.orderStatus === 'recibido' ? 'Pedido recibido' : nextTitle(o.orderStatus),
+      body: `${nextStep(o.orderStatus, o.fulfillment === 'delivery')} ${o.paymentStatus === 'aprobado' ? '' : `Pagas ${o.total != null ? money(o.total) : ''} ${when}.`}`.trim(),
+    };
+  }
   switch (o.paymentStatus) {
     case 'aprobado':
       return { title: 'Pago recibido', body: nextStep(o.orderStatus, o.fulfillment === 'delivery') };
@@ -229,6 +238,10 @@ function headline(o: PublicOrder, verifying: boolean): { title: string; body: st
         ? { title: 'Verificando tu pago…', body: 'Estamos confirmando con Mercado Pago. No cierres ni pagues de nuevo.', spinner: true }
         : { title: 'Pendiente de pago', body: 'Tu pedido está guardado. Completa el pago para que empecemos a prepararlo.' };
   }
+}
+
+function nextTitle(s: OrderStatus): string {
+  return { confirmado: 'Pedido confirmado', en_preparacion: 'En preparación', listo: 'Listo', en_camino: 'En camino', entregado: 'Entregado' }[s as string] ?? 'Pedido recibido';
 }
 
 function nextStep(s: OrderStatus, delivery: boolean): string {
@@ -253,7 +266,7 @@ function nextStep(s: OrderStatus, delivery: boolean): string {
 function Progress({ order }: { order: PublicOrder }) {
   const delivery = order.fulfillment === 'delivery';
   const steps: { key: OrderStatus; label: string }[] = [
-    { key: 'recibido', label: 'Pago recibido' },
+    { key: 'recibido', label: order.paymentMethod === 'contra_entrega' ? 'Pedido recibido' : 'Pago recibido' },
     { key: 'confirmado', label: 'Pedido confirmado' },
     { key: 'en_preparacion', label: 'En preparación' },
     delivery ? { key: 'en_camino', label: 'En camino' } : { key: 'listo', label: 'Listo para recoger' },

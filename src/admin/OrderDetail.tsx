@@ -4,6 +4,7 @@ import { api } from '../lib/api';
 import { formatDate, money } from '../lib/format';
 import { parseMoney } from '../../shared/money';
 import { LoadError, Spinner } from '../components/ui';
+import { LineDetails } from '../pages/parts';
 import { ORDER_LABEL, PAYMENT_LABEL, REFUND_LABEL } from '../../shared/status';
 import type { AdminOrder, OrderStatus, RefundStatus } from '../../shared/types';
 
@@ -50,6 +51,8 @@ export default function OrderDetail() {
   if (!order) return <Spinner label="Cargando…" />;
 
   const paid = order.paymentStatus === 'aprobado';
+  const cod = order.paymentMethod === 'contra_entrega';
+  const canAdvance = paid || (cod && order.orderStatus !== 'cotizando_envio');
   const nexts = (NEXT[order.orderStatus] ?? []).filter((s) => s !== 'en_camino' || order.fulfillment === 'delivery');
 
   return (
@@ -73,7 +76,10 @@ export default function OrderDetail() {
         <h2>Estados</h2>
         <dl className="kv">
           <dt>Pago</dt>
-          <dd><span className={`badge ${paid ? 'ok' : 'warn'}`}>{PAYMENT_LABEL[order.paymentStatus]}</span></dd>
+          <dd>
+            <span className={`badge ${paid ? 'ok' : 'warn'}`}>{PAYMENT_LABEL[order.paymentStatus]}</span>{' '}
+            <span className="muted small">{cod ? (order.fulfillment === 'pickup' ? 'paga al recoger' : 'paga al recibir') : 'en línea'}</span>
+          </dd>
           <dt>Pedido</dt>
           <dd><span className="badge">{ORDER_LABEL[order.orderStatus]}</span></dd>
           <dt>Reembolso</dt>
@@ -83,10 +89,15 @@ export default function OrderDetail() {
         {order.orderStatus !== 'cancelado' && (
           <div className="status-actions">
             {nexts.map((s) => (
-              <button key={s} className="btn primary small" disabled={busy || !paid} onClick={() => act(`orders/${order.id}/status`, { status: s })}>
+              <button key={s} className="btn primary small" disabled={busy || !canAdvance} onClick={() => act(`orders/${order.id}/status`, { status: s })}>
                 Marcar «{ORDER_LABEL[s]}»
               </button>
             ))}
+            {cod && !paid && order.orderStatus !== 'cotizando_envio' && (
+              <button className="btn secondary small" disabled={busy} onClick={() => act(`orders/${order.id}/collected`, {})}>
+                Marcar cobrado {order.total != null && money(order.total)}
+              </button>
+            )}
             {!confirmCancel ? (
               <button className="btn secondary small" disabled={busy || order.orderStatus === 'entregado'} onClick={() => setConfirmCancel(true)}>
                 Cancelar pedido
@@ -106,7 +117,7 @@ export default function OrderDetail() {
             )}
           </div>
         )}
-        {!paid && order.orderStatus !== 'cancelado' && order.orderStatus !== 'cotizando_envio' && (
+        {!canAdvance && order.orderStatus !== 'cancelado' && order.orderStatus !== 'cotizando_envio' && (
           <p className="muted small">El pedido avanza cuando el pago se confirma con la plataforma de pago.</p>
         )}
 
@@ -132,9 +143,8 @@ export default function OrderDetail() {
               <tr key={i}>
                 <td><strong>{l.qty}×</strong></td>
                 <td>
-                  {l.name} · {l.sizeLabel}
-                  {l.toppings.length > 0 && <div className="muted small">{l.toppings.map((t) => `${t.name} +${money(t.price)}`).join(' · ')}</div>}
-                  {l.forWhom && <div className="for-whom">Para: {l.forWhom}</div>}
+                  {l.name} {!l.choices && <>· {l.sizeLabel}</>}
+                  <LineDetails line={l} />
                 </td>
                 <td className="price" style={{ textAlign: 'right' }}>{money(l.lineTotal)}</td>
               </tr>
@@ -160,6 +170,20 @@ export default function OrderDetail() {
               <dt>Oficina</dt>
               <dd>{order.address.office}</dd>
               {order.address.references && (<><dt>Referencias</dt><dd>{order.address.references}</dd></>)}
+              <dt>Ubicación</dt>
+              <dd>
+                {order.address.location ? (
+                  <>
+                    GPS del cliente (±{order.address.location.accuracyM} m) ·{' '}
+                    <a href={`https://www.google.com/maps?q=${order.address.location.lat},${order.address.location.lng}`} target="_blank" rel="noopener noreferrer">
+                      Ver en mapa
+                    </a>
+                    <div className="muted small">Compárala con la dirección escrita antes de salir.</div>
+                  </>
+                ) : (
+                  <span className="muted">No la compartió</span>
+                )}
+              </dd>
             </>
           )}
           <dt>Zona</dt>

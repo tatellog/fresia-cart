@@ -5,6 +5,7 @@
  *   npm run db:setup     migra y crea/rota la contraseña del rol fresia_office_app,
  *                        y escribe DATABASE_URL (rol de la app) en .env
  *   npm run db:check     comprueba que los permisos sean los esperados
+ *   npm run db:catalog   reemplaza el menú por el catálogo base de server/seed.ts
  *
  * El usuario administrador se toma de DATABASE_ADMIN_URL (o SESSION_POOLER).
  * Solo se usa desde tu computadora; el servidor nunca lo necesita.
@@ -13,7 +14,8 @@ import { randomBytes } from 'node:crypto';
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import pg from 'pg';
 import '../server/env';
-import { migrationFiles, sslFor } from '../server/db';
+import { migrationFiles, openDb, sslFor } from '../server/db';
+import { listProducts, loadBaseCatalog } from '../server/store';
 
 const APP_ROLE = 'fresia_office_app';
 const adminUrl = process.env.DATABASE_ADMIN_URL || process.env.SESSION_POOLER || '';
@@ -155,10 +157,24 @@ function readEnv(key: string) {
   return m ? m[1] : '';
 }
 
+async function catalog() {
+  const appUrl = process.env.DATABASE_URL || readEnv('DATABASE_URL');
+  if (!appUrl) throw new Error('Falta DATABASE_URL en .env');
+  const db = await openDb({ url: appUrl });
+  try {
+    await loadBaseCatalog(db);
+    const products = await listProducts(db);
+    console.log(`✓ Catálogo cargado: ${products.length} productos`);
+    for (const p of products) console.log(`  · [${p.section}] ${p.name}: ${p.sizes.map((z) => `${z.label} $${z.price / 100}`).join(', ')}`);
+  } finally {
+    await db.close();
+  }
+}
+
 const cmd = process.argv[2];
-const run = { migrate, setup, check }[cmd as 'migrate' | 'setup' | 'check'];
+const run = { migrate, setup, check, catalog }[cmd as 'migrate' | 'setup' | 'check' | 'catalog'];
 if (!run) {
-  console.error('Uso: tsx scripts/db.ts migrate|setup|check');
+  console.error('Uso: tsx scripts/db.ts migrate|setup|check|catalog');
   process.exit(1);
 }
 run().catch((e) => {

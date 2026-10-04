@@ -8,7 +8,9 @@ import type { Config } from '../server/env';
 export function testConfig(over: Partial<Config> = {}): Config {
   return {
     port: 0, publicUrl: 'http://localhost:9999', databaseUrl: '', pglitePath: 'memory://', adminPassword: 'secreto-de-prueba',
-    sessionSecret: 'x'.repeat(32), production: false, mpAccessToken: '', mpWebhookSecret: '', notifyWebhookUrl: '', ...over,
+    sessionSecret: 'x'.repeat(32), production: false, mpAccessToken: '', mpWebhookSecret: '', notifyWebhookUrl: '',
+    whatsappProvider: '', whatsappNotifyTo: '', callmebotApiKey: '', metaWhatsappToken: '', metaWhatsappPhoneNumberId: '', metaWhatsappTemplate: '', metaWhatsappTemplateLang: 'es_MX',
+    ...over,
   };
 }
 
@@ -38,7 +40,12 @@ export async function start(over: Partial<Config> = {}) {
   return { api, ctx, base, close: async () => { await new Promise<void>((r) => server.close(() => r())); await ctx.db.close(); } };
 }
 
-export const address = { street: 'Calle de ejemplo', number: '123', colonia: 'Del Valle Norte', postalCode: '03103', office: 'Piso 4, oficina 402', references: 'Recepción' };
+// Frésia está en 19.39725, -99.1712. 1 m de latitud ≈ 1/111195 grados.
+export const near = (meters: number, accuracyM = 15) => ({ lat: 19.39725 + meters / 111195, lng: -99.1712, accuracyM });
+export const address = {
+  street: 'Calle de ejemplo', number: '123', colonia: 'Del Valle Norte', postalCode: '03103', office: 'Piso 4, oficina 402', references: 'Recepción',
+  location: near(100),
+};
 
 export function orderBody(over: Record<string, unknown> = {}) {
   return {
@@ -48,8 +55,10 @@ export function orderBody(over: Record<string, unknown> = {}) {
     address,
     notes: '',
     items: [
-      { productId: 'clasica', sizeId: 'mediana', toppingIds: ['nuez', 'coco'], qty: 2, forWhom: 'Ana' },
-      { productId: 'waffle', sizeId: 'unico', toppingIds: [], qty: 1 },
+      // 2 incluidos + granola adicional ($18): $120 + $18 = $138 c/u
+      { productId: 'clasica', sizeId: 'mediano', toppingIds: ['nuez', 'coco', 'granola'], qty: 3, forWhom: 'Ana' },
+      // Waffle $104: el Turín (premium) entra como incluido
+      { productId: 'waffle', sizeId: 'pieza', toppingIds: ['turin'], qty: 3 },
     ],
     ...over,
   };

@@ -38,16 +38,38 @@ export default function DeliveryPage() {
 
   const cp = form.address.postalCode.trim();
   const colonia = form.address.colonia.trim();
+  const radiusMode = data?.delivery.mode === 'radius';
+  const location = form.address.location ?? null;
+  const [locating, setLocating] = useState<'idle' | 'busy' | 'denied' | 'unavailable'>('idle');
+
+  function locate() {
+    if (!('geolocation' in navigator) || !window.isSecureContext) {
+      setLocating('unavailable');
+      return;
+    }
+    setLocating('busy');
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setForm((f) => ({
+          ...f,
+          address: { ...f.address, location: { lat: pos.coords.latitude, lng: pos.coords.longitude, accuracyM: Math.round(pos.coords.accuracy) } },
+        }));
+        setLocating('idle');
+      },
+      (err) => setLocating(err.code === err.PERMISSION_DENIED ? 'denied' : 'unavailable'),
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
+    );
+  }
 
   useEffect(() => {
-    if (form.fulfillment !== 'delivery' || !isPostalCode(cp)) {
+    if (form.fulfillment !== 'delivery' || !data || (!radiusMode && !isPostalCode(cp))) {
       setCoverage({ state: 'idle' });
       return;
     }
     const ctrl = new AbortController();
     setCoverage({ state: 'loading' });
     const t = setTimeout(() => {
-      api<DeliveryQuote>('/api/coverage', { body: { postalCode: cp, colonia }, signal: ctrl.signal }).then(
+      api<DeliveryQuote>('/api/coverage', { body: { postalCode: cp, colonia, location }, signal: ctrl.signal }).then(
         (quote) => setCoverage({ state: 'done', quote }),
         (e) => e.name !== 'AbortError' && setCoverage({ state: 'error' }),
       );
@@ -56,7 +78,8 @@ export default function DeliveryPage() {
       clearTimeout(t);
       ctrl.abort();
     };
-  }, [cp, colonia, form.fulfillment]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cp, colonia, form.fulfillment, data, radiusMode, location?.lat, location?.lng, location?.accuracyM]);
 
   // Si solo hay una modalidad disponible, selecciónala.
   useEffect(() => {
@@ -68,7 +91,7 @@ export default function DeliveryPage() {
   if (cart.lines.length === 0) return <Navigate to="/carrito" replace />;
 
   const set = (patch: Partial<CheckoutForm>) => setForm((f) => ({ ...f, ...patch }));
-  const setAddr = (k: keyof CheckoutForm['address'], v: string) => setForm((f) => ({ ...f, address: { ...f.address, [k]: v } }));
+  const setAddr = (k: Exclude<keyof CheckoutForm['address'], 'location'>, v: string) => setForm((f) => ({ ...f, address: { ...f.address, [k]: v } }));
   const notCovered = form.fulfillment === 'delivery' && coverage.state === 'done' && coverage.quote.status === 'not_covered';
 
   function next() {
@@ -114,6 +137,26 @@ export default function DeliveryPage() {
             </div>
           </fieldset>
 
+          {form.fulfillment === 'delivery' && radiusMode && data && (
+            <section className="card stack" aria-labelledby="loc-title">
+              <h2 id="loc-title">¿Estás cerca?</h2>
+              <p className="muted">
+                Entregamos a oficinas a menos de {data.delivery.radiusM} m de Frésia. Comparte tu ubicación <strong>desde el lugar de entrega</strong> para confirmarlo.
+              </p>
+              <button type="button" className={`btn ${location ? 'secondary' : 'primary'} block`} onClick={locate} disabled={locating === 'busy'}>
+                {locating === 'busy' ? <Spinner label="Buscando tu ubicación…" /> : location ? 'Actualizar mi ubicación' : 'Usar mi ubicación'}
+              </button>
+              {locating === 'denied' && (
+                <p className="small error-text" role="alert">No diste permiso de ubicación. Puedes activarlo en tu navegador, o seguir y confirmaremos el envío por WhatsApp.</p>
+              )}
+              {locating === 'unavailable' && (
+                <p className="small error-text" role="alert">No pudimos obtener tu ubicación. Puedes seguir y confirmaremos el envío por WhatsApp.</p>
+              )}
+              <CoverageNotice coverage={coverage} />
+              <p className="muted small">Solo usamos tu ubicación para calcular la distancia; la verá Frésia junto con tu pedido.</p>
+            </section>
+          )}
+
           <section className="stack" aria-labelledby="contact-title">
             <h2 id="contact-title">Tus datos</h2>
             <Field label="Nombre" autoComplete="name" value={form.name} onChange={(e) => set({ name: e.target.value })} error={errors.name} maxLength={80} />
@@ -146,7 +189,7 @@ export default function DeliveryPage() {
                 />
               </div>
               <Field label="Colonia" autoComplete="address-level3" value={form.address.colonia} onChange={(e) => setAddr('colonia', e.target.value)} error={errors.colonia} maxLength={80} />
-              <CoverageNotice coverage={coverage} />
+              {!radiusMode && <CoverageNotice coverage={coverage} />}
               <Field label="Oficina o piso" placeholder="Ej. Piso 4, oficina 402" value={form.address.office} onChange={(e) => setAddr('office', e.target.value)} error={errors.office} maxLength={80} />
               <Field label="Referencias" optional placeholder="Ej. Dejar en recepción" value={form.address.references} onChange={(e) => setAddr('references', e.target.value)} maxLength={200} />
             </section>
@@ -178,16 +221,19 @@ export default function DeliveryPage() {
 }
 
 function CoverageNotice({ coverage }: { coverage: { state: string; quote?: DeliveryQuote } }) {
-  if (coverage.state === 'idle') return <p className="hint muted small">Con tu código postal verificamos la cobertura y el costo de envío.</p>;
+  if (coverage.state === 'idle') return <p className="hint muted small">Verificamos la cobertura y el costo de envío antes de pagar.</p>;
   if (coverage.state === 'loading') return <div className="notice"><Spinner label="Verificando cobertura…" /></div>;
   if (coverage.state === 'error') return <div className="notice error" role="alert">No pudimos verificar la cobertura. Revisa tu conexión.</div>;
   const q = coverage.quote!;
   if (q.status === 'covered') {
     return (
       <div className="notice ok" role="status">
-        <strong>Sí llegamos.</strong> Envío {q.fee ? money(q.fee) : 'sin costo'} · {etaText(q.etaMin, q.etaMax)} aprox.
+        <strong>Sí llegamos{q.distanceM != null ? ` · estás a ${q.distanceM} m` : ''}.</strong> Envío {q.fee ? money(q.fee) : 'sin costo'} · {etaText(q.etaMin, q.etaMax)} aprox.
       </div>
     );
+  }
+  if (q.status === 'manual' && q.needsLocation) {
+    return <p className="small muted">Sin tu ubicación, guardaremos tu pedido y confirmaremos el envío por WhatsApp antes de cobrar.</p>;
   }
   if (q.status === 'manual') {
     return (
@@ -198,7 +244,7 @@ function CoverageNotice({ coverage }: { coverage: { state: string; quote?: Deliv
   }
   return (
     <div className="notice error" role="alert">
-      <strong>Por ahora no llegamos a esa dirección.</strong> Puedes elegir recoger en Frésia.
+      <strong>Por ahora no llegamos ahí{q.status === 'not_covered' && q.distanceM ? ` (estás a unos ${q.distanceM} m)` : ''}.</strong> Puedes elegir recoger en Frésia.
     </div>
   );
 }

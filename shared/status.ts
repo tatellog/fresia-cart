@@ -2,6 +2,7 @@ import type { OrderStatus, PaymentStatus, RefundStatus } from './types';
 
 export const PAYMENT_LABEL: Record<PaymentStatus, string> = {
   sin_pagar: 'Sin pagar',
+  por_cobrar: 'Pago al recibir',
   pendiente: 'Pago pendiente',
   aprobado: 'Pago recibido',
   rechazado: 'Pago rechazado',

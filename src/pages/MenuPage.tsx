@@ -17,7 +17,12 @@ export default function MenuPage() {
         <section className="hero">
           <img src="/brand/fresia-logo.svg" alt="Frésia, fresas con crema" className="logo" width={132} height={196} />
           <h1>Fresas con crema para tu oficina</h1>
-          <p className="muted">Pide para ti o para todo el equipo. Sin crear cuenta.</p>
+          <p className="muted">Pide para todo el equipo. Sin crear cuenta.</p>
+          {data && (data.rules.minQtyPerItem > 1 || data.rules.minFresias > 1) && (
+            <p className="badge" style={{ fontSize: '0.875rem', padding: '6px 14px' }}>
+              {data.rules.minQtyPerItem > 1 ? `Desde ${data.rules.minQtyPerItem} piezas por producto · combos desde 1` : `Pedido mínimo: ${data.rules.minFresias} Frésias`}
+            </p>
+          )}
           {recent && (
             <Link to={`/pedido/${recent.number}?t=${recent.token}`} className="btn ghost small">
               Ver mi pedido {recent.number}
@@ -34,15 +39,20 @@ export default function MenuPage() {
 
         <section aria-labelledby="menu-title" className="stack-lg" style={{ marginTop: 24 }}>
           <h2 id="menu-title" className="sr-only">Menú</h2>
+
           {error && <LoadError message={error} retry={reload} />}
           {!data && !error && <MenuSkeleton />}
-          {data && (
-            <div className="grid">
-              {data.products.map((p) => (
-                <ProductCard key={p.id} product={p} />
-              ))}
-            </div>
-          )}
+          {data &&
+            sections(data.products).map(([title, items]) => (
+              <section key={title} className="stack" aria-labelledby={`s-${title}`}>
+                <h2 id={`s-${title}`}>{title}</h2>
+                <div className="grid">
+                  {items.map((p) => (
+                    <ProductCard key={p.id} product={p} />
+                  ))}
+                </div>
+              </section>
+            ))}
         </section>
 
         {data && <BusinessSection business={data.business} delivery={data.delivery} />}
@@ -51,6 +61,13 @@ export default function MenuPage() {
       <CartBar />
     </>
   );
+}
+
+/** Agrupa por sección, en el orden del primer producto de cada una. */
+function sections(products: Product[]): [string, Product[]][] {
+  const map = new Map<string, Product[]>();
+  for (const p of products) map.set(p.section, [...(map.get(p.section) ?? []), p]);
+  return [...map.entries()];
 }
 
 function ProductCard({ product: p }: { product: Product }) {
@@ -67,7 +84,7 @@ function ProductCard({ product: p }: { product: Product }) {
           <p className="muted small desc">{p.description}</p>
         </div>
         <p className="price" style={{ whiteSpace: 'nowrap' }}>
-          {p.sizes.length > 1 && <span className="muted small" style={{ fontWeight: 400 }}>desde </span>}
+          {(p.sizes.length > 1 || p.combo) && <span className="muted small" style={{ fontWeight: 400 }}>desde </span>}
           {money(from)}
         </p>
       </div>

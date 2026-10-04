@@ -3,10 +3,18 @@ import { isPostalCode } from '../shared/coverage';
 
 const text = (max: number) => z.string().trim().max(max);
 
+const choiceSchema = z.object({
+  slotId: text(60).min(1),
+  productId: text(60).min(1),
+  sizeId: text(60).min(1),
+  toppingIds: z.array(text(60)).max(20),
+});
+
 export const lineSchema = z.object({
   productId: text(60).min(1),
   sizeId: text(60).min(1),
   toppingIds: z.array(text(60)).max(20),
+  choices: z.array(choiceSchema).max(30).optional(),
   qty: z.number().int().min(1).max(50),
   forWhom: text(40).optional(),
 });
@@ -18,6 +26,10 @@ export const addressSchema = z.object({
   postalCode: z.string().trim().refine(isPostalCode, 'El código postal debe tener 5 dígitos.'),
   office: text(80).min(1, 'Indica oficina o piso.'),
   references: text(200),
+  location: z
+    .object({ lat: z.number().min(-90).max(90), lng: z.number().min(-180).max(180), accuracyM: z.number().min(0).max(100000) })
+    .nullable()
+    .optional(),
 });
 
 export const phoneSchema = z
@@ -33,11 +45,16 @@ export const quoteSchema = z.object({
 
 export const orderSchema = quoteSchema.extend({
   idempotencyKey: z.string().uuid(),
+  paymentMethod: z.enum(['online', 'contra_entrega']).default('online'),
   customer: z.object({ name: text(80).min(2, 'Escribe tu nombre.'), phone: phoneSchema }),
   notes: text(300).default(''),
 }).refine((o) => o.fulfillment === 'pickup' || o.address != null, { message: 'Falta la dirección de entrega.' });
 
-export const coverageSchema = z.object({ postalCode: z.string().trim().refine(isPostalCode, 'El código postal debe tener 5 dígitos.'), colonia: text(80) });
+export const coverageSchema = z.object({
+  postalCode: z.string().trim(),
+  colonia: text(80),
+  location: z.object({ lat: z.number().min(-90).max(90), lng: z.number().min(-180).max(180), accuracyM: z.number().min(0).max(100000) }).nullable().optional(),
+});
 
 // ── Panel ──
 const money = z.number().int().min(0).max(10_000_00);
@@ -48,19 +65,45 @@ export const productSchema = z.object({
   name: text(80).min(1),
   description: text(240),
   image: text(300),
+  section: text(40).min(1, 'Indica la sección del menú.'),
   sizes: z.array(z.object({ id, label: text(40).min(1), price: money })).min(1, 'Agrega al menos un tamaño.'),
   toppingIds: z.array(id),
+  includedToppings: z.number().int().min(0).max(10),
+  freePremiumIds: z.array(id),
   maxToppings: z.number().int().min(0).max(20).nullable(),
+  fresiaUnits: z.number().int().min(0).max(20),
+  combo: z
+    .array(
+      z.object({
+        id,
+        label: text(60).min(1),
+        qty: z.number().int().min(1).max(20),
+        options: z.array(z.object({ productId: id, sizeId: id })).min(1, 'Cada parte del combo necesita al menos una opción.'),
+      }),
+    )
+    .min(1, 'El combo necesita al menos una parte.')
+    .nullable(),
   available: z.boolean(),
   sort: z.number().int(),
   example: z.boolean(),
 });
 
-export const toppingSchema = z.object({ id, name: text(60).min(1), price: money, available: z.boolean(), sort: z.number().int(), example: z.boolean() });
+export const toppingSchema = z.object({ id, name: text(60).min(1), price: money, premium: z.boolean(), available: z.boolean(), sort: z.number().int(), example: z.boolean() });
+
+export const rulesSchema = z.object({ extraToppingPrice: money, minFresias: z.number().int().min(0).max(100), minQtyPerItem: z.number().int().min(1).max(50) });
 
 export const deliverySchema = z.object({
+  mode: z.enum(['radius', 'zones']),
+  origin: z.object({ lat: z.number().min(-90).max(90), lng: z.number().min(-180).max(180) }).nullable(),
+  radiusM: z.number().int().min(50).max(20000),
+  radiusFee: money,
+  radiusEtaMin: z.number().int().min(0).max(600),
+  radiusEtaMax: z.number().int().min(0).max(600),
   deliveryEnabled: z.boolean(),
   pickupEnabled: z.boolean(),
+  onlinePayment: z.boolean(),
+  cashOnDelivery: z.boolean(),
+  cashOnDeliveryNote: text(120),
   pickupPrepText: text(80),
   outOfZone: z.enum(['reject', 'manual']),
   example: z.boolean(),

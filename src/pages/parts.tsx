@@ -1,5 +1,28 @@
 import { money } from '../lib/format';
-import type { Fulfillment, PricedLine, Product } from '../../shared/types';
+import type { Fulfillment, PricedLine, PricedTopping, Product } from '../../shared/types';
+
+export const toppingText = (ts: PricedTopping[]) => ts.map((t) => `${t.name} ${t.included ? '(incluido)' : `+${money(t.price)}`}`).join(' · ');
+
+/** Toppings, contenido del combo y destinatario de un renglón. */
+export function LineDetails({ line }: { line: PricedLine }) {
+  return (
+    <>
+      {line.choices ? (
+        <ul className="muted small" style={{ margin: 0, paddingLeft: 18 }}>
+          {line.choices.map((c, i) => (
+            <li key={i}>
+              {c.name} · {c.sizeLabel}
+              {c.toppings.length > 0 && <> — {toppingText(c.toppings)}</>}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        line.toppings.length > 0 && <p className="muted small">{toppingText(line.toppings)}</p>
+      )}
+      {line.forWhom && <p className="for-whom">Para: {line.forWhom}</p>}
+    </>
+  );
+}
 
 export function OrderLines({ lines, products }: { lines: PricedLine[]; products: Product[] }) {
   return (
@@ -12,16 +35,12 @@ export function OrderLines({ lines, products }: { lines: PricedLine[]; products:
             <div className="details">
               <div className="row between" style={{ alignItems: 'flex-start' }}>
                 <p>
-                  <strong>{l.qty} × {l.name}</strong> <span className="muted">· {l.sizeLabel}</span>
+                  <strong>{l.qty} × {l.name}</strong> {!l.choices && <span className="muted">· {l.sizeLabel}</span>}
                 </p>
                 <span className="price">{money(l.lineTotal)}</span>
               </div>
-              <p className="muted small">
-                {money(l.basePrice)}
-                {l.toppings.map((t) => ` · ${t.name} +${money(t.price)}`).join('')}
-                {l.qty > 1 && ` · ${money(l.unitPrice)} c/u`}
-              </p>
-              {l.forWhom && <p className="for-whom">Para: {l.forWhom}</p>}
+              <LineDetails line={l} />
+              {l.qty > 1 && <p className="muted small">{money(l.unitPrice)} c/u</p>}
             </div>
           </div>
         );

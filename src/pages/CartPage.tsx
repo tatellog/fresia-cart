@@ -3,6 +3,9 @@ import { useCart } from '../lib/cart';
 import { useMenu } from '../lib/menu';
 import { money } from '../lib/format';
 import { DemoBanner, Spinner, Stepper, StickyAction, TopBar } from '../components/ui';
+import { minQtyFor, minimumMessage, priceCart } from '../../shared/pricing';
+import { DEFAULT_RULES_CLIENT } from '../lib/rules';
+import { LineDetails } from './parts';
 
 export default function CartPage() {
   const cart = useCart();
@@ -26,6 +29,8 @@ export default function CartPage() {
   }
 
   const hasProblems = cart.problems.size > 0;
+  const rules = data?.rules ?? DEFAULT_RULES_CLIENT;
+  const minMsg = data ? minimumMessage(cart.fresias, rules) : null;
 
   return (
     <>
@@ -39,9 +44,7 @@ export default function CartPage() {
           <section aria-label="Productos" className="card" style={{ paddingTop: 4, paddingBottom: 4 }}>
             {cart.lines.map((l) => {
               const p = data.products.find((x) => x.id === l.productId);
-              const size = p?.sizes.find((s) => s.id === l.sizeId);
-              const tops = data.toppings.filter((t) => l.toppingIds.includes(t.id));
-              const unit = (size?.price ?? 0) + tops.reduce((s, t) => s + t.price, 0);
+              const priced = priceCart([l], data.products, data.toppings, rules).lines[0];
               const problem = cart.problems.get(l.lineId);
               return (
                 <article key={l.lineId} className="line">
@@ -49,19 +52,14 @@ export default function CartPage() {
                   <div className="details">
                     <div className="row between" style={{ alignItems: 'flex-start' }}>
                       <h2 style={{ fontSize: '1rem' }}>
-                        {p?.name ?? 'Producto no disponible'} {size && <span className="muted" style={{ fontWeight: 400 }}>· {size.label}</span>}
+                        {p?.name ?? 'Producto no disponible'} {priced && !priced.choices && <span className="muted" style={{ fontWeight: 400 }}>· {priced.sizeLabel}</span>}
                       </h2>
-                      <span className="price">{money(unit * l.qty)}</span>
+                      {priced && <span className="price">{money(priced.lineTotal)}</span>}
                     </div>
-                    {tops.length > 0 && (
-                      <p className="muted small">
-                        {tops.map((t) => `${t.name} +${money(t.price)}`).join(' · ')}
-                      </p>
-                    )}
-                    {l.forWhom && <p className="for-whom">Para: {l.forWhom}</p>}
+                    {priced && <LineDetails line={priced} />}
                     {problem && <p className="error-text" role="alert">{problem}</p>}
                     <div className="row between" style={{ marginTop: 6, flexWrap: 'wrap' }}>
-                      <Stepper value={l.qty} onChange={(qty) => cart.update(l.lineId, { qty })} label={`Cantidad de ${p?.name ?? 'producto'}`} />
+                      <Stepper value={l.qty} min={p ? minQtyFor(p, rules) : 1} onChange={(qty) => cart.update(l.lineId, { qty })} label={`Cantidad de ${p?.name ?? 'producto'}`} />
                       <div className="row" style={{ gap: 16 }}>
                         {p && (
                           <Link to={`/producto/${p.id}?linea=${l.lineId}`} className="linkbtn" style={{ display: 'inline-flex', alignItems: 'center' }}>
@@ -88,11 +86,23 @@ export default function CartPage() {
           <p className="muted small">El envío se calcula con tu dirección en el siguiente paso.</p>
         </div>
 
+        {data && rules.minFresias > 1 && (
+          <div className={`notice ${minMsg ? 'warn' : 'ok'}`} role="status">
+            {minMsg ? (
+              <>
+                <strong>{minMsg}</strong> Llevas {cart.fresias} de {rules.minFresias}. El pan de muerto y el waffle no cuentan.
+              </>
+            ) : (
+              <>Llevas {cart.fresias} Frésias: tu pedido cumple el mínimo.</>
+            )}
+          </div>
+        )}
+
         <Link to="/" className="btn secondary block">Seguir comprando</Link>
       </main>
       <StickyAction>
-        <button type="button" className="btn primary block" disabled={hasProblems || !data} onClick={() => navigate('/entrega')}>
-          {hasProblems ? 'Revisa los productos marcados' : 'Continuar a la entrega'}
+        <button type="button" className="btn primary block" disabled={hasProblems || !data || !!minMsg} onClick={() => navigate('/entrega')}>
+          {hasProblems ? 'Revisa los productos marcados' : minMsg ? `Mínimo ${rules.minFresias} Frésias` : 'Continuar a la entrega'}
         </button>
       </StickyAction>
     </>

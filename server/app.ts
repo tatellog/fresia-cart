@@ -14,11 +14,12 @@ import { DemoProvider } from './payments/demo';
 import { MercadoPagoProvider, verifyMercadoPagoSignature } from './payments/mercadopago';
 import { checkReturnedPayment, handlePaymentNotification, reconcile, startCheckout } from './payments/service';
 import {
-  createOrder, getOrderById, getOrderForCustomer, listOrders, quoteOrder, setOrderStatus, setRefundStatus, setShippingQuote, toAdmin, toPublic,
+  createOrder, getOrderById, getOrderForCustomer, listOrders, markCollected, quoteOrder, setOrderStatus, setRefundStatus, setShippingQuote, toAdmin, toPublic,
 } from './orders';
 import * as store from './store';
 import * as S from './schemas';
 import { clearSession, isAdmin, passwordMatches, rateLimit, requireAdmin, setSession } from './auth';
+import { whatsappConfigured } from './whatsapp';
 import type { LegalSlug, MenuResponse } from '../shared/types';
 import { ADMIN_FLOW } from '../shared/status';
 
@@ -55,11 +56,14 @@ export async function createApp(config: Config, opts: { demoWebhookDelayMs?: num
   app.get('/api/health', (_req, res) => res.json({ ok: true, payments: provider.name }));
 
   app.get('/api/menu', async (_req, res) => {
-    const [delivery, products, toppings, business] = await Promise.all([store.getDelivery(db), store.listProducts(db), store.listToppings(db), store.getBusiness(db)]);
+    const [delivery, products, toppings, business, rules] = await Promise.all([
+      store.getDelivery(db), store.listProducts(db), store.listToppings(db), store.getBusiness(db), store.getRules(db),
+    ]);
     const { zones, ...rest } = delivery;
     const body: MenuResponse = {
       products,
       toppings,
+      rules,
       business,
       delivery: { ...rest, zoneNames: zones.filter((z) => z.active).map((z) => z.name) },
       paymentsMode: provider.name,
@@ -81,6 +85,7 @@ export async function createApp(config: Config, opts: { demoWebhookDelayMs?: num
     const { order, created } = await createOrder(ctx, idempotencyKey, {
       customer: input.customer,
       fulfillment: input.fulfillment,
+      paymentMethod: input.paymentMethod,
       address: input.fulfillment === 'delivery' ? input.address : null,
       notes: input.notes,
       items: input.items,
@@ -234,6 +239,10 @@ export async function createApp(config: Config, opts: { demoWebhookDelayMs?: num
     await orderOr404(String(req.params.id));
     res.json({ order: await toAdmin(db, await setShippingQuote(ctx, String(req.params.id), fee, etaText, 'panel')) });
   });
+  admin.post('/orders/:id/collected', async (req, res) => {
+    await orderOr404(String(req.params.id));
+    res.json({ order: await toAdmin(db, await markCollected(ctx, String(req.params.id), 'panel')) });
+  });
   admin.post('/orders/:id/review-clear', async (req, res) => {
     const o = await orderOr404(String(req.params.id));
     await db.query('update office.orders set needs_review = null, updated_at = now() where id = $1', [o.id]);
@@ -257,6 +266,15 @@ export async function createApp(config: Config, opts: { demoWebhookDelayMs?: num
   admin.put('/products/:id', async (req, res) => {
     const p = S.productSchema.parse(req.body);
     if (p.id !== req.params.id) throw new HttpError(400, 'El identificador no coincide.');
+    if (p.combo) {
+      const all = await store.listProducts(db);
+      for (const slot of p.combo) {
+        for (const o of slot.options) {
+          const target = all.find((x) => x.id === o.productId);
+          if (!target || target.combo || !target.sizes.some((z) => z.id === o.sizeId)) throw new HttpError(400, `Opción inválida en «${slot.label}».`);
+        }
+      }
+    }
     await store.saveProduct(db, p);
     res.json({ ok: true });
   });
@@ -274,10 +292,16 @@ export async function createApp(config: Config, opts: { demoWebhookDelayMs?: num
     await store.deleteTopping(db, String(req.params.id));
     res.json({ ok: true });
   });
+  admin.get('/rules', async (_req, res) => res.json(await store.getRules(db)));
+  admin.put('/rules', async (req, res) => {
+    await store.setRules(db, S.rulesSchema.parse(req.body));
+    res.json({ ok: true });
+  });
   admin.get('/delivery', async (_req, res) => res.json(await store.getDelivery(db)));
   admin.put('/delivery', async (req, res) => {
     const d = S.deliverySchema.parse(req.body);
-    if (d.zones.some((z) => z.etaMax < z.etaMin)) throw new HttpError(400, 'El tiempo máximo debe ser mayor o igual al mínimo.');
+    if (d.zones.some((z) => z.etaMax < z.etaMin) || d.radiusEtaMax < d.radiusEtaMin) throw new HttpError(400, 'El tiempo máximo debe ser mayor o igual al mínimo.');
+    if (!d.onlinePayment && !d.cashOnDelivery) throw new HttpError(400, 'Activa al menos un método de pago.');
     await store.setDelivery(db, d);
     res.json({ ok: true });
   });
@@ -304,6 +328,7 @@ export async function createApp(config: Config, opts: { demoWebhookDelayMs?: num
       payments: provider.name,
       webhookSecret: Boolean(config.mpWebhookSecret),
       notifyWebhook: Boolean(config.notifyWebhookUrl),
+      whatsapp: whatsappConfigured(config) ? config.whatsappProvider : '',
       publicUrl: config.publicUrl,
       httpsPublicUrl: config.publicUrl.startsWith('https://'),
       database: config.databaseUrl ? 'postgres' : 'pglite',

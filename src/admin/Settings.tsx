@@ -51,8 +51,17 @@ export function DeliverySettings() {
     <div className="stack-lg">
       <div className="stack" style={{ gap: 6 }}>
         <h1>Entrega y cobertura</h1>
-        <p className="muted">Solo se entrega a las zonas capturadas aquí. Cada zona usa códigos postales; si agregas colonias, solo esas quedan cubiertas.</p>
       </div>
+      <section className="card stack">
+        <div className="field">
+          <label htmlFor="mode">Cómo se valida la cobertura</label>
+          <select id="mode" className="select sm" value={d.mode} onChange={(e) => set({ mode: e.target.value as DeliveryConfig['mode'] })}>
+            <option value="radius">Radio desde Frésia (ubicación del celular del cliente)</option>
+            <option value="zones">Por código postal / colonia</option>
+          </select>
+        </div>
+        {d.mode === 'radius' && <RadiusFields d={d} set={set} />}
+      </section>
       <section className="card stack">
         <Toggle checked={d.deliveryEnabled} onChange={(deliveryEnabled) => set({ deliveryEnabled })} label="Entrega a domicilio activa" />
         <Toggle checked={d.pickupEnabled} onChange={(pickupEnabled) => set({ pickupEnabled })} label="Recoger en Frésia activo" />
@@ -63,14 +72,26 @@ export function DeliverySettings() {
         <div className="field">
           <label htmlFor="ooz">Direcciones fuera de zona</label>
           <select id="ooz" className="select sm" value={d.outOfZone} onChange={(e) => set({ outOfZone: e.target.value as DeliveryConfig['outOfZone'] })}>
-            <option value="manual">Guardar pedido y cotizar por WhatsApp</option>
             <option value="reject">No aceptar (ofrecer recoger)</option>
+            <option value="manual">Guardar pedido y cotizar por WhatsApp</option>
           </select>
         </div>
         <Toggle checked={d.example} onChange={(example) => set({ example })} label="Mostrar como datos de ejemplo" />
       </section>
 
-      <section className="stack">
+      <section className="card stack">
+        <h2>Métodos de pago</h2>
+        <Toggle checked={d.onlinePayment} onChange={(onlinePayment) => set({ onlinePayment })} label="Pagar en línea (Mercado Pago)" />
+        <Toggle checked={d.cashOnDelivery} onChange={(cashOnDelivery) => set({ cashOnDelivery })} label="Pagar al recibir / al recoger" />
+        <div className="field">
+          <label htmlFor="codnote">Detalle para «pagar al recibir» <span className="muted small">(opcional)</span></label>
+          <input id="codnote" className="input sm" value={d.cashOnDeliveryNote} maxLength={120} placeholder="Ej. Efectivo o tarjeta al recibir" onChange={(e) => set({ cashOnDeliveryNote: e.target.value })} />
+        </div>
+        {!d.onlinePayment && !d.cashOnDelivery && <p className="error-text">Activa al menos un método de pago.</p>}
+      </section>
+
+      {d.mode === 'zones' && <section className="stack">
+        <p className="muted">Solo se entrega a las zonas capturadas aquí. Cada zona usa códigos postales; si agregas colonias, solo esas quedan cubiertas.</p>
         <div className="row between">
           <h2>Zonas</h2>
           <button className="btn ghost small" onClick={() => set({ zones: [...d.zones, { id: `zona-${Date.now().toString(36)}`, name: 'Nueva zona', postalCodes: [], colonias: [], fee: 0, etaMin: 30, etaMax: 45, mode: 'auto', active: false }] })}>
@@ -102,9 +123,50 @@ export function DeliverySettings() {
             )}
           </div>
         ))}
-      </section>
+      </section>}
       <SaveBar busy={r.busy} saved={r.everSaved} error={r.saveError} dirty={r.dirty} onSave={() => r.save()} />
     </div>
+  );
+}
+
+function RadiusFields({ d, set }: { d: DeliveryConfig; set: (p: Partial<DeliveryConfig>) => void }) {
+  const [coords, setCoords] = useState(d.origin ? `${d.origin.lat}, ${d.origin.lng}` : '');
+  const [err, setErr] = useState<string | null>(null);
+  return (
+    <>
+      <div className="field">
+        <label htmlFor="origin">Ubicación de Frésia (latitud, longitud)</label>
+        <input
+          id="origin"
+          className="input sm"
+          value={coords}
+          placeholder="19.39725, -99.1712"
+          onChange={(e) => setCoords(e.target.value)}
+          onBlur={() => {
+            const m = coords.match(/(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)/);
+            if (!m) return setErr('Pega las coordenadas como «19.39725, -99.1712».');
+            setErr(null);
+            set({ origin: { lat: parseFloat(m[1]), lng: parseFloat(m[2]) } });
+          }}
+        />
+        {err ? <span className="error-text">{err}</span> : (
+          <span className="hint">
+            En Google Maps, mantén presionado el punto exacto de la tienda y copia las coordenadas que aparecen.{' '}
+            {d.origin && <a href={`https://www.google.com/maps?q=${d.origin.lat},${d.origin.lng}`} target="_blank" rel="noreferrer">Ver punto actual</a>}
+          </span>
+        )}
+      </div>
+      <div className="row" style={{ flexWrap: 'wrap' }}>
+        <div className="field" style={{ width: 140 }}><label>Radio (m)</label><input className="input sm" inputMode="numeric" value={d.radiusM} onChange={(e) => set({ radiusM: parseInt(e.target.value, 10) || 0 })} /></div>
+        <div className="field" style={{ width: 140 }}><label>Envío (MXN)</label><MoneyInput label="Envío" value={d.radiusFee} onChange={(radiusFee) => set({ radiusFee })} /></div>
+        <div className="field" style={{ width: 120 }}><label>Mín. (min)</label><input className="input sm" inputMode="numeric" value={d.radiusEtaMin} onChange={(e) => set({ radiusEtaMin: parseInt(e.target.value, 10) || 0 })} /></div>
+        <div className="field" style={{ width: 120 }}><label>Máx. (min)</label><input className="input sm" inputMode="numeric" value={d.radiusEtaMax} onChange={(e) => set({ radiusEtaMax: parseInt(e.target.value, 10) || 0 })} /></div>
+      </div>
+      <p className="muted small">
+        Se acepta automáticamente solo si el GPS confirma que está dentro del radio aun con su margen de error (máx. 80 m).
+        Si el cliente no comparte su ubicación, está en el límite o el GPS es impreciso, el pedido se guarda y se confirma por WhatsApp.
+      </p>
+    </>
   );
 }
 
@@ -203,7 +265,7 @@ function LegalEditor({ doc, onChange }: { doc: LegalDoc; onChange: (d: LegalDoc)
 
 // ── QR y estado del sistema ──────────────────────────────────────────
 
-type SystemRes = { payments: string; webhookSecret: boolean; notifyWebhook: boolean; publicUrl: string; httpsPublicUrl: boolean; lastWebhooks: { at: string; verified: number; result: string }[] };
+type SystemRes = { payments: string; webhookSecret: boolean; notifyWebhook: boolean; whatsapp: string; publicUrl: string; httpsPublicUrl: boolean; lastWebhooks: { at: string; verified: number; result: string }[] };
 type QrRes = { url: string; svg: string; scans: { day: string; source: string; count: number }[] };
 
 export function SystemSettings() {
@@ -251,6 +313,8 @@ export function SystemSettings() {
           <dd>{check(sys.webhookSecret, 'Configurada', 'Falta MP_WEBHOOK_SECRET')}</dd>
           <dt>URL pública</dt>
           <dd>{check(sys.httpsPublicUrl, sys.publicUrl, `${sys.publicUrl} (sin https: Mercado Pago no podrá notificar)`)}</dd>
+          <dt>Aviso por WhatsApp</dt>
+          <dd>{check(!!sys.whatsapp, `Activo (${sys.whatsapp})`, 'Falta configurar WHATSAPP_PROVIDER')}</dd>
           <dt>Avisos externos</dt>
           <dd>{check(sys.notifyWebhook, 'NOTIFY_WEBHOOK_URL configurado', 'Solo en este panel')}</dd>
         </dl>

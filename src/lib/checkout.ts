@@ -1,6 +1,6 @@
 import { uuid } from './uuid';
 import { useEffect, useState } from 'react';
-import type { Address, Fulfillment } from '../../shared/types';
+import type { Address, Fulfillment, PaymentMethod } from '../../shared/types';
 import { load, remove, save } from './storage';
 
 export type CheckoutForm = {
@@ -9,6 +9,7 @@ export type CheckoutForm = {
   phone: string;
   address: Address;
   notes: string;
+  paymentMethod: PaymentMethod;
 };
 
 const KEY = 'fo.checkout.v1';
@@ -18,6 +19,7 @@ export const emptyCheckout: CheckoutForm = {
   phone: '',
   address: { street: '', number: '', colonia: '', postalCode: '', office: '', references: '' },
   notes: '',
+  paymentMethod: 'online',
 };
 
 export function useCheckoutForm() {
