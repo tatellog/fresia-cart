@@ -4,6 +4,7 @@ import { api } from '../lib/api';
 import { Spinner } from '../components/ui';
 import Orders from './Orders';
 import OrderDetail from './OrderDetail';
+import { GiftCardPrint } from './GiftCard';
 import Catalog from './Catalog';
 import { BusinessSettings, DeliverySettings, LegalSettings, SystemSettings } from './Settings';
 import './admin.css';
@@ -62,6 +63,7 @@ export default function AdminApp() {
         <Routes>
           <Route index element={<Orders />} />
           <Route path="pedidos/:id" element={<OrderDetail />} />
+          <Route path="pedidos/:id/tarjeta" element={<GiftCardPrint />} />
           <Route path="menu" element={<Catalog />} />
           <Route path="entrega" element={<DeliverySettings />} />
           <Route path="negocio" element={<BusinessSettings />} />

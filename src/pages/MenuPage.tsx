@@ -8,6 +8,8 @@ import { money } from '../lib/format';
 import { recentOrders } from '../lib/checkout';
 import { CartBar, DemoBanner, Footer, GroupModeBanner, LoadError } from '../components/ui';
 import { activeGroup } from '../lib/groupState';
+import { GIFT_KEY, emptyGift } from '../components/GiftFields';
+import { load as loadStored, save } from '../lib/storage';
 import { minQtyFor } from '../../shared/pricing';
 import type { MenuRules } from '../../shared/types';
 import { isOpenAt, nextOpening } from '../../shared/schedule';
@@ -39,6 +41,7 @@ export default function MenuPage() {
             </p>
           )}
           <Link to="/equipo/nuevo" className="btn secondary small">👥 Pedido de equipo</Link>
+          {data?.delivery.deliveryEnabled && !activeGroup() && <GiftCta />}
           {data && !isOpenAt(new Date(), data.schedule) && (
             <p className="notice closed-banner small">
               Ahora estamos cerrados{nextOpening(new Date(), data.schedule) ? `; abrimos ${nextOpening(new Date(), data.schedule)}` : ''}{nextOpening(new Date(), data.schedule)?.endsWith('.') ? '' : '.'} Puedes programar tu pedido.
@@ -227,4 +230,31 @@ function useActiveOrder() {
     };
   }, []);
   return active;
+}
+
+/** Fresigrama: deja el pedido marcado como regalo; los datos se escriben al final. */
+function GiftCta() {
+  const [on, setOn] = useState(() => loadStored(GIFT_KEY, emptyGift).on);
+  const toggle = () => {
+    const g = loadStored(GIFT_KEY, emptyGift);
+    save(GIFT_KEY, { ...g, on: !on });
+    setOn(!on);
+  };
+  return (
+    <button type="button" className="gift-cta" onClick={toggle} aria-pressed={on}>
+      <span style={{ fontSize: '1.6rem' }} aria-hidden="true">💌</span>
+      <span className="grow">
+        {on ? (
+          <>
+            <strong>Fresigrama activado.</strong> Elige su Frésia; al final escribes para quién es y su tarjeta.{' '}
+            <span className="muted small">(Toca para quitarlo.)</span>
+          </>
+        ) : (
+          <>
+            <strong>Fresigrama:</strong> alguien en tu oficina merece un bombón. Mándale uno con tarjeta, incluso anónimo.
+          </>
+        )}
+      </span>
+    </button>
+  );
 }

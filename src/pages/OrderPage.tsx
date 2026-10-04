@@ -192,8 +192,15 @@ export default function OrderPage() {
           <Totals subtotal={order.subtotal} shippingFee={order.shippingFee} total={order.total} fulfillment={order.fulfillment} />
         </section>
 
-        {(order.scheduledFor || order.groupName || order.invoice) && (
+        {(order.scheduledFor || order.groupName || order.invoice || order.gift) && (
           <section className="card flat stack" style={{ gap: 6 }}>
+            {order.gift && (
+              <p>
+                🎁 <strong>Fresigrama para {order.gift.to}</strong>
+                {order.gift.anonymous ? ' · anónimo' : ''}
+                {order.gift.note && <><br /><span className="muted">«{order.gift.note}»</span></>}
+              </p>
+            )}
             {order.scheduledFor && <p>🗓 <strong>Programado:</strong> {slotLabel(order.scheduledFor)}</p>}
             {order.groupName && <p>👥 Pedido de equipo «{order.groupName}»</p>}
             {order.invoice && (

@@ -170,6 +170,16 @@ export type CustomerLocation = LatLng & { accuracyM: number };
 
 export type CourierMode = 'walk' | 'bike' | 'moto';
 
+/** Fresigrama: el pedido es un regalo para alguien de la oficina. */
+export type GiftInfo = {
+  /** Para quién y dónde encontrarle, p. ej. «Ana · Piso 7, área de diseño». */
+  to: string;
+  /** Mensaje de la tarjeta (opcional). */
+  note: string;
+  /** No decir quién lo manda. */
+  anonymous: boolean;
+};
+
 /** Días que se guarda la foto de entrega (después se borra). */
 export const PHOTO_RETENTION_DAYS = 30;
 
@@ -232,6 +242,7 @@ export type PublicOrder = {
   /** Hora para la que se programó (null = lo antes posible). */
   scheduledFor: string | null;
   invoice: InvoiceData | null;
+  gift: GiftInfo | null;
   invoiceStatus: 'no_aplica' | 'solicitada' | 'emitida';
   /** Pedido de equipo del que salió, si aplica. */
   groupName: string | null;

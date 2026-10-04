@@ -154,6 +154,7 @@ function OrderRow({ o, onChanged }: { o: AdminOrder; onChanged: () => void }) {
           {o.demo && o.paymentMethod === 'online' && <span className="badge">Demo</span>}
           {o.scheduledFor && <span className="badge warn">🗓 {slotLabel(o.scheduledFor)}</span>}
           {o.groupName && <span className="badge">👥 {o.groupName}</span>}
+          {o.gift && <span className="badge red">🎁 Fresigrama</span>}
           {o.invoice && <span className="badge">🧾 Factura{o.invoiceStatus === 'emitida' ? ' ✓' : ''}</span>}
         </div>
         <span className="price">{o.total != null ? money(o.total) : 'Envío por cotizar'}</span>

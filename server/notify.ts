@@ -195,7 +195,7 @@ export function buildWhatsApp(kind: NotifyKind, o: AdminOrder, adminUrl: string,
 /** Notificación corta para el celular o la laptop: lo esencial para decidir si atender ya. */
 export function buildPush(kind: NotifyKind, o: AdminOrder): PushPayload {
   const lines = paymentLines(o);
-  const when = o.scheduledFor ? `🗓 ${slotLabel(o.scheduledFor)} · ` : '';
+  const when = `${o.gift ? '🎁 ' : ''}${o.scheduledFor ? `🗓 ${slotLabel(o.scheduledFor)} · ` : ''}`;
   const pay = when + lines.map((l) => l.trim()).join(' · ');
   const where = o.fulfillment === 'pickup' ? 'Recoge en Frésia' : 'A domicilio';
   const pieces = o.items.reduce((n, l) => n + l.qty * (l.choices?.length ?? 1), 0);
@@ -230,5 +230,12 @@ function extraLines(o: AdminOrder): string[] {
     ...(o.scheduledFor ? [`🗓 *Programado: ${slotLabel(o.scheduledFor)}*`] : []),
     ...(o.groupName ? [`👥 Pedido de equipo «${o.groupName}»`] : []),
     ...(o.invoice ? [`🧾 Requiere factura · RFC ${o.invoice.rfc}`] : []),
+    ...(o.gift
+      ? [
+          `🎁 *FRESIGRAMA* para ${o.gift.to}${o.gift.anonymous ? ' · *ANÓNIMO: no digas quién lo manda*' : ''}`,
+          ...(o.gift.note ? [`   Tarjeta: «${o.gift.note}»`] : []),
+          ...(o.paymentMethod === 'contra_entrega' && o.paymentStatus !== 'aprobado' ? [`   💵 Cobra a ${o.customerName} (quien lo envía) antes de entregar`] : []),
+        ]
+      : []),
   ];
 }

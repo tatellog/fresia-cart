@@ -257,3 +257,20 @@ details.more > summary {
   cursor: pointer;
 }
 .delivery-proof { outline: 2px solid var(--red); }
+
+/* Fresigrama: tarjeta para imprimir (10 × 7 cm) */
+.print-card { width: 10cm; height: 7cm; box-sizing: border-box; padding: 0.55cm 0.65cm; background: #fff; color: #3e2a25; border-radius: 10px; box-shadow: 0 6px 24px rgb(62 42 37 / 0.15); display: flex; flex-direction: column; gap: 0.12cm; font-family: 'Avenir Next', Avenir, system-ui, sans-serif; }
+.print-card h1 { margin: 0; font-family: 'Playfair Display', 'Cormorant Garamond', Didot, Georgia, serif; font-size: 22pt; line-height: 1.1; color: #c0392b; font-weight: 700; }
+.print-card h1 em { font-style: italic; }
+.print-to { margin: 0; font-size: 9pt; color: #8a6f68; }
+.print-note { margin: 0.1cm 0 0; font-size: 11pt; line-height: 1.35; flex: 1; overflow: hidden; }
+.print-from { margin: 0; font-size: 10.5pt; font-weight: 700; }
+.print-foot { display: flex; align-items: center; justify-content: space-between; border-top: 1px dashed #e3c9c3; padding-top: 0.12cm; font-size: 8pt; letter-spacing: 0.12em; text-transform: uppercase; color: #c0392b; font-weight: 700; }
+.print-qr svg { width: 1.6cm; height: 1.6cm; display: block; }
+@media print {
+  @page { size: 10cm 7cm; margin: 0; }
+  body * { visibility: hidden; }
+  .print-card, .print-card * { visibility: visible; }
+  .print-card { position: fixed; inset: 0; box-shadow: none; border-radius: 0; }
+  .no-print { display: none !important; }
+}

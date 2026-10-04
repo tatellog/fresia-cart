@@ -136,6 +136,7 @@ export async function createApp(config: Config, opts: { demoWebhookDelayMs?: num
       cashTendered: input.cashTendered,
       source: input.source ?? null,
       invoice: input.invoice ?? null,
+      gift: input.gift ?? null,
       scheduledFor: input.scheduledFor ?? null,
       group: input.group ?? null,
       address: input.fulfillment === 'delivery' ? input.address : null,

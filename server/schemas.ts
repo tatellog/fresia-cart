@@ -56,11 +56,18 @@ export const invoiceSchema = z.object({
   email: z.string().trim().email('Correo inválido.').max(120),
 });
 
+export const giftSchema = z.object({
+  to: text(80).min(2, 'Escribe para quién es el regalo.'),
+  note: text(160).default(''),
+  anonymous: z.boolean().default(false),
+});
+
 export const orderSchema = quoteSchema.extend({
   idempotencyKey: z.string().uuid(),
   paymentMethod: z.enum(['online', 'contra_entrega']).default('online'),
   source: z.string().regex(/^[a-z0-9-]{1,40}$/).nullable().optional(),
   invoice: invoiceSchema.nullable().optional(),
+  gift: giftSchema.nullable().optional(),
   scheduledFor: z.string().datetime().nullable().optional(),
   /** Efectivo: billete con el que paga, en centavos (null = exacto). */
   cashTendered: z.number().int().min(0).max(5_000_000).nullable().default(null),
