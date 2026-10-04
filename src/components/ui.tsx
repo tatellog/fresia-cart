@@ -141,6 +141,29 @@ export function Field({
   );
 }
 
+export function SelectField({
+  label, value, onChange, options, placeholder, error,
+}: { label: string; value: string; onChange: (v: string) => void; options: string[]; placeholder: string; error?: string }) {
+  const id = useId();
+  return (
+    <div className="field">
+      <label htmlFor={id}>{label}</label>
+      <select
+        id={id}
+        className="input"
+        value={options.includes(value) ? value : ''}
+        onChange={(e) => onChange(e.target.value)}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={error ? `${id}-d` : undefined}
+      >
+        <option value="" disabled>{placeholder}</option>
+        {options.map((o) => <option key={o} value={o}>{o}</option>)}
+      </select>
+      {error && <span id={`${id}-d`} className="error-text">{error}</span>}
+    </div>
+  );
+}
+
 export function Spinner({ label }: { label?: string }) {
   return (
     <span className="row" role="status">

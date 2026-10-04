@@ -17,6 +17,7 @@
     "db:setup": "tsx scripts/db.ts setup",
     "db:check": "tsx scripts/db.ts check",
     "db:catalog": "tsx scripts/db.ts catalog",
+    "db:cp": "tsx scripts/db.ts cp",
     "whatsapp:avisar": "tsx scripts/whatsapp.ts",
     "build:server": "esbuild server/vercel.ts --bundle --platform=node --format=esm --packages=external --target=node22 --outfile=build/server.mjs --log-level=warning"
   },

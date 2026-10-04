@@ -6,9 +6,10 @@ import { useCheckoutForm } from '../lib/checkout';
 import type { CheckoutForm } from '../lib/checkout';
 import { api } from '../lib/api';
 import { money } from '../lib/format';
-import { DemoBanner, Field, Spinner, StickyAction, TopBar } from '../components/ui';
+import { DemoBanner, Field, SelectField, Spinner, StickyAction, TopBar } from '../components/ui';
 import { groupCheckout } from '../lib/groupState';
-import { etaText, isPostalCode } from '../../shared/coverage';
+import { etaText, isPostalCode, normalizeText } from '../../shared/coverage';
+import { POSTAL_NOT_FOUND, usePostalCode } from '../lib/postal';
 import type { DeliveryQuote } from '../../shared/types';
 
 type Errors = Partial<Record<'name' | 'phone' | 'street' | 'number' | 'colonia' | 'postalCode' | 'office', string>>;
@@ -42,6 +43,19 @@ export default function DeliveryPage() {
   const radiusMode = data?.delivery.mode === 'radius';
   const location = form.address.location ?? null;
   const [locating, setLocating] = useState<'idle' | 'busy' | 'denied' | 'unavailable'>('idle');
+  const postal = usePostalCode(cp);
+
+  // Al reconocer el código postal: si tiene una sola colonia se llena sola; si la escrita no es de ese CP, se borra.
+  useEffect(() => {
+    if (postal.state !== 'found') return;
+    const names = postal.info.colonias.map((c) => c.name);
+    setForm((f) => {
+      const current = names.find((n) => normalizeText(n) === normalizeText(f.address.colonia));
+      const next = current ?? (names.length === 1 ? names[0] : '');
+      return next === f.address.colonia ? f : { ...f, address: { ...f.address, colonia: next } };
+    });
+    setErrors((e) => ({ ...e, postalCode: undefined, colonia: undefined }));
+  }, [postal, setForm]);
 
   function locate() {
     if (!('geolocation' in navigator) || !window.isSecureContext) {
@@ -97,6 +111,7 @@ export default function DeliveryPage() {
 
   function next() {
     const e = validate(form);
+    if (form.fulfillment === 'delivery' && postal.state === 'not_found') e.postalCode = POSTAL_NOT_FOUND;
     setErrors(e);
     if (Object.keys(e).length) {
       const first = document.querySelector('[aria-invalid="true"]') as HTMLElement | null;
@@ -186,10 +201,31 @@ export default function DeliveryPage() {
                   autoComplete="postal-code"
                   value={form.address.postalCode}
                   onChange={(e) => setAddr('postalCode', e.target.value.replace(/\D/g, '').slice(0, 5))}
-                  error={errors.postalCode}
+                  error={errors.postalCode ?? (postal.state === 'not_found' ? POSTAL_NOT_FOUND : undefined)}
+                  hint={postal.state === 'loading' ? 'Buscando…' : postal.state === 'found' ? `${postal.info.alcaldia}, ${postal.info.estado}` : undefined}
                 />
               </div>
-              <Field label="Colonia" autoComplete="address-level3" value={form.address.colonia} onChange={(e) => setAddr('colonia', e.target.value)} error={errors.colonia} maxLength={80} />
+              {postal.state === 'found' && postal.info.colonias.length > 1 ? (
+                <SelectField
+                  label="Colonia"
+                  value={form.address.colonia}
+                  onChange={(v) => setAddr('colonia', v)}
+                  error={errors.colonia}
+                  placeholder="Elige tu colonia"
+                  options={postal.info.colonias.map((c) => c.name)}
+                />
+              ) : (
+                <Field
+                  label="Colonia"
+                  autoComplete="address-level3"
+                  value={form.address.colonia}
+                  onChange={(e) => setAddr('colonia', e.target.value)}
+                  error={errors.colonia}
+                  maxLength={80}
+                  readOnly={postal.state === 'found'}
+                  hint={postal.state === 'found' ? 'Según tu código postal.' : postal.state === 'idle' && !isPostalCode(cp) ? 'Se llena sola con tu código postal.' : undefined}
+                />
+              )}
               {!radiusMode && <CoverageNotice coverage={coverage} />}
               <Field label="Oficina o piso" placeholder="Ej. Piso 4, oficina 402" value={form.address.office} onChange={(e) => setAddr('office', e.target.value)} error={errors.office} maxLength={80} />
               <Field label="Referencias" optional placeholder="Ej. Dejar en recepción" value={form.address.references} onChange={(e) => setAddr('references', e.target.value)} maxLength={200} />

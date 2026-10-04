@@ -23,6 +23,7 @@ import { whatsappConfigured } from './whatsapp';
 import { addGroupItem, createGroup, groupLinesForOrder, groupView, removeGroupItem } from './groups';
 import { background, sleep } from './background';
 import { clubCardFor, stampClub } from './club';
+import { lookupPostalCode, postalCatalogLoaded } from './postal';
 import { listSubscriptions, pushConfigured, removeSubscription, saveSubscription, sendPushToAll } from './push';
 import type { LegalSlug, MenuResponse } from '../shared/types';
 import { ADMIN_FLOW } from '../shared/status';
@@ -74,6 +75,16 @@ export async function createApp(config: Config, opts: { demoWebhookDelayMs?: num
       paymentsMode: provider.name,
     };
     res.json(body);
+  });
+
+  // Código postal → colonias y alcaldía (catálogo de SEPOMEX) para autollenar la dirección.
+  app.get('/api/postal-codes/:cp', rateLimit(60, 60_000), async (req, res) => {
+    const cp = String(req.params.cp);
+    if (!/^\d{5}$/.test(cp)) throw new HttpError(400, 'El código postal debe tener 5 dígitos.');
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    if (!(await postalCatalogLoaded(db))) return res.json({ found: false, catalog: false });
+    const info = await lookupPostalCode(db, cp);
+    res.json(info ? { found: true, catalog: true, ...info } : { found: false, catalog: true });
   });
 
   app.post('/api/coverage', rateLimit(60, 60_000), async (req, res) => {

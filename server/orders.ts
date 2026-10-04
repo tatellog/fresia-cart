@@ -9,7 +9,8 @@ import { isOpenAt, isValidSlot, nextOpening } from '../shared/schedule';
 import { invoiceErrors, normalizeInvoice } from '../shared/invoice';
 import type { InvoiceData } from '../shared/invoice';
 import { minimumMessage, priceCart } from '../shared/pricing';
-import { distanceM, quoteDelivery } from '../shared/coverage';
+import { distanceM, normalizeText, quoteDelivery } from '../shared/coverage';
+import { lookupPostalCode, postalCatalogLoaded } from './postal';
 import type {
   Address, AdminOrder, CartLineInput, Quote, DeliveryQuote, Fulfillment, OrderStatus, PaymentMethod, PaymentStatus, PricedLine, PublicOrder, RefundStatus, TrackingInfo,
 } from '../shared/types';
@@ -156,6 +157,15 @@ export async function createOrder(ctx: Ctx, idempotencyKey: string, input: Order
   const source = input.source
     ? (await db.one<{ slug: string }>('select slug from office.qr_sources where slug = $1', [input.source]))?.slug ?? null
     : null;
+
+  // Código postal y colonia contra el catálogo de SEPOMEX (si está cargado); se guarda el nombre oficial.
+  if (input.fulfillment === 'delivery' && input.address && (await postalCatalogLoaded(db))) {
+    const info = await lookupPostalCode(db, input.address.postalCode);
+    if (!info) throw new HttpError(422, 'Ese código postal no existe en la Ciudad de México. Revísalo.', { code: 'postal_code' });
+    const match = info.colonias.find((c) => normalizeText(c.name) === normalizeText(input.address!.colonia));
+    if (!match) throw new HttpError(422, 'Esa colonia no corresponde al código postal. Elígela de la lista.', { code: 'colonia' });
+    input = { ...input, address: { ...input.address, colonia: match.name } };
+  }
 
   const quote = await quoteOrder(db, input, { group: !!group });
   if (quote.errors.length) throw new HttpError(422, quote.errors[0], { errors: quote.errors });

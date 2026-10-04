@@ -6,6 +6,7 @@
  *                        y escribe DATABASE_URL (rol de la app) en .env
  *   npm run db:check     comprueba que los permisos sean los esperados
  *   npm run db:catalog   reemplaza el menú por el catálogo base de server/seed.ts
+ *   npm run db:cp        carga los códigos postales de SEPOMEX (data/sepomex/cdmx.txt, UTF-8)
  *
  * El usuario administrador se toma de DATABASE_ADMIN_URL (o SESSION_POOLER).
  * Solo se usa desde tu computadora; el servidor nunca lo necesita.
@@ -16,6 +17,7 @@ import pg from 'pg';
 import '../server/env';
 import { migrationFiles, openDb, sslFor } from '../server/db';
 import { listProducts, loadBaseCatalog } from '../server/store';
+import { parseSepomex } from '../server/postal';
 
 const APP_ROLE = 'fresia_office_app';
 const adminUrl = process.env.DATABASE_ADMIN_URL || process.env.SESSION_POOLER || '';
@@ -173,10 +175,35 @@ async function catalog() {
   }
 }
 
+/** Descarga: correosdemexico.gob.mx → Consulta CP → Descarga → Ciudad de México, formato TXT. */
+async function postalCodes() {
+  const file = process.argv[3] || 'data/sepomex/cdmx.txt';
+  if (!existsSync(file)) throw new Error(`No encuentro ${file}`);
+  const rows = parseSepomex(readFileSync(file, 'utf8'));
+  if (rows.length < 100) throw new Error(`El archivo solo tiene ${rows.length} filas; ¿es el TXT de SEPOMEX en UTF-8?`);
+  const appUrl = process.env.DATABASE_URL || readEnv('DATABASE_URL');
+  const db = appUrl ? await openDb({ url: appUrl }) : await openDb({ pglitePath: process.env.PGLITE_PATH || './data/pglite' });
+  try {
+    await db.tx(async (q) => {
+      await q.query('delete from office.postal_codes');
+      for (let i = 0; i < rows.length; i += 500) {
+        const chunk = rows.slice(i, i + 500);
+        const params = chunk.flatMap((r) => [r.cp, r.colonia, r.tipo, r.alcaldia, r.estado]);
+        const values = chunk.map((_, j) => `($${j * 5 + 1}, $${j * 5 + 2}, $${j * 5 + 3}, $${j * 5 + 4}, $${j * 5 + 5})`).join(', ');
+        await q.query(`insert into office.postal_codes (cp, colonia, tipo, alcaldia, estado) values ${values} on conflict do nothing`, params);
+      }
+    });
+    const n = await db.one<{ n: number }>('select count(*)::int as n from office.postal_codes');
+    console.log(`✓ ${n?.n} colonias cargadas (${new Set(rows.map((r) => r.cp)).size} códigos postales)`);
+  } finally {
+    await db.close();
+  }
+}
+
 const cmd = process.argv[2];
-const run = { migrate, setup, check, catalog }[cmd as 'migrate' | 'setup' | 'check' | 'catalog'];
+const run = { migrate, setup, check, catalog, cp: postalCodes }[cmd as 'migrate' | 'setup' | 'check' | 'catalog' | 'cp'];
 if (!run) {
-  console.error('Uso: tsx scripts/db.ts migrate|setup|check|catalog');
+  console.error('Uso: tsx scripts/db.ts migrate|setup|check|catalog|cp');
   process.exit(1);
 }
 run().catch((e) => {
