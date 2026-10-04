@@ -1,0 +1,53 @@
+{
+  "name": "fresia-office",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "dev": "concurrently -k -n api,web -c red,magenta \"tsx watch server/index.ts\" \"vite\"",
+    "build": "tsc -b && vite build && npm run build:server",
+    "start": "NODE_ENV=production tsx server/index.ts",
+    "preview": "npm run build && npm start",
+    "test": "vitest run",
+    "typecheck": "tsc -b",
+    "db:migrate": "tsx scripts/db.ts migrate",
+    "db:setup": "tsx scripts/db.ts setup",
+    "db:check": "tsx scripts/db.ts check",
+    "db:catalog": "tsx scripts/db.ts catalog",
+    "db:cp": "tsx scripts/db.ts cp",
+    "whatsapp:avisar": "tsx scripts/whatsapp.ts",
+    "build:server": "esbuild server/vercel.ts --bundle --platform=node --format=esm --packages=external --target=node22 --outfile=build/server.mjs --log-level=warning"
+  },
+  "dependencies": {
+    "@electric-sql/pglite": "^0.5.8",
+    "@vercel/functions": "^3.9.11",
+    "express": "^5.2.1",
+    "maplibre-gl": "^5.24.0",
+    "pg": "^8.23.1",
+    "qrcode": "^1.5.4",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "react-router-dom": "^7.18.4",
+    "tsx": "^4.23.15",
+    "web-push": "^3.6.7",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^22.20.5",
+    "@types/pg": "^8.23.1",
+    "@types/qrcode": "^1.5.6",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@types/web-push": "^3.6.4",
+    "@vitejs/plugin-react": "^4.7.0",
+    "concurrently": "^10.0.5",
+    "esbuild": "^0.28.2",
+    "typescript": "5.8",
+    "vite": "^6.4.3",
+    "vitest": "^3.2.7"
+  }
+}
