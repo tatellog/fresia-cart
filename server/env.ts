@@ -35,6 +35,9 @@ export type Config = {
   /** Web Push (notificaciones del panel). Genera con: npx web-push generate-vapid-keys */
   vapidPublicKey: string;
   vapidPrivateKey: string;
+  /** Frésia Club (tarjeta de lealtad): URL base y clave compartida servidor-a-servidor. */
+  clubUrl: string;
+  clubSecret: string;
 };
 
 export function loadConfig(overrides: Partial<Config> = {}): Config {
@@ -65,6 +68,8 @@ export function loadConfig(overrides: Partial<Config> = {}): Config {
     metaWhatsappTemplateButton: process.env.META_WHATSAPP_TEMPLATE_BUTTON !== '0',
     vapidPublicKey: process.env.VAPID_PUBLIC_KEY || '',
     vapidPrivateKey: process.env.VAPID_PRIVATE_KEY || '',
+    clubUrl: (process.env.CLUB_URL || '').replace(/\/$/, ''),
+    clubSecret: process.env.CLUB_SECRET || '',
     ...overrides,
   };
   if (!cfg.databaseUrl) {

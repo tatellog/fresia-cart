@@ -903,3 +903,8 @@ legend {
   margin-top: 12px;
   text-align: center;
 }
+
+/* Frésia Club */
+.club-stamps { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+.club-stamps span { aspect-ratio: 1; border-radius: 50%; border: 2px dashed var(--line); display: grid; place-items: center; font-size: 1.1rem; }
+.club-stamps span.on { border-style: solid; border-color: var(--rose); background: var(--rose-soft); }

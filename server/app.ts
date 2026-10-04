@@ -22,6 +22,7 @@ import { clearSession, isAdmin, passwordMatches, rateLimit, requireAdmin, setSes
 import { whatsappConfigured } from './whatsapp';
 import { addGroupItem, createGroup, groupLinesForOrder, groupView, removeGroupItem } from './groups';
 import { background, sleep } from './background';
+import { clubCardFor, stampClub } from './club';
 import { listSubscriptions, pushConfigured, removeSubscription, saveSubscription, sendPushToAll } from './push';
 import type { LegalSlug, MenuResponse } from '../shared/types';
 import { ADMIN_FLOW } from '../shared/status';
@@ -154,6 +155,13 @@ export async function createApp(config: Config, opts: { demoWebhookDelayMs?: num
     res.json(await trackingFor(ctx, order));
   });
 
+  // Frésia Club: sellos de la tarjeta con el teléfono del pedido.
+  app.get('/api/orders/:number/club', rateLimit(30, 60_000), async (req, res) => {
+    const order = await getOrderForCustomer(db, String(req.params.number), String(req.query.t ?? ''));
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.json({ club: await clubCardFor(ctx, order) });
+  });
+
   app.post('/api/orders/:number/checkout', rateLimit(20, 60_000), async (req, res) => {
     const order = await getOrderForCustomer(db, String(req.params.number), String(req.body?.t ?? ''));
     res.json(await startCheckout(ctx, order.id));
@@ -274,8 +282,10 @@ export async function createApp(config: Config, opts: { demoWebhookDelayMs?: num
   admin.post('/orders/:id/status', async (req, res) => {
     const status = S.orderStatus.parse(req.body?.status);
     if (!ADMIN_FLOW.includes(status)) throw new HttpError(400, 'Estado no válido.');
-    await orderOr404(String(req.params.id));
-    res.json({ order: await toAdmin(db, await setOrderStatus(ctx, String(req.params.id), status, 'panel')) });
+    const before = await orderOr404(String(req.params.id));
+    const row = await setOrderStatus(ctx, before.id, status, 'panel');
+    if (status === 'entregado' && before.order_status !== 'entregado') background(stampClub(ctx, row));
+    res.json({ order: await toAdmin(db, row) });
   });
   admin.post('/orders/:id/refund', async (req, res) => {
     const status = S.refundStatus.parse(req.body?.status);

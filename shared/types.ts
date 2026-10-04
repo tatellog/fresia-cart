@@ -263,3 +263,8 @@ export type Quote = {
   total: number | null;
   errors: string[];
 };
+
+/** Tarjeta de Frésia Club del teléfono de un pedido. */
+export type ClubCard =
+  | { found: true; name: string; visits: number; goal: number; rewardsPending: number; cardUrl: string; stamped?: boolean; alreadyStamped?: boolean }
+  | { found: false; joinUrl: string };

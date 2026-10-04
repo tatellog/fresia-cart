@@ -8,6 +8,7 @@ import { formatDate, money, whatsappLink } from '../lib/format';
 import { DemoBanner, Footer, Spinner, TopBar } from '../components/ui';
 import { OrderLines, Totals } from './parts';
 import { LiveTracking } from '../components/LiveTracking';
+import { ClubCardView } from '../components/ClubCard';
 import { slotLabel } from '../../shared/schedule';
 import { PAYMENT_LABEL, REFUND_LABEL } from '../../shared/status';
 import type { OrderStatus, PublicOrder } from '../../shared/types';
@@ -179,6 +180,10 @@ export default function OrderPage() {
 
         {(order.paymentStatus === 'aprobado' || (order.paymentMethod === 'contra_entrega' && order.orderStatus !== 'cotizando_envio' && order.orderStatus !== 'cancelado')) && (
           <Progress order={order} />
+        )}
+
+        {order.orderStatus !== 'cancelado' && order.orderStatus !== 'cotizando_envio' && (
+          <ClubCardView number={order.number} token={token} delivered={order.orderStatus === 'entregado'} />
         )}
 
         <section className="card stack" aria-labelledby="sum-title">
