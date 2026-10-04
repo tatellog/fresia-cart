@@ -38,6 +38,8 @@ export type Config = {
   /** Frésia Club (tarjeta de lealtad): URL base y clave compartida servidor-a-servidor. */
   clubUrl: string;
   clubSecret: string;
+  /** Vercel Cron manda «Authorization: Bearer CRON_SECRET» a /api/cron/daily. */
+  cronSecret: string;
 };
 
 export function loadConfig(overrides: Partial<Config> = {}): Config {
@@ -70,6 +72,7 @@ export function loadConfig(overrides: Partial<Config> = {}): Config {
     vapidPrivateKey: process.env.VAPID_PRIVATE_KEY || '',
     clubUrl: (process.env.CLUB_URL || '').replace(/\/$/, ''),
     clubSecret: process.env.CLUB_SECRET || '',
+    cronSecret: process.env.CRON_SECRET || '',
     ...overrides,
   };
   if (!cfg.databaseUrl) {

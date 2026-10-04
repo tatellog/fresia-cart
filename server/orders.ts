@@ -5,6 +5,7 @@ import { HttpError, onlinePaymentReady } from './context';
 import type { Ctx } from './context';
 import { getDelivery, getRules, getSchedule, listProducts, listToppings, nextOrderNumber } from './store';
 import { groupLinesForOrder } from './groups';
+import { PHOTO_RETENTION_DAYS } from '../shared/types';
 import { isOpenAt, isValidSlot, nextOpening } from '../shared/schedule';
 import { invoiceErrors, normalizeInvoice } from '../shared/invoice';
 import type { InvoiceData } from '../shared/invoice';
@@ -263,7 +264,7 @@ export function toPublic(row: OrderRow): PublicOrder {
     paymentMethod: row.payment_method,
     paymentStatus: row.payment_status,
     cashTendered: row.cash_tendered ?? null,
-    deliveryPhotoAt: isoOrNull(row.delivery_photo_at),
+    deliveryPhotoAt: photoStillStored(row.delivery_photo_at) ? isoOrNull(row.delivery_photo_at) : null,
     scheduledFor: isoOrNull(row.scheduled_for),
     invoice: row.invoice ?? null,
     invoiceStatus: row.invoice_status ?? 'no_aplica',
@@ -437,6 +438,21 @@ export async function trackingFor(ctx: Ctx, row: OrderRow): Promise<TrackingInfo
 }
 
 // ── Foto de entrega ─────────────────────────────────────────────────────
+
+const RETENTION_MS = PHOTO_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+/** Pasado el plazo la foto ya se borró: no se anuncia. */
+function photoStillStored(at: Date | string | null): boolean {
+  return at != null && Date.now() - new Date(at).getTime() < RETENTION_MS;
+}
+
+/** Borra las fotos de entrega de más de 30 días. Devuelve cuántas borró. */
+export async function purgeOldDeliveryPhotos(db: DB, now: Date): Promise<number> {
+  const rows = await db.query<{ order_id: string }>(
+    'delete from office.delivery_photos where created_at < $1 returning order_id',
+    [new Date(now.getTime() - RETENTION_MS)],
+  );
+  return rows.length;
+}
 
 const PHOTO_TYPES: Record<string, (b: Buffer) => boolean> = {
   'image/jpeg': (b) => b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff,

@@ -2,7 +2,7 @@
  * Reduce una foto en el celular antes de subirla: máx. 1280 px y JPEG ~75%.
  * Una foto de cámara de 3–5 MB queda en ~150–300 KB (rápido aun con mala señal).
  */
-export async function compressPhoto(file: File, maxSide = 1280, quality = 0.75): Promise<Blob> {
+export async function compressPhoto(file: File, maxSide = 1024, quality = 0.65): Promise<Blob> {
   const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' } as ImageBitmapOptions).catch(() => createImageBitmap(file));
   const scale = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height));
   const w = Math.round(bitmap.width * scale);

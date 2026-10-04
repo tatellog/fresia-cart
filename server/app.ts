@@ -14,11 +14,11 @@ import { DemoProvider } from './payments/demo';
 import { MercadoPagoProvider, verifyMercadoPagoSignature } from './payments/mercadopago';
 import { checkReturnedPayment, handlePaymentNotification, reconcile, startCheckout } from './payments/service';
 import {
-  createOrder, setInvoiceStatus, getDeliveryPhoto, getOrderById, getOrderForCustomer, listOrders, markCollected, quoteOrder, saveCourierLocation, saveDeliveryPhoto, setOrderStatus, setRefundStatus, setShippingQuote, toAdmin, toPublic, trackingFor,
+  createOrder, purgeOldDeliveryPhotos, setInvoiceStatus, getDeliveryPhoto, getOrderById, getOrderForCustomer, listOrders, markCollected, quoteOrder, saveCourierLocation, saveDeliveryPhoto, setOrderStatus, setRefundStatus, setShippingQuote, toAdmin, toPublic, trackingFor,
 } from './orders';
 import * as store from './store';
 import * as S from './schemas';
-import { clearSession, isAdmin, passwordMatches, rateLimit, requireAdmin, setSession } from './auth';
+import { clearSession, isAdmin, passwordMatches, secretMatches, rateLimit, requireAdmin, setSession } from './auth';
 import { whatsappConfigured } from './whatsapp';
 import { addGroupItem, createGroup, groupLinesForOrder, groupView, removeGroupItem } from './groups';
 import { background, sleep } from './background';
@@ -75,6 +75,15 @@ export async function createApp(config: Config, opts: { demoWebhookDelayMs?: num
       paymentsMode: provider.name,
     };
     res.json(body);
+  });
+
+  // Tarea diaria (Vercel Cron): mantiene activa la base del plan gratis y borra fotos de entrega viejas.
+  app.get('/api/cron/daily', async (req, res) => {
+    const got = String(req.headers.authorization ?? '').replace(/^Bearer\s+/i, '');
+    if (!secretMatches(got, config.cronSecret)) throw new HttpError(401, 'No autorizado.');
+    const purged = await purgeOldDeliveryPhotos(db, ctx.now());
+    console.log(`[cron] latido ok · ${purged} foto(s) de entrega borradas`);
+    res.json({ ok: true, purgedPhotos: purged });
   });
 
   // Código postal → colonias y alcaldía (catálogo de SEPOMEX) para autollenar la dirección.
