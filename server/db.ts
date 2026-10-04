@@ -65,7 +65,9 @@ export function sslFor(url: string): pg.ConnectionConfig['ssl'] {
 export function postgres(url: string): Sql {
   const pool = new pg.Pool({
     connectionString: url.replace(/[?&]sslmode=[^&]*/, ''),
-    max: 5,
+    // Pocas conexiones por instancia: en Vercel hay varias instancias contra el pooler de Supabase.
+    max: Number(process.env.DB_POOL_MAX ?? (process.env.VERCEL ? 3 : 5)),
+    idleTimeoutMillis: 10_000,
     ssl: sslFor(url),
   });
   pool.on('error', (e) => console.error('[db] error de conexión', e.message));

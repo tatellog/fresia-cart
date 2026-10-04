@@ -21,6 +21,7 @@
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.8",
+    "@vercel/functions": "^3.9.11",
     "express": "^5.2.1",
     "pg": "^8.23.1",
     "qrcode": "^1.5.4",

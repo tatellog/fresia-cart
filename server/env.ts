@@ -33,11 +33,15 @@ export type Config = {
 };
 
 export function loadConfig(overrides: Partial<Config> = {}): Config {
-  const production = process.env.NODE_ENV === 'production';
+  const production = process.env.NODE_ENV === 'production' || Boolean(process.env.VERCEL);
   const port = Number(process.env.PORT ?? 8787);
   const cfg: Config = {
     port,
-    publicUrl: (process.env.PUBLIC_URL || `http://localhost:${port}`).replace(/\/$/, ''),
+    publicUrl: (
+      process.env.PUBLIC_URL ||
+      (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : '') ||
+      `http://localhost:${port}`
+    ).replace(/\/$/, ''),
     databaseUrl: process.env.DATABASE_URL || '',
     pglitePath: process.env.PGLITE_PATH || './data/pglite',
     adminPassword: process.env.ADMIN_PASSWORD || '',

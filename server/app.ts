@@ -20,6 +20,7 @@ import * as store from './store';
 import * as S from './schemas';
 import { clearSession, isAdmin, passwordMatches, rateLimit, requireAdmin, setSession } from './auth';
 import { whatsappConfigured } from './whatsapp';
+import { background, sleep } from './background';
 import type { LegalSlug, MenuResponse } from '../shared/types';
 import { ADMIN_FLOW } from '../shared/status';
 
@@ -179,7 +180,7 @@ export async function createApp(config: Config, opts: { demoWebhookDelayMs?: num
       if (!pref) throw new HttpError(404, 'No encontrado');
       const paymentId = await provider.simulatePayment(pref.id, outcome);
       // Igual que en producción: la plataforma avisa al servidor por su cuenta, un momento después.
-      setTimeout(() => void handlePaymentNotification(ctx, paymentId, 'demo:webhook').catch(console.error), demoDelay);
+      background(sleep(demoDelay).then(() => handlePaymentNotification(ctx, paymentId, 'demo:webhook')));
       const url = new URL(pref.return_url);
       url.searchParams.set('regreso', '1');
       res.json({ returnUrl: url.pathname + url.search });

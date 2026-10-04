@@ -5,6 +5,7 @@ import { getBusiness } from './store';
 import { sendWhatsApp, whatsappConfigured } from './whatsapp';
 import type { WhatsAppMessage } from './whatsapp';
 import { money } from '../shared/money';
+import { background } from './background';
 import type { AdminOrder } from '../shared/types';
 
 export type NotifyKind = 'pedido_pagado' | 'pedido_contra_entrega' | 'cotizacion_envio' | 'revision';
@@ -30,7 +31,7 @@ export class Notifier {
   notify(ctx: Ctx, kind: NotifyKind, order: OrderRow) {
     this.sent.push({ kind, number: order.number });
     console.log(`[aviso] ${TITLES[kind]}: ${order.number}`);
-    void this.deliverAll(ctx, kind, order).catch((e) => console.error('[aviso]', e));
+    background(this.deliverAll(ctx, kind, order));
   }
 
   private async deliverAll(ctx: Ctx, kind: NotifyKind, order: OrderRow) {
