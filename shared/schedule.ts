@@ -141,3 +141,11 @@ export function scheduleText(s: Schedule): string {
     })
     .join('\n');
 }
+
+/** «las 4 de la tarde», en hora de CDMX (tarjeta del Fresigrama). */
+export function hourPhrase(d: Date): string {
+  const h24 = Math.floor(cdmx(d).min / 60);
+  const h = h24 % 12 || 12;
+  const part = h24 < 12 ? 'de la mañana' : h24 < 19 ? 'de la tarde' : 'de la noche';
+  return `${h === 1 ? 'la' : 'las'} ${h} ${part}`;
+}

@@ -17,7 +17,8 @@ import type { InvoiceData } from '../../shared/invoice';
 import { isOpenAt } from '../../shared/schedule';
 import { validate } from './DeliveryPage';
 import { prepText, quoteEtaText } from '../../shared/coverage';
-import type { PublicOrder, Quote } from '../../shared/types';
+import type { GiftInfo, PublicOrder, Quote } from '../../shared/types';
+import { GiftFields, GIFT_KEY, emptyGift } from '../components/GiftFields';
 import { OrderLines, Totals } from './parts';
 
 type CreateRes = { number: string; token: string; order: PublicOrder };
@@ -54,6 +55,13 @@ export default function SummaryPage() {
   const [invoiceTried, setInvoiceTried] = useState(false);
   const setWantInvoice = (v: boolean) => { setWantInvoiceState(v); save('fo.invoice.on.v1', v); };
   const setInvoice = (v: InvoiceData) => { setInvoiceState(v); save('fo.invoice.v1', v); };
+  // Fresigrama: regalo con tarjeta (solo a domicilio, no en pedido de equipo).
+  const giftAllowed = form.fulfillment === 'delivery' && !group;
+  const [gift, setGiftState] = useState<GiftInfo & { on: boolean }>(() => loadStored(GIFT_KEY, emptyGift));
+  const setGift = (g: GiftInfo & { on: boolean }) => { setGiftState(g); save(GIFT_KEY, g); };
+  const isGift = giftAllowed && gift.on;
+  const [giftTried, setGiftTried] = useState(false);
+  const giftInvalid = isGift && gift.to.trim().length < 2;
   const invoiceInvalid = wantInvoice && Object.keys(invoiceErrors(invoice)).length > 0;
   const address = form.fulfillment === 'delivery' ? { ...form.address, postalCode: form.address.postalCode.trim(), location: form.address.location ?? null } : null;
   const formInvalid = Object.keys(validate(form)).length > 0;
@@ -90,14 +98,22 @@ export default function SummaryPage() {
     if (!quote || busy) return;
     setBusy(true);
     setError(null);
+    if (giftInvalid) {
+      setGiftTried(true);
+      setBusy(false);
+      document.getElementById('gift-title')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      return;
+    }
     if (invoiceInvalid) {
       setInvoiceTried(true);
+      setBusy(false);
       document.getElementById('invoice-title')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       return;
     }
     const body = {
       source: currentSource(),
       invoice: wantInvoice ? invoice : null,
+      gift: isGift ? { to: gift.to.trim(), note: gift.note.trim(), anonymous: gift.anonymous } : null,
       scheduledFor,
       group: group ? { code: group.code, token: group.token } : null,
       customer: { name: form.name.trim(), phone: form.phone },
@@ -119,6 +135,7 @@ export default function SummaryPage() {
           created = await api<CreateRes>('/api/orders', { body: { ...body, idempotencyKey: idempotencyKeyFor(fingerprint) } });
         } else throw e;
       }
+      if (isGift) setGift(emptyGift);
       rememberOrder({ number: created.number, token: created.token, at: new Date().toISOString(), cartFingerprint: fingerprint });
       if (group) {
         setGroupCheckout(null);
@@ -217,6 +234,8 @@ export default function SummaryPage() {
               />
             )}
 
+            {giftAllowed && <GiftFields value={gift} onChange={setGift} showErrors={giftTried} />}
+
             <section className="stack" aria-labelledby="invoice-title">
               <label className="option">
                 <input type="checkbox" checked={wantInvoice} onChange={(e) => setWantInvoice(e.target.checked)} />
@@ -312,7 +331,7 @@ export default function SummaryPage() {
                   <strong>
                     {form.fulfillment === 'pickup' ? `Pagas ${quote.total != null ? money(quote.total) : ''} al recoger.` : `Pagas ${quote.total != null ? money(quote.total) : ''} en efectivo al recibir.`}
                   </strong>{' '}
-                  Tu pedido entra a la cocina en cuanto lo confirmes.
+                  {isGift ? 'El repartidor te cobra a ti primero y después entrega el regalo.' : 'Tu pedido entra a la cocina en cuanto lo confirmes.'}
                 </p>
               </div>
             ) : (
@@ -340,9 +359,9 @@ export default function SummaryPage() {
           ) : manual ? (
             'Enviar pedido y confirmar envío'
           ) : payLater ? (
-            <>Confirmar pedido · {quote?.total != null ? money(quote.total) : ''}</>
+            <>{isGift ? 'Enviar bombón' : 'Confirmar pedido'} · {quote?.total != null ? money(quote.total) : ''}</>
           ) : (
-            <>Pagar {quote?.total != null ? money(quote.total) : ''}</>
+            <>{isGift ? 'Pagar y enviar bombón' : 'Pagar'} {quote?.total != null ? money(quote.total) : ''}</>
           )}
         </button>
       </StickyAction>

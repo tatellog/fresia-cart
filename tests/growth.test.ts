@@ -97,7 +97,7 @@ describe('QR por edificio', () => {
     expect(r.status).toBe(201);
     await t.api('POST', '/api/orders', pickup({ source: 'no-existe' })); // origen desconocido: se ignora
     const { sources } = (await t.api('GET', '/api/admin/qr-sources')).body;
-    expect(sources).toEqual([expect.objectContaining({ slug: 'torre-insurgentes', label: 'Torre Insurgentes', scans: 2, orders: 1, sales: 0 })]);
+    expect(sources.filter((s: any) => s.slug !== 'fresigrama')).toEqual([expect.objectContaining({ slug: 'torre-insurgentes', label: 'Torre Insurgentes', scans: 2, orders: 1, sales: 0 })]);
     const svg = await fetch(`${t.base}/api/admin/qr-sources/torre-insurgentes/svg`, { headers: { cookie: '' } });
     expect(svg.status).toBe(401);
   });

@@ -138,7 +138,7 @@ export const LEGAL_DRAFTS: Record<LegalSlug, LegalDoc> = {
     approved: false,
     body: `Responsable: Tania Anahí Tello García (RFC TEGT900130SW9), quien opera Frésia, con domicilio para oír y recibir notificaciones en Av. Insurgentes Sur 612, local C, esq. Valle de Arizpe, col. Del Valle Norte, C.P. 03103, alcaldía Benito Juárez, Ciudad de México. Contacto: fresia12026@gmail.com.
 
-Datos que recabamos: nombre, teléfono, dirección de entrega (incluida la ubicación del mapa si decides compartirla), los nombres opcionales que escribas en "¿Para quién es?" y, solo si pides factura, tus datos fiscales (RFC, nombre o razón social, régimen fiscal, código postal fiscal, uso del CFDI y correo). No recabamos datos sensibles.
+Datos que recabamos: nombre, teléfono, dirección de entrega (incluida la ubicación del mapa si decides compartirla), los nombres opcionales que escribas en "¿Para quién es?", si mandas un regalo (Fresigrama) el nombre de quien lo recibe y el mensaje de la tarjeta, y, solo si pides factura, tus datos fiscales (RFC, nombre o razón social, régimen fiscal, código postal fiscal, uso del CFDI y correo). No recabamos datos sensibles.
 
 Finalidades necesarias: preparar y entregar tu pedido, cobrarlo, contactarte sobre él, mostrarte su estado y la foto de entrega, emitir tu factura si la pides y sumar sellos a tu tarjeta de Frésia Club si tienes una registrada con el mismo teléfono. No usamos tus datos para publicidad.
 

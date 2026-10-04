@@ -13,7 +13,7 @@ import { minimumMessage, priceCart } from '../shared/pricing';
 import { distanceM, normalizeText, quoteDelivery, shippingFor } from '../shared/coverage';
 import { lookupPostalCode, postalCatalogLoaded } from './postal';
 import type {
-  Address, AdminOrder, CartLineInput, Quote, DeliveryQuote, Fulfillment, OrderStatus, PaymentMethod, PaymentStatus, PricedLine, PublicOrder, RefundStatus, TrackingInfo,
+  Address, AdminOrder, CartLineInput, GiftInfo, Quote, DeliveryQuote, Fulfillment, OrderStatus, PaymentMethod, PaymentStatus, PricedLine, PublicOrder, RefundStatus, TrackingInfo,
 } from '../shared/types';
 
 export type OrderInput = {
@@ -27,6 +27,7 @@ export type OrderInput = {
   /** QR / edificio de origen (slug). */
   source?: string | null;
   invoice?: InvoiceData | null;
+  gift?: GiftInfo | null;
   /** ISO de la hora programada; null = lo antes posible. */
   scheduledFor?: string | null;
   /** Pedido de equipo: el servidor toma los productos del grupo. */
@@ -57,6 +58,7 @@ export type OrderRow = {
   delivery_photo_at: Date | string | null;
   source: string | null;
   invoice: InvoiceData | null;
+  gift: GiftInfo | null;
   invoice_status: 'no_aplica' | 'solicitada' | 'emitida';
   scheduled_for: Date | string | null;
   group_name: string | null;
@@ -147,6 +149,11 @@ export async function createOrder(ctx: Ctx, idempotencyKey: string, input: Order
     throw new HttpError(422, `Ahora estamos cerrados${when ? `; abrimos ${when}` : ''}. Programa tu pedido.`, { code: 'closed' });
   }
 
+  // Fresigrama: solo a domicilio y no en pedidos de equipo.
+  const gift = input.gift ? { to: input.gift.to.trim(), note: input.gift.note.trim(), anonymous: input.gift.anonymous } : null;
+  if (gift && input.fulfillment !== 'delivery') throw new HttpError(422, 'Los regalos solo se envían a domicilio.', { code: 'gift' });
+  if (gift && input.group) throw new HttpError(422, 'El pedido de equipo no puede ser un regalo.', { code: 'gift' });
+
   let invoice: InvoiceData | null = null;
   if (input.invoice) {
     const errs = Object.values(invoiceErrors(input.invoice));
@@ -187,9 +194,9 @@ export async function createOrder(ctx: Ctx, idempotencyKey: string, input: Order
     const row = await q.one<OrderRow>(
       `insert into office.orders (id, number, access_token, idempotency_key, request_hash, customer_name, customer_phone,
          fulfillment, address, notes, items, subtotal, shipping_fee, total, delivery_quote, payment_method, payment_status, order_status, demo, cash_tendered,
-         source, invoice, invoice_status, scheduled_for, group_name)
+         source, invoice, invoice_status, scheduled_for, group_name, gift)
        values ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11::jsonb, $12, $13, $14, $15::jsonb, $18, $19, $16, $17, $20,
-         $21, $22::jsonb, $23, $24, $25)
+         $21, $22::jsonb, $23, $24, $25, $26::jsonb)
        on conflict (idempotency_key) do nothing
        returning *`,
       [
@@ -197,7 +204,7 @@ export async function createOrder(ctx: Ctx, idempotencyKey: string, input: Order
         input.fulfillment, input.address ? JSON.stringify(input.address) : null, input.notes, JSON.stringify(quote.lines),
         quote.subtotal, quote.shippingFee, quote.total, JSON.stringify(quote.delivery), orderStatus,
         ctx.provider.name === 'demo', input.paymentMethod, cod ? 'por_cobrar' : 'sin_pagar', cashTendered,
-        source, invoice ? JSON.stringify(invoice) : null, invoice ? 'solicitada' : 'no_aplica', input.scheduledFor ?? null, group?.name ?? null,
+        source, invoice ? JSON.stringify(invoice) : null, invoice ? 'solicitada' : 'no_aplica', input.scheduledFor ?? null, group?.name ?? null, gift ? JSON.stringify(gift) : null,
       ],
     );
     if (row && group) {
@@ -267,6 +274,7 @@ export function toPublic(row: OrderRow): PublicOrder {
     deliveryPhotoAt: photoStillStored(row.delivery_photo_at) ? isoOrNull(row.delivery_photo_at) : null,
     scheduledFor: isoOrNull(row.scheduled_for),
     invoice: row.invoice ?? null,
+    gift: row.gift ?? null,
     invoiceStatus: row.invoice_status ?? 'no_aplica',
     groupName: row.group_name ?? null,
     orderStatus: row.order_status,

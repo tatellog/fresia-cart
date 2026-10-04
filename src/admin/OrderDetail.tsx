@@ -10,6 +10,7 @@ import { CollectBox } from './Collect';
 import { StatusFlow } from './StatusFlow';
 import { CourierShare } from './CourierShare';
 import { DeliveryProof } from './DeliveryProof';
+import { GiftNotice } from './GiftCard';
 import { slotLabel } from '../../shared/schedule';
 import { CFDI_USES, REGIMES } from '../../shared/invoice';
 import type { AdminOrder, OrderStatus, RefundStatus } from '../../shared/types';
@@ -102,6 +103,7 @@ export default function OrderDetail() {
         </div>
       )}
       {order.groupName && <div className="notice">👥 Pedido de equipo «{order.groupName}» · cada producto dice para quién es.</div>}
+      <GiftNotice order={order} />
       {order.orderStatus !== 'entregado' && <CollectBox order={order} />}
       {order.demo && order.paymentMethod === 'online' && <div className="notice warn">Pago en línea simulado: no hubo cobro real.</div>}
       {order.needsReview && (
