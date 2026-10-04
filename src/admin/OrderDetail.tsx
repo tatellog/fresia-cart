@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../lib/api';
 import { formatDate, money } from '../lib/format';
 import { parseMoney } from '../../shared/money';
@@ -19,6 +19,7 @@ export default function OrderDetail() {
   const [busy, setBusy] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [params] = useSearchParams();
+  const navigate = useNavigate();
   const [shareNow, setShareNow] = useState(params.get('compartir') === '1');
 
   const load = useCallback(() => {
@@ -30,24 +31,29 @@ export default function OrderDetail() {
     return () => clearInterval(t);
   }, [load]);
 
-  async function act(path: string, body: unknown) {
+  async function act(path: string, body: unknown): Promise<boolean> {
     setBusy(true);
     setActionError(null);
+    let ok = true;
     try {
       const r = await api<{ order?: AdminOrder }>(`/api/admin/${path}`, { body });
       if (r.order) setOrder(r.order);
       else load();
     } catch (e) {
       setActionError((e as Error).message);
+      ok = false;
     }
     setBusy(false);
     setConfirmCancel(false);
+    return ok;
   }
 
   async function setStatus(status: OrderStatus, collect: boolean) {
     if (status === 'en_camino') setShareNow(true);
-    await act(`orders/${order!.id}/status`, { status });
-    if (collect) await act(`orders/${order!.id}/collected`, {});
+    if (!(await act(`orders/${order!.id}/status`, { status }))) return;
+    if (collect && !(await act(`orders/${order!.id}/collected`, {}))) return;
+    // Pedido terminado: de vuelta a la lista.
+    if (status === 'entregado') navigate('/admin', { state: { completed: { number: order!.number, collected: collect ? order!.total : null } } });
   }
 
   if (error) return <LoadError message={error} retry={load} />;

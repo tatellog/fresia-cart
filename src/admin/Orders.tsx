@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
 import { formatDate, money } from '../lib/format';
 import { LoadError, Spinner } from '../components/ui';
@@ -22,6 +22,14 @@ export default function Orders() {
   const [orders, setOrders] = useState<AdminOrder[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [summary, setSummary] = useState({ nuevos: 0, cotizar: 0, revision: 0 });
+  const location = useLocation();
+  const [completed, setCompleted] = useState(() => (location.state as { completed?: { number: string; collected: number | null } } | null)?.completed ?? null);
+  useEffect(() => {
+    if (!completed) return;
+    window.history.replaceState({}, ''); // que no reaparezca al recargar
+    const t = setTimeout(() => setCompleted(null), 6000);
+    return () => clearTimeout(t);
+  }, [completed]);
   const seen = useRef<Set<string> | null>(null);
   const [fresh, setFresh] = useState<AdminOrder[]>([]);
 
@@ -72,6 +80,15 @@ export default function Orders() {
             ))}
           </div>
           <button className="btn ghost small" onClick={() => setFresh([])}>Entendido</button>
+        </div>
+      )}
+      {completed && (
+        <div className="notice ok row between" role="status">
+          <span>
+            <strong>✅ {completed.number} completado</strong>
+            {completed.collected != null && ` · cobrado ${money(completed.collected)}`}
+          </span>
+          <button className="linkbtn" onClick={() => setCompleted(null)}>Cerrar</button>
         </div>
       )}
       <div className="row between" style={{ flexWrap: 'wrap' }}>
