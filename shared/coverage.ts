@@ -84,6 +84,11 @@ export function etaText(min: number, max: number): string {
   return min === max ? `${min} min` : `${min}–${max} min`;
 }
 
+/** Envío que se cobra: gratis si el subtotal alcanza el monto configurado. */
+export function shippingFor(fee: number, subtotal: number, freeFrom: number | null): number {
+  return freeFrom != null && subtotal >= freeFrom ? 0 : fee;
+}
+
 /** Texto del tiempo de una cotización cubierta, o null si Frésia aún no captura sus tiempos. */
 export function quoteEtaText(q: { etaMin: number | null; etaMax: number | null }): string | null {
   return q.etaMin != null && q.etaMax != null ? etaText(q.etaMin, q.etaMax) : null;

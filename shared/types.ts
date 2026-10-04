@@ -121,6 +121,8 @@ export type DeliveryConfig = {
   origin: LatLng | null;
   radiusM: number;
   radiusFee: number;
+  /** Envío gratis cuando el subtotal llega a este monto (centavos). null = nunca. */
+  freeShippingFrom: number | null;
   /** Minutos de preparación (desde–hasta). null = sin capturar: no se muestra ningún tiempo. */
   prepMin: number | null;
   prepMax: number | null;

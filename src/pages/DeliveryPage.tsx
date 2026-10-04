@@ -168,7 +168,7 @@ export default function DeliveryPage() {
               {locating === 'unavailable' && (
                 <p className="small error-text" role="alert">No pudimos obtener tu ubicación. Puedes seguir y confirmaremos el envío por WhatsApp.</p>
               )}
-              <CoverageNotice coverage={coverage} />
+              <CoverageNotice coverage={coverage} freeFrom={data?.delivery.freeShippingFrom ?? null} />
               <p className="muted small">Solo usamos tu ubicación para calcular la distancia; la verá Frésia junto con tu pedido.</p>
             </section>
           )}
@@ -226,7 +226,7 @@ export default function DeliveryPage() {
                   hint={postal.state === 'found' ? 'Según tu código postal.' : postal.state === 'idle' && !isPostalCode(cp) ? 'Se llena sola con tu código postal.' : undefined}
                 />
               )}
-              {!radiusMode && <CoverageNotice coverage={coverage} />}
+              {!radiusMode && <CoverageNotice coverage={coverage} freeFrom={data?.delivery.freeShippingFrom ?? null} />}
               <Field label="Oficina o piso" placeholder="Ej. Piso 4, oficina 402" value={form.address.office} onChange={(e) => setAddr('office', e.target.value)} error={errors.office} maxLength={80} />
               <Field label="Referencias" optional placeholder="Ej. Dejar en recepción" value={form.address.references} onChange={(e) => setAddr('references', e.target.value)} maxLength={200} />
             </section>
@@ -257,7 +257,7 @@ export default function DeliveryPage() {
   );
 }
 
-function CoverageNotice({ coverage }: { coverage: { state: string; quote?: DeliveryQuote } }) {
+function CoverageNotice({ coverage, freeFrom }: { coverage: { state: string; quote?: DeliveryQuote }; freeFrom: number | null }) {
   if (coverage.state === 'idle') return <p className="hint muted small">Verificamos la cobertura y el costo de envío antes de pagar.</p>;
   if (coverage.state === 'loading') return <div className="notice"><Spinner label="Verificando cobertura…" /></div>;
   if (coverage.state === 'error') return <div className="notice error" role="alert">No pudimos verificar la cobertura. Revisa tu conexión.</div>;
@@ -265,7 +265,7 @@ function CoverageNotice({ coverage }: { coverage: { state: string; quote?: Deliv
   if (q.status === 'covered') {
     return (
       <div className="notice ok" role="status">
-        <strong>Sí llegamos{q.distanceM != null ? ` · estás a ${q.distanceM} m` : ''}.</strong> Envío {q.fee ? money(q.fee) : 'sin costo'}{quoteEtaText(q) ? ` · llega en ${quoteEtaText(q)} aprox.` : '.'}
+        <strong>Sí llegamos{q.distanceM != null ? ` · estás a ${q.distanceM} m` : ''}.</strong> Envío {q.fee ? money(q.fee) : 'sin costo'}{q.fee && freeFrom != null ? ` (gratis desde ${money(freeFrom)})` : ''}{quoteEtaText(q) ? ` · llega en ${quoteEtaText(q)} aprox.` : '.'}
       </div>
     );
   }

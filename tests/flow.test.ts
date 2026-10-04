@@ -75,6 +75,20 @@ describe('cobertura: 300 m alrededor de Frésia', () => {
     expect(bad.status).toBe(400);
   });
 
+  it('envío gratis desde el monto configurado', async () => {
+    await t.close();
+    t = await start({ storeDelivery: true }); // tarifa real: $15, gratis desde $400
+    const small = orderBody({ items: [{ productId: 'clasica', sizeId: 'chico', toppingIds: [], qty: 2 }] });
+    const q1 = await t.api('POST', '/api/quote', small);
+    expect(q1.body.shippingFee).toBe(1500);
+    const q2 = await t.api('POST', '/api/quote', orderBody());
+    expect(q2.body.subtotal).toBeGreaterThanOrEqual(40000);
+    expect(q2.body.shippingFee).toBe(0);
+    expect(q2.body.total).toBe(q2.body.subtotal);
+    const o = await t.api('POST', '/api/orders', orderBody({ paymentMethod: 'contra_entrega' }));
+    expect(o.body.order.shippingFee).toBe(0);
+  });
+
   it('fuera del radio: no se acepta y no se crea el pedido', async () => {
     expect((await check(near(600))).body).toMatchObject({ status: 'not_covered', distanceM: 600 });
     const r = await t.api('POST', '/api/orders', orderBody({ address: { ...address, location: near(600) } }));

@@ -32,10 +32,16 @@ export default function MenuPage() {
               {data.rules.minQtyPerItem > 1 ? `Mínimo ${data.rules.minQtyPerItem} piezas por producto · combos desde 1` : `Pedido mínimo: ${data.rules.minFresias} Frésias`}
             </p>
           )}
+          {data?.delivery.deliveryEnabled && data.delivery.mode === 'radius' && (
+            <p className="small muted" style={{ margin: 0 }}>
+              Envío {money(data.delivery.radiusFee)}
+              {data.delivery.freeShippingFrom != null && <> · <strong className="ok-text">gratis desde {money(data.delivery.freeShippingFrom)}</strong></>}
+            </p>
+          )}
           <Link to="/equipo/nuevo" className="btn secondary small">👥 Pedido de equipo</Link>
           {data && !isOpenAt(new Date(), data.schedule) && (
             <p className="notice closed-banner small">
-              Ahora estamos cerrados{nextOpening(new Date(), data.schedule) ? `; abrimos ${nextOpening(new Date(), data.schedule)}` : ''}. Puedes programar tu pedido.
+              Ahora estamos cerrados{nextOpening(new Date(), data.schedule) ? `; abrimos ${nextOpening(new Date(), data.schedule)}` : ''}{nextOpening(new Date(), data.schedule)?.endsWith('.') ? '' : '.'} Puedes programar tu pedido.
             </p>
           )}
           {active && (

@@ -160,6 +160,19 @@ function RadiusFields({ d, set }: { d: DeliveryConfig; set: (p: Partial<Delivery
       <div className="row" style={{ flexWrap: 'wrap' }}>
         <div className="field" style={{ width: 140 }}><label>Radio (m)</label><input className="input sm" inputMode="numeric" value={d.radiusM} onChange={(e) => set({ radiusM: parseInt(e.target.value, 10) || 0 })} /></div>
         <div className="field" style={{ width: 140 }}><label>Envío (MXN)</label><MoneyInput label="Envío" value={d.radiusFee} onChange={(radiusFee) => set({ radiusFee })} /></div>
+        <div className="field" style={{ width: 170 }}>
+          <label>Gratis desde (MXN)</label>
+          <input
+            className="input sm"
+            inputMode="decimal"
+            placeholder="Nunca"
+            defaultValue={d.freeShippingFrom != null ? String(d.freeShippingFrom / 100) : ''}
+            onBlur={(e) => {
+              const v = e.target.value.replace(/[$,\s]/g, '');
+              set({ freeShippingFrom: v === '' ? null : Math.max(0, Math.round(parseFloat(v) * 100) || 0) });
+            }}
+          />
+        </div>
       </div>
       <p className="muted small">
         Se acepta automáticamente solo si el GPS confirma que está dentro del radio aun con su margen de error (máx. 80 m).

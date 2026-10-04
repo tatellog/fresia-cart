@@ -912,3 +912,4 @@ legend {
 /* Mínimo de piezas visible desde el menú */
 .min-banner { font-size: 0.875rem; padding: 6px 14px; }
 .min-tag { display: inline-block; margin: 6px 0 0; padding: 2px 8px; border-radius: 999px; background: var(--rose-soft); color: var(--red-ink); font-size: 0.75rem; font-weight: 600; }
+.ok-text { color: var(--ok); }

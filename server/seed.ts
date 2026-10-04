@@ -107,8 +107,9 @@ export const DEMO_DELIVERY: DeliveryConfig = {
   mode: 'radius',
   origin: FRESIA_LOCATION,
   radiusM: 300,
-  // Tarifa de ejemplo: el negocio debe confirmarla.
-  radiusFee: 3000,
+  // Tarifa de arranque decidida por Frésia (oct 2026): $15, gratis desde $400. Revisar tras 2–4 semanas.
+  radiusFee: 1500,
+  freeShippingFrom: 40000,
   // Tiempos: sin capturar hasta que Frésia los mida (no se muestra ningún tiempo inventado).
   prepMin: null,
   prepMax: null,
@@ -121,7 +122,7 @@ export const DEMO_DELIVERY: DeliveryConfig = {
   cashOnDelivery: true,
   // Detalle opcional (p. ej. «Efectivo o tarjeta»); por definir con Frésia.
   cashOnDeliveryNote: '',
-  example: true,
+  example: false,
   zones: [
     { id: 'z-ejemplo-1', name: 'Zona de ejemplo A', postalCodes: ['03103'], colonias: [], fee: 3000, etaMin: 0, etaMax: 0, mode: 'auto', active: true },
     { id: 'z-ejemplo-2', name: 'Zona de ejemplo B', postalCodes: ['03100', '03104'], colonias: [], fee: 0, etaMin: 0, etaMax: 0, mode: 'manual', active: true },

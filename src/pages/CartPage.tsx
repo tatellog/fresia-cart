@@ -84,6 +84,13 @@ export default function CartPage() {
             <span className="price">{money(cart.subtotal)}</span>
           </div>
           <p className="muted small">El envío se calcula con tu dirección en el siguiente paso.</p>
+          {data?.delivery.deliveryEnabled && data.delivery.freeShippingFrom != null && (
+            <p className={`small ${cart.subtotal >= data.delivery.freeShippingFrom ? 'ok-text' : ''}`}>
+              {cart.subtotal >= data.delivery.freeShippingFrom
+                ? '🎉 Tu pedido tiene envío gratis.'
+                : `Te faltan ${money(data.delivery.freeShippingFrom - cart.subtotal)} para el envío gratis.`}
+            </p>
+          )}
         </div>
 
         {data && rules.minFresias > 1 && (

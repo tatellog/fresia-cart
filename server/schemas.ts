@@ -117,6 +117,7 @@ export const deliverySchema = z.object({
   origin: z.object({ lat: z.number().min(-90).max(90), lng: z.number().min(-180).max(180) }).nullable(),
   radiusM: z.number().int().min(50).max(20000),
   radiusFee: money,
+  freeShippingFrom: money.nullable(),
   prepMin: z.number().int().min(0).max(600).nullable(),
   prepMax: z.number().int().min(0).max(600).nullable(),
   handoffMin: z.number().int().min(0).max(120),
