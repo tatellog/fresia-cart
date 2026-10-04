@@ -908,3 +908,7 @@ legend {
 .club-stamps { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
 .club-stamps span { aspect-ratio: 1; border-radius: 50%; border: 2px dashed var(--line); display: grid; place-items: center; font-size: 1.1rem; }
 .club-stamps span.on { border-style: solid; border-color: var(--rose); background: var(--rose-soft); }
+
+/* Mínimo de piezas visible desde el menú */
+.min-banner { font-size: 0.875rem; padding: 6px 14px; }
+.min-tag { display: inline-block; margin: 6px 0 0; padding: 2px 8px; border-radius: 999px; background: var(--rose-soft); color: var(--red-ink); font-size: 0.75rem; font-weight: 600; }

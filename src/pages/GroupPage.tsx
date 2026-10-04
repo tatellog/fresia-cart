@@ -79,7 +79,8 @@ export default function GroupPage() {
   }
 
   const productImage = (id: string) => menu?.products.find((p) => p.id === id)?.image;
-  const minPieces = menu?.rules.minQtyPerItem ?? 3;
+  // Pedido de equipo: sin mínimo de piezas.
+  const minPieces = 1;
 
   return (
     <>
@@ -117,7 +118,7 @@ export default function GroupPage() {
               <input id="member" className="input" value={name} onChange={(e) => setName(e.target.value)} maxLength={40} autoComplete="given-name" />
             </div>
             <button type="button" className="btn primary" disabled={name.trim().length < 2} onClick={join}>Elegir mi Frésia</button>
-            <p className="muted small">Cada quien pide desde 1 pieza; el pedido completo debe sumar al menos {minPieces}.</p>
+            <p className="muted small">Sin mínimo: cada quien pide lo que quiera, desde 1 pieza.</p>
           </section>
         )}
 
@@ -166,7 +167,7 @@ export default function GroupPage() {
               navigate('/entrega');
             }}
           >
-            {g.pieces < minPieces ? `Faltan ${minPieces - g.pieces} pieza${minPieces - g.pieces === 1 ? '' : 's'} para pedir` : `Hacer el pedido del equipo · ${money(g.subtotal)}`}
+            {g.pieces < minPieces ? 'Agrega al menos 1 pieza' : `Hacer el pedido del equipo · ${money(g.subtotal)}`}
           </button>
         </StickyAction>
       )}

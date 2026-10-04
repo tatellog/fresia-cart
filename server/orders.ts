@@ -77,8 +77,6 @@ export async function quoteOrder(db: DB, input: Pick<OrderInput, 'fulfillment' |
   else if (!priced.errors.length) {
     const min = minimumMessage(priced.fresias, rules);
     if (min) errors.push(min);
-    const pieces = priced.lines.reduce((s, l) => s + l.qty, 0);
-    if (opts.group && pieces < rules.minQtyPerItem) errors.push(`El pedido de equipo necesita al menos ${rules.minQtyPerItem} piezas.`);
   }
 
   let delivery: DeliveryQuote;

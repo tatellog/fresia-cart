@@ -154,12 +154,13 @@ describe('pedido de equipo', () => {
     expect((await t.api('POST', '/api/orders', pickup({ items: [], group: ref }))).status).toBe(409);
   });
 
-  it('necesita al menos 3 piezas en total y solo el organizador lo envía', async () => {
+  it('sin mínimo de piezas (basta 1) y solo el organizador lo envía', async () => {
+    const empty = await group();
+    expect((await t.api('POST', '/api/orders', pickup({ items: [], group: { code: empty.code, token: empty.adminToken } }))).status).toBe(422);
     const g = await group();
     await g.add('Ana', 'key-ana-123456', item('clasica', 'chico'));
-    await g.add('Luis', 'key-luis-123456', item('clasica', 'chico'));
-    expect((await t.api('POST', '/api/orders', pickup({ items: [], group: { code: g.code, token: g.adminToken } }))).status).toBe(422);
     expect((await t.api('POST', '/api/orders', pickup({ items: [], group: { code: g.code, token: 'token-que-no-es-0000' } }))).status).toBe(403);
+    expect((await t.api('POST', '/api/orders', pickup({ items: [], group: { code: g.code, token: g.adminToken } }))).status).toBe(201);
   });
 
   it('respeta la hora límite', async () => {

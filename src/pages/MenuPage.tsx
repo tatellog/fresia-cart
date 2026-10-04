@@ -7,6 +7,9 @@ import { useMenu } from '../lib/menu';
 import { money } from '../lib/format';
 import { recentOrders } from '../lib/checkout';
 import { CartBar, DemoBanner, Footer, GroupModeBanner, LoadError } from '../components/ui';
+import { activeGroup } from '../lib/groupState';
+import { minQtyFor } from '../../shared/pricing';
+import type { MenuRules } from '../../shared/types';
 import { isOpenAt, nextOpening } from '../../shared/schedule';
 import type { BusinessInfo, MenuResponse, Product } from '../../shared/types';
 
@@ -24,9 +27,9 @@ export default function MenuPage() {
           <img src="/brand/fresia-logo.svg" alt="Frésia, fresas con crema" className="logo" width={132} height={196} />
           <h1>Fresas con crema para tu oficina</h1>
           <p className="muted">Pide para todo el equipo. Sin crear cuenta.</p>
-          {data && (data.rules.minQtyPerItem > 1 || data.rules.minFresias > 1) && (
-            <p className="badge" style={{ fontSize: '0.875rem', padding: '6px 14px' }}>
-              {data.rules.minQtyPerItem > 1 ? `Desde ${data.rules.minQtyPerItem} piezas por producto · combos desde 1` : `Pedido mínimo: ${data.rules.minFresias} Frésias`}
+          {data && !activeGroup() && (data.rules.minQtyPerItem > 1 || data.rules.minFresias > 1) && (
+            <p className="badge min-banner">
+              {data.rules.minQtyPerItem > 1 ? `Mínimo ${data.rules.minQtyPerItem} piezas por producto · combos desde 1` : `Pedido mínimo: ${data.rules.minFresias} Frésias`}
             </p>
           )}
           <Link to="/equipo/nuevo" className="btn secondary small">👥 Pedido de equipo</Link>
@@ -60,7 +63,7 @@ export default function MenuPage() {
                 <h2 id={`s-${title}`}>{title}</h2>
                 <div className="grid">
                   {items.map((p) => (
-                    <ProductCard key={p.id} product={p} />
+                    <ProductCard key={p.id} product={p} rules={data.rules} />
                   ))}
                 </div>
               </section>
@@ -82,7 +85,9 @@ function sections(products: Product[]): [string, Product[]][] {
   return [...map.entries()];
 }
 
-function ProductCard({ product: p }: { product: Product }) {
+function ProductCard({ product: p, rules }: { product: Product; rules: MenuRules }) {
+  // En pedido de equipo no hay mínimo.
+  const min = activeGroup() ? 1 : minQtyFor(p, rules);
   const from = Math.min(...p.sizes.map((s) => s.price));
   const content = (
     <>
@@ -94,6 +99,7 @@ function ProductCard({ product: p }: { product: Product }) {
         <div>
           <h3>{p.name}</h3>
           <p className="muted small desc">{p.description}</p>
+          {min > 1 && <p className="min-tag">Mínimo {min} piezas</p>}
         </div>
         <p className="price" style={{ whiteSpace: 'nowrap' }}>
           {(p.sizes.length > 1 || p.combo) && <span className="muted small" style={{ fontWeight: 400 }}>desde </span>}
