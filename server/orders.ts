@@ -9,7 +9,7 @@ import { isOpenAt, isValidSlot, nextOpening } from '../shared/schedule';
 import { invoiceErrors, normalizeInvoice } from '../shared/invoice';
 import type { InvoiceData } from '../shared/invoice';
 import { minimumMessage, priceCart } from '../shared/pricing';
-import { distanceM, normalizeText, quoteDelivery } from '../shared/coverage';
+import { distanceM, normalizeText, quoteDelivery, shippingFor } from '../shared/coverage';
 import { lookupPostalCode, postalCatalogLoaded } from './postal';
 import type {
   Address, AdminOrder, CartLineInput, Quote, DeliveryQuote, Fulfillment, OrderStatus, PaymentMethod, PaymentStatus, PricedLine, PublicOrder, RefundStatus, TrackingInfo,
@@ -94,7 +94,8 @@ export async function quoteOrder(db: DB, input: Pick<OrderInput, 'fulfillment' |
     }
   }
 
-  const shippingFee = delivery.status === 'pickup' ? 0 : delivery.status === 'covered' ? delivery.fee : null;
+  const shippingFee =
+    delivery.status === 'pickup' ? 0 : delivery.status === 'covered' ? shippingFor(delivery.fee, priced.subtotal, cfg.freeShippingFrom) : null;
   return {
     lines: priced.lines,
     subtotal: priced.subtotal,

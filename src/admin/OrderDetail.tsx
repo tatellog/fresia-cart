@@ -1,3 +1,4 @@
+import { quoteEtaText } from '../../shared/coverage';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../lib/api';
@@ -239,7 +240,7 @@ export default function OrderDetail() {
           )}
           <dt>Zona</dt>
           <dd>
-            {order.deliveryQuote.status === 'covered' && `${order.deliveryQuote.zoneName} · ${order.deliveryQuote.etaMin}–${order.deliveryQuote.etaMax} min`}
+            {order.deliveryQuote.status === 'covered' && [order.deliveryQuote.zoneName, quoteEtaText(order.deliveryQuote)].filter(Boolean).join(' · ')}
             {order.deliveryQuote.status === 'quoted' && `Cotizado manualmente · ${order.deliveryQuote.etaText}`}
             {order.deliveryQuote.status === 'manual' && 'Requiere cotización'}
             {order.deliveryQuote.status === 'pickup' && 'Recoge en tienda'}

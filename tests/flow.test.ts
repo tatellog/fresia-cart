@@ -58,9 +58,35 @@ describe('totales', () => {
 describe('cobertura: 300 m alrededor de Frésia', () => {
   const check = (location: object | null) => t.api('POST', '/api/coverage', { postalCode: '', colonia: '', location });
 
-  it('dentro del radio: tarifa y tiempo', async () => {
-    expect((await check(near(100))).body).toMatchObject({ status: 'covered', fee: 3000, etaMin: 15, etaMax: 25, distanceM: 100 });
+  it('dentro del radio: tarifa; sin tiempos capturados no se inventa un tiempo', async () => {
+    expect((await check(near(100))).body).toMatchObject({ status: 'covered', fee: 3000, etaMin: null, etaMax: null, distanceM: 100 });
     expect((await check(near(280, 15))).body.status).toBe('covered'); // 280 + 15 ≤ 300
+  });
+
+  it('con tiempos reales: preparación + camino según la distancia + subir a la oficina', async () => {
+    await t.api('POST', '/api/admin/login', { password: 'secreto-de-prueba' });
+    const d = (await t.api('GET', '/api/admin/delivery')).body;
+    const r = await t.api('PUT', '/api/admin/delivery', { ...d, prepMin: 8, prepMax: 12, handoffMin: 3, courierMode: 'walk' });
+    expect(r.status).toBe(200);
+    // 100 m a pie ≈ 2 min; 280 m ≈ 5 min
+    expect((await check(near(100))).body).toMatchObject({ etaMin: 13, etaMax: 17 });
+    expect((await check(near(280, 5))).body).toMatchObject({ etaMin: 16, etaMax: 20 });
+    const bad = await t.api('PUT', '/api/admin/delivery', { ...d, prepMin: 8, prepMax: null });
+    expect(bad.status).toBe(400);
+  });
+
+  it('envío gratis desde el monto configurado', async () => {
+    await t.close();
+    t = await start({ storeDelivery: true }); // tarifa real: $15, gratis desde $400
+    const small = orderBody({ items: [{ productId: 'clasica', sizeId: 'chico', toppingIds: [], qty: 2 }] });
+    const q1 = await t.api('POST', '/api/quote', small);
+    expect(q1.body.shippingFee).toBe(1500);
+    const q2 = await t.api('POST', '/api/quote', orderBody());
+    expect(q2.body.subtotal).toBeGreaterThanOrEqual(40000);
+    expect(q2.body.shippingFee).toBe(0);
+    expect(q2.body.total).toBe(q2.body.subtotal);
+    const o = await t.api('POST', '/api/orders', orderBody({ paymentMethod: 'contra_entrega' }));
+    expect(o.body.order.shippingFee).toBe(0);
   });
 
   it('fuera del radio: no se acepta y no se crea el pedido', async () => {

@@ -3,7 +3,8 @@ import { api } from '../lib/api';
 import { formatDate } from '../lib/format';
 import { LoadError, Spinner } from '../components/ui';
 import { MoneyInput, SaveBar, Toggle, splitList } from './fields';
-import type { BusinessInfo, DeliveryConfig, LegalDoc, Zone } from '../../shared/types';
+import type { BusinessInfo, CourierMode, DeliveryConfig, LegalDoc, Zone } from '../../shared/types';
+import { deliveryEta, etaText } from '../../shared/coverage';
 import type { Schedule } from '../../shared/schedule';
 import { scheduleText } from '../../shared/schedule';
 
@@ -64,13 +65,10 @@ export function DeliverySettings() {
         </div>
         {d.mode === 'radius' && <RadiusFields d={d} set={set} />}
       </section>
+      <TimesFields d={d} set={set} />
       <section className="card stack">
         <Toggle checked={d.deliveryEnabled} onChange={(deliveryEnabled) => set({ deliveryEnabled })} label="Entrega a domicilio activa" />
         <Toggle checked={d.pickupEnabled} onChange={(pickupEnabled) => set({ pickupEnabled })} label="Recoger en Frésia activo" />
-        <div className="field">
-          <label htmlFor="prep">Tiempo de preparación para recoger</label>
-          <input id="prep" className="input sm" value={d.pickupPrepText} placeholder="Ej. 15–20 min" onChange={(e) => set({ pickupPrepText: e.target.value })} />
-        </div>
         <div className="field">
           <label htmlFor="ooz">Direcciones fuera de zona</label>
           <select id="ooz" className="select sm" value={d.outOfZone} onChange={(e) => set({ outOfZone: e.target.value as DeliveryConfig['outOfZone'] })}>
@@ -97,7 +95,7 @@ export function DeliverySettings() {
         <p className="muted">Solo se entrega a las zonas capturadas aquí. Cada zona usa códigos postales; si agregas colonias, solo esas quedan cubiertas.</p>
         <div className="row between">
           <h2>Zonas</h2>
-          <button className="btn ghost small" onClick={() => set({ zones: [...d.zones, { id: `zona-${Date.now().toString(36)}`, name: 'Nueva zona', postalCodes: [], colonias: [], fee: 0, etaMin: 30, etaMax: 45, mode: 'auto', active: false }] })}>
+          <button className="btn ghost small" onClick={() => set({ zones: [...d.zones, { id: `zona-${Date.now().toString(36)}`, name: 'Nueva zona', postalCodes: [], colonias: [], fee: 0, etaMin: 0, etaMax: 0, mode: 'auto', active: false }] })}>
             + Agregar zona
           </button>
         </div>
@@ -162,8 +160,19 @@ function RadiusFields({ d, set }: { d: DeliveryConfig; set: (p: Partial<Delivery
       <div className="row" style={{ flexWrap: 'wrap' }}>
         <div className="field" style={{ width: 140 }}><label>Radio (m)</label><input className="input sm" inputMode="numeric" value={d.radiusM} onChange={(e) => set({ radiusM: parseInt(e.target.value, 10) || 0 })} /></div>
         <div className="field" style={{ width: 140 }}><label>Envío (MXN)</label><MoneyInput label="Envío" value={d.radiusFee} onChange={(radiusFee) => set({ radiusFee })} /></div>
-        <div className="field" style={{ width: 120 }}><label>Mín. (min)</label><input className="input sm" inputMode="numeric" value={d.radiusEtaMin} onChange={(e) => set({ radiusEtaMin: parseInt(e.target.value, 10) || 0 })} /></div>
-        <div className="field" style={{ width: 120 }}><label>Máx. (min)</label><input className="input sm" inputMode="numeric" value={d.radiusEtaMax} onChange={(e) => set({ radiusEtaMax: parseInt(e.target.value, 10) || 0 })} /></div>
+        <div className="field" style={{ width: 170 }}>
+          <label>Gratis desde (MXN)</label>
+          <input
+            className="input sm"
+            inputMode="decimal"
+            placeholder="Nunca"
+            defaultValue={d.freeShippingFrom != null ? String(d.freeShippingFrom / 100) : ''}
+            onBlur={(e) => {
+              const v = e.target.value.replace(/[$,\s]/g, '');
+              set({ freeShippingFrom: v === '' ? null : Math.max(0, Math.round(parseFloat(v) * 100) || 0) });
+            }}
+          />
+        </div>
       </div>
       <p className="muted small">
         Se acepta automáticamente solo si el GPS confirma que está dentro del radio aun con su margen de error (máx. 80 m).
@@ -456,6 +465,54 @@ function QrSources() {
         </table>
       )}
       <p className="muted small">«Ventas» cuenta pedidos entregados. Los pedidos se atribuyen al último QR escaneado en los 30 días previos.</p>
+    </section>
+  );
+}
+
+const MODE_LABEL: Record<CourierMode, string> = { walk: 'A pie', bike: 'Bici', moto: 'Moto' };
+const optMin = (v: string) => (v.trim() === '' ? null : Math.max(0, parseInt(v, 10) || 0));
+
+/** Tiempos reales de Frésia: con ellos se calcula el tiempo de cada pedido según su distancia. */
+function TimesFields({ d, set }: { d: DeliveryConfig; set: (p: Partial<DeliveryConfig>) => void }) {
+  const ready = d.prepMin != null && d.prepMax != null;
+  const sample = (m: number) => {
+    const e = deliveryEta(d, m);
+    return e.etaMin != null && e.etaMax != null ? etaText(e.etaMin, e.etaMax) : '';
+  };
+  return (
+    <section className="card stack">
+      <h2>Tiempos de entrega</h2>
+      <p className="muted small">
+        El tiempo que ve cada cliente se calcula: preparación + camino según su distancia real + subir a la oficina.
+        Mientras no captures la preparación, no se muestra ningún tiempo.
+      </p>
+      <div className="row" style={{ flexWrap: 'wrap' }}>
+        <div className="field" style={{ width: 130 }}>
+          <label>Preparar, desde</label>
+          <input className="input sm" inputMode="numeric" value={d.prepMin ?? ''} placeholder="—" onChange={(e) => set({ prepMin: optMin(e.target.value) })} />
+        </div>
+        <div className="field" style={{ width: 130 }}>
+          <label>hasta (min)</label>
+          <input className="input sm" inputMode="numeric" value={d.prepMax ?? ''} placeholder="—" onChange={(e) => set({ prepMax: optMin(e.target.value) })} />
+        </div>
+        <div className="field" style={{ width: 150 }}>
+          <label>Subir a oficina (min)</label>
+          <input className="input sm" inputMode="numeric" value={d.handoffMin} onChange={(e) => set({ handoffMin: Math.max(0, parseInt(e.target.value, 10) || 0) })} />
+        </div>
+        <div className="field" style={{ width: 150 }}>
+          <label>El repartidor va</label>
+          <select className="select sm" value={d.courierMode} onChange={(e) => set({ courierMode: e.target.value as CourierMode })}>
+            {(Object.keys(MODE_LABEL) as CourierMode[]).map((m) => <option key={m} value={m}>{MODE_LABEL[m]}</option>)}
+          </select>
+        </div>
+      </div>
+      {ready ? (
+        <p className="small">
+          Así lo verá el cliente: a 100 m, <strong>{sample(100)}</strong> · a {d.radiusM} m, <strong>{sample(d.radiusM)}</strong> · para recoger, <strong>{etaText(d.prepMin!, d.prepMax!)}</strong>.
+        </p>
+      ) : (
+        <p className="notice small">Sin tiempo de preparación: los clientes no ven ningún tiempo estimado.</p>
+      )}
     </section>
   );
 }

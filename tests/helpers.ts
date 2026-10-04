@@ -16,12 +16,18 @@ export function testConfig(over: Partial<Config> = {}): Config {
 
 export const NOW = '2026-10-07T20:00:00.000Z';
 
-export async function start(over: Partial<Config> & { now?: string } = {}) {
-  const { now: _now, ...cfgOver } = over;
+export async function start(over: Partial<Config> & { now?: string; storeDelivery?: boolean } = {}) {
+  const { now: _now, storeDelivery, ...cfgOver } = over;
   const cfg = testConfig(cfgOver);
   // Igual que en producción: el servidor opera con el rol de mínimo privilegio.
   const db = await openDb({ pglitePath: cfg.pglitePath });
   await db.query('set role fresia_office_app');
+  // Las pruebas de flujo usan una tarifa fija de $30 sin envío gratis; storeDelivery usa la configuración real de la tienda.
+  if (!storeDelivery) {
+    await db.query("insert into office.settings (key, value) values ('delivery', $1::jsonb) on conflict (key) do update set value = excluded.value", [
+      JSON.stringify({ radiusFee: 3000, freeShippingFrom: null }),
+    ]);
+  }
   // Reloj fijo: miércoles 7 oct 2026, 2:00 p.m. en CDMX (abierto).
   const { app, ctx } = await createApp(cfg, { demoWebhookDelayMs: 0, db, now: () => new Date(over.now ?? NOW) });
   const server: Server = await new Promise((r) => {

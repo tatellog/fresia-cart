@@ -16,7 +16,7 @@ import { invoiceErrors } from '../../shared/invoice';
 import type { InvoiceData } from '../../shared/invoice';
 import { isOpenAt } from '../../shared/schedule';
 import { validate } from './DeliveryPage';
-import { etaText } from '../../shared/coverage';
+import { prepText, quoteEtaText } from '../../shared/coverage';
 import type { PublicOrder, Quote } from '../../shared/types';
 import { OrderLines, Totals } from './parts';
 
@@ -191,11 +191,11 @@ export default function SummaryPage() {
               ) : (
                 <p className="muted">{data?.business.address}</p>
               )}
-              {quote.delivery.status === 'covered' && (
-                <p className="small">Tiempo estimado: {etaText(quote.delivery.etaMin, quote.delivery.etaMax)} después de confirmar {payLater ? 'tu pedido' : 'el pago'}.</p>
+              {quote.delivery.status === 'covered' && quoteEtaText(quote.delivery) && (
+                <p className="small">Tiempo estimado: {quoteEtaText(quote.delivery)} después de confirmar {payLater ? 'tu pedido' : 'el pago'}.</p>
               )}
-              {quote.delivery.status === 'pickup' && data?.delivery.pickupPrepText && (
-                <p className="small">Preparación: {data.delivery.pickupPrepText}.</p>
+              {quote.delivery.status === 'pickup' && data && prepText(data.delivery) && (
+                <p className="small">Preparación: {prepText(data.delivery)}.</p>
               )}
               {form.notes && <p className="small muted">Notas: {form.notes}</p>}
             </section>
@@ -209,9 +209,9 @@ export default function SummaryPage() {
                 onChange={setScheduledFor}
                 asapLabel={
                   form.fulfillment === 'pickup'
-                    ? `Listo en ${data.delivery.pickupPrepText || 'unos minutos'}`
+                    ? prepText(data.delivery) ? `Listo en ${prepText(data.delivery)}` : 'Lo antes posible'
                     : quote.delivery.status === 'covered'
-                      ? `Llega en ${etaText(quote.delivery.etaMin, quote.delivery.etaMax)}`
+                      ? quoteEtaText(quote.delivery) ? `Llega en ${quoteEtaText(quote.delivery)}` : 'Lo antes posible'
                       : 'En cuanto confirmemos el envío'
                 }
               />

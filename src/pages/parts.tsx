@@ -58,7 +58,7 @@ export function Totals({ subtotal, shippingFee, total, fulfillment }: { subtotal
       </div>
       <div className="row">
         <span>Envío</span>
-        <span className="price">{fulfillment === 'pickup' ? 'Recoges en Frésia' : shippingFee == null ? 'Por confirmar' : shippingFee === 0 ? 'Sin costo' : money(shippingFee)}</span>
+        <span className="price">{fulfillment === 'pickup' ? 'Recoges en Frésia' : shippingFee == null ? 'Por confirmar' : shippingFee === 0 ? 'Gratis' : money(shippingFee)}</span>
       </div>
       <div className="row grand">
         <span>Total</span>

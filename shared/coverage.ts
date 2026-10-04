@@ -43,7 +43,7 @@ function quoteByRadius(location: CustomerLocation | null | undefined, config: De
     return { status: 'manual', reason: 'Tu ubicación no es lo bastante precisa para confirmarlo automáticamente.', distanceM: d };
   }
   if (d + acc <= config.radiusM) {
-    return { status: 'covered', zoneId: 'radio', zoneName: `A ${d} m de Frésia`, fee: config.radiusFee, etaMin: config.radiusEtaMin, etaMax: config.radiusEtaMax, distanceM: d };
+    return { status: 'covered', zoneId: 'radio', zoneName: `A ${d} m de Frésia`, fee: config.radiusFee, ...deliveryEta(config, d), distanceM: d };
   }
   if (d - acc > config.radiusM) {
     return config.outOfZone === 'manual'
@@ -67,7 +67,7 @@ export function quoteDelivery(input: { postalCode: string; colonia: string; loca
     const coloniaOk = zone.colonias.length === 0 || zone.colonias.some((c) => normalizeText(c) === colonia);
     if (!coloniaOk) continue;
     if (zone.mode === 'manual') return { status: 'manual', reason: 'Esta zona requiere confirmar el costo de envío.', zoneName: zone.name };
-    return { status: 'covered', zoneId: zone.id, zoneName: zone.name, fee: zone.fee, etaMin: zone.etaMin, etaMax: zone.etaMax };
+    return { status: 'covered', zoneId: zone.id, zoneName: zone.name, fee: zone.fee, etaMin: zone.etaMax > 0 ? zone.etaMin : null, etaMax: zone.etaMax > 0 ? zone.etaMax : null };
   }
 
   if (zones.length > 0) {
@@ -82,6 +82,34 @@ export function quoteDelivery(input: { postalCode: string; colonia: string; loca
 
 export function etaText(min: number, max: number): string {
   return min === max ? `${min} min` : `${min}–${max} min`;
+}
+
+/** Envío que se cobra: gratis si el subtotal alcanza el monto configurado. */
+export function shippingFor(fee: number, subtotal: number, freeFrom: number | null): number {
+  return freeFrom != null && subtotal >= freeFrom ? 0 : fee;
+}
+
+/** Texto del tiempo de una cotización cubierta, o null si Frésia aún no captura sus tiempos. */
+export function quoteEtaText(q: { etaMin: number | null; etaMax: number | null }): string | null {
+  return q.etaMin != null && q.etaMax != null ? etaText(q.etaMin, q.etaMax) : null;
+}
+
+/** Tiempo para recoger en tienda: solo la preparación. */
+export function prepText(c: Pick<DeliveryConfig, 'prepMin' | 'prepMax'>): string | null {
+  return c.prepMin != null && c.prepMax != null ? etaText(c.prepMin, c.prepMax) : null;
+}
+
+/**
+ * Tiempo estimado de entrega: preparación + trayecto según la distancia real + subir a la oficina.
+ * Sin preparación capturada no se estima nada.
+ */
+export function deliveryEta(
+  c: Pick<DeliveryConfig, 'prepMin' | 'prepMax' | 'handoffMin' | 'courierMode'>,
+  distance: number,
+): { etaMin: number | null; etaMax: number | null } {
+  if (c.prepMin == null || c.prepMax == null) return { etaMin: null, etaMax: null };
+  const travel = etaMinutes(distance, c.courierMode) + Math.max(0, c.handoffMin);
+  return { etaMin: c.prepMin + travel, etaMax: Math.max(c.prepMin, c.prepMax) + travel };
 }
 
 /** Velocidad aproximada en ciudad (m/min) y factor por calles vs. línea recta. */
