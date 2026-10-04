@@ -51,6 +51,20 @@ describe('seguimiento en vivo', () => {
     expect(n).toBe(0);
   });
 
+  it('guarda el recorrido (puntos a más de 10 m) para dibujar la ruta', async () => {
+    const r = await t.api('POST', '/api/orders', orderBody({ paymentMethod: 'contra_entrega' }));
+    await t.api('POST', '/api/admin/login', { password: 'secreto-de-prueba' });
+    const id = (await t.api('GET', '/api/admin/orders?filter=todos')).body.orders[0].id;
+    await t.api('POST', `/api/admin/orders/${id}/status`, { status: 'en_camino' });
+    const step = 0.0002; // ~22 m
+    for (let i = 0; i < 4; i++) await t.api('POST', `/api/admin/orders/${id}/tracking`, { lat: 19.3973 + i * step, lng: -99.1712, accuracyM: 10 });
+    await t.api('POST', `/api/admin/orders/${id}/tracking`, { lat: 19.3973 + 3 * step + 0.00002, lng: -99.1712, accuracyM: 10 }); // 2 m: no suma
+    await t.api('POST', `/api/admin/orders/${id}/tracking`, { lat: 19.3990, lng: -99.1712, accuracyM: 500 }); // GPS impreciso: no suma
+    const tr = (await t.api('GET', `/api/orders/${r.body.number}/tracking?t=${r.body.token}`)).body;
+    expect(tr.trail).toHaveLength(4);
+    expect(tr.courier.lat).toBeCloseTo(19.399, 4);
+  });
+
   it('el cliente no puede mandar ubicaciones del repartidor', async () => {
     expect((await t.api('POST', '/api/admin/orders/x/tracking', { lat: 1, lng: 1, accuracyM: 1 })).status).toBe(401);
   });

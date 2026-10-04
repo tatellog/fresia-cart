@@ -50,7 +50,7 @@ export function LiveTracking({ number, token }: { number: string; token: string 
         {ago != null && <span className="small"> · actualizado hace {ago < 60 ? `${ago} s` : `${Math.round(ago / 60)} min`}</span>}
       </p>
       <Suspense fallback={<div className="live-map"><Spinner label="Cargando mapa…" /></div>}>
-        <LiveMap store={info.store} courier={c} destination={info.destination} />
+        <LiveMap store={info.store} courier={c} destination={info.destination} trail={info.trail} />
       </Suspense>
     </section>
   );

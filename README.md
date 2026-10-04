@@ -26,7 +26,8 @@ El repartidor ve en el panel el punto GPS del cliente para compararlo con la dir
   (o «Listo para recoger») → «Entregado» / «Entregado y cobrado $X». Los pasos de arriba permiten corregir un estado.
 - **Seguimiento en vivo:** al tocar «Salir a entregar» en el celular de quien reparte, ese celular comparte su ubicación cada
   ~8 s mientras la página esté abierta (límite de la web: sin app nativa no hay rastreo en segundo plano). El cliente ve en su
-  página un mapa (OpenStreetMap) con Frésia, el repartidor y su destino, y la distancia que falta. Al entregar se borra la ubicación.
+  página un mapa vectorial (MapLibre + OpenFreeMap, gratis) con Frésia, el recorrido real del repartidor, su posición en vivo
+  y la distancia que falta a su destino. Al entregar se borra la ubicación.
 
 ### Datos del negocio
 

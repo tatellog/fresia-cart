@@ -163,6 +163,8 @@ export type CustomerLocation = LatLng & { accuracyM: number };
 export type TrackingInfo = {
   active: boolean;
   courier: (LatLng & { accuracyM: number; updatedAt: string }) | null;
+  /** Recorrido del repartidor desde que salió, como [lat, lng]. */
+  trail: [number, number][];
   destination: LatLng | null;
   store: LatLng | null;
 };

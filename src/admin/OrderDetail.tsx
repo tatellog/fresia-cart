@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../lib/api';
 import { formatDate, money } from '../lib/format';
 import { parseMoney } from '../../shared/money';
@@ -19,7 +19,8 @@ export default function OrderDetail() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
-  const [shareNow, setShareNow] = useState(false);
+  const [params] = useSearchParams();
+  const [shareNow, setShareNow] = useState(params.get('compartir') === '1');
 
   const load = useCallback(() => {
     api<{ order: AdminOrder }>(`/api/admin/orders/${id}`).then((r) => setOrder(r.order), (e: Error) => setError(e.message));

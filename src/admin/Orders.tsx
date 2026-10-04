@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
 import { formatDate, money } from '../lib/format';
 import { LoadError, Spinner } from '../components/ui';
@@ -105,6 +105,7 @@ export default function Orders() {
 function OrderRow({ o, onChanged }: { o: AdminOrder; onChanged: () => void }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const navigate = useNavigate();
   const next = nextAction(o);
   async function advance() {
     if (!next) return;
@@ -113,6 +114,8 @@ function OrderRow({ o, onChanged }: { o: AdminOrder; onChanged: () => void }) {
     try {
       await api(`/api/admin/orders/${o.id}/status`, { body: { status: next.status } });
       if (next.collect) await api(`/api/admin/orders/${o.id}/collected`, { body: {} });
+      // Al salir a entregar, abre el pedido y empieza a compartir la ubicación desde este celular.
+      if (next.status === 'en_camino') return navigate(`/admin/pedidos/${o.id}?compartir=1`);
       onChanged();
     } catch (e) {
       setErr((e as Error).message);

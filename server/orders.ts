@@ -5,7 +5,7 @@ import { HttpError } from './context';
 import type { Ctx } from './context';
 import { getDelivery, getRules, listProducts, listToppings, nextOrderNumber } from './store';
 import { minimumMessage, priceCart } from '../shared/pricing';
-import { quoteDelivery } from '../shared/coverage';
+import { distanceM, quoteDelivery } from '../shared/coverage';
 import type {
   Address, AdminOrder, CartLineInput, Quote, DeliveryQuote, Fulfillment, OrderStatus, PaymentMethod, PaymentStatus, PricedLine, PublicOrder, RefundStatus, TrackingInfo,
 } from '../shared/types';
@@ -319,25 +319,35 @@ export async function saveCourierLocation(ctx: Ctx, id: string, loc: { lat: numb
   const row = await getOrderById(ctx.db, id);
   if (!row) throw new HttpError(404, 'Pedido no encontrado.');
   if (row.order_status !== 'en_camino') throw new HttpError(409, 'Solo se comparte la ubicación mientras el pedido va en camino.');
-  await ctx.db.query(
-    `insert into office.order_tracking (order_id, lat, lng, accuracy_m, updated_at) values ($1, $2, $3, $4, now())
-     on conflict (order_id) do update set lat = excluded.lat, lng = excluded.lng, accuracy_m = excluded.accuracy_m, updated_at = now()`,
-    [id, loc.lat, loc.lng, Math.round(loc.accuracyM)],
-  );
+  await ctx.db.tx(async (q) => {
+    const cur = await q.one<{ trail: [number, number][] }>('select trail from office.order_tracking where order_id = $1 for update', [id]);
+    const trail = cur?.trail ?? [];
+    const lastPt = trail.at(-1);
+    // Agrega un punto al recorrido si se movió más de 10 m (y con GPS razonable); máximo 300 puntos.
+    if (loc.accuracyM <= 60 && (!lastPt || distanceM({ lat: lastPt[0], lng: lastPt[1] }, loc) > 10)) {
+      trail.push([Number(loc.lat.toFixed(6)), Number(loc.lng.toFixed(6))]);
+    }
+    await q.query(
+      `insert into office.order_tracking (order_id, lat, lng, accuracy_m, trail, updated_at) values ($1, $2, $3, $4, $5::jsonb, now())
+       on conflict (order_id) do update set lat = excluded.lat, lng = excluded.lng, accuracy_m = excluded.accuracy_m, trail = excluded.trail, updated_at = now()`,
+      [id, loc.lat, loc.lng, Math.round(loc.accuracyM), JSON.stringify(trail.slice(-300))],
+    );
+  });
 }
 
 export async function trackingFor(ctx: Ctx, row: OrderRow): Promise<TrackingInfo> {
   const store = (await getDelivery(ctx.db)).origin;
   const destination = row.address?.location ? { lat: row.address.location.lat, lng: row.address.location.lng } : null;
-  if (row.order_status !== 'en_camino') return { active: false, courier: null, destination, store };
-  const t = await ctx.db.one<{ lat: number; lng: number; accuracy_m: number; updated_at: Date }>(
-    'select lat, lng, accuracy_m, updated_at from office.order_tracking where order_id = $1',
+  if (row.order_status !== 'en_camino') return { active: false, courier: null, trail: [], destination, store };
+  const t = await ctx.db.one<{ lat: number; lng: number; accuracy_m: number; updated_at: Date; trail: [number, number][] }>(
+    'select lat, lng, accuracy_m, updated_at, trail from office.order_tracking where order_id = $1',
     [row.id],
   );
   const fresh = t && Date.now() - new Date(t.updated_at).getTime() < TRACKING_STALE_MS;
   return {
     active: true,
     courier: fresh ? { lat: t!.lat, lng: t!.lng, accuracyM: t!.accuracy_m, updatedAt: iso(t!.updated_at) } : null,
+    trail: fresh ? t!.trail : [],
     destination,
     store,
   };
