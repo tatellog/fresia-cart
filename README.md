@@ -110,6 +110,14 @@ Panel: `/admin` (contraseña = `ADMIN_PASSWORD`).
 6. **Despliegue:** falta hospedar el servidor Node (Render, Railway, Fly, etc.) con las variables de `.env.example` y apuntar el dominio.
    Genera el QR desde *Panel → QR y sistema* **después** de fijar `PUBLIC_URL` definitiva.
 
+## Producción (Vercel)
+
+- Tienda: **https://fresia-office.vercel.app** · Panel: **https://fresia-office.vercel.app/admin** · QR: `/q/volante`
+- Proyecto `tatellogs-projects/fresia-office`. Desplegar: `vercel deploy --prod`.
+- Variables (Vercel → Settings → Environment Variables): `DATABASE_URL` (rol limitado), `ADMIN_PASSWORD`, `SESSION_SECRET`,
+  `WHATSAPP_PROVIDER` y `META_WHATSAPP_*`. La contraseña del panel de producción está en tu `.env` local como `ADMIN_PASSWORD_PRODUCCION`.
+- El servidor se empaqueta en `build/server.mjs` (`npm run build:server`) y corre como función (`api/index.mjs`); los estáticos van por la CDN.
+
 ## Supabase
 
 Proyecto `gdpggpebuioeiserpwyc` (ca-central-1). Migraciones en `supabase/migrations/`.
