@@ -32,6 +32,9 @@ export type Config = {
   metaWhatsappTemplateLang: string;
   /** La plantilla tiene botón de URL dinámica (…/admin/pedidos/{{1}}). */
   metaWhatsappTemplateButton: boolean;
+  /** Web Push (notificaciones del panel). Genera con: npx web-push generate-vapid-keys */
+  vapidPublicKey: string;
+  vapidPrivateKey: string;
 };
 
 export function loadConfig(overrides: Partial<Config> = {}): Config {
@@ -60,6 +63,8 @@ export function loadConfig(overrides: Partial<Config> = {}): Config {
     metaWhatsappTemplate: process.env.META_WHATSAPP_TEMPLATE || '',
     metaWhatsappTemplateLang: process.env.META_WHATSAPP_TEMPLATE_LANG || 'es_MX',
     metaWhatsappTemplateButton: process.env.META_WHATSAPP_TEMPLATE_BUTTON !== '0',
+    vapidPublicKey: process.env.VAPID_PUBLIC_KEY || '',
+    vapidPrivateKey: process.env.VAPID_PRIVATE_KEY || '',
     ...overrides,
   };
   if (!cfg.databaseUrl) {

@@ -140,3 +140,12 @@ export const orderFilter = z.enum(['activos', 'sin_pagar', 'revision', 'todos'])
 export const orderStatus = z.enum(['recibido', 'confirmado', 'en_preparacion', 'listo', 'en_camino', 'entregado', 'cancelado']);
 export const refundStatus = z.enum(['no_aplica', 'pendiente', 'reembolsado']);
 export const shippingQuote = z.object({ fee: money, etaText: text(60).min(1, 'Indica el tiempo estimado.') });
+
+export const pushEndpointSchema = z.object({ endpoint: z.string().url().startsWith('https://').max(1000) });
+export const pushSubscribeSchema = z.object({
+  subscription: z.object({
+    endpoint: z.string().url().startsWith('https://').max(1000),
+    keys: z.object({ p256dh: z.string().min(1).max(200), auth: z.string().min(1).max(100) }),
+  }),
+  label: text(80).default(''),
+});

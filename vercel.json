@@ -23,11 +23,24 @@
       "destination": "/api"
     },
     {
-      "source": "/((?!assets/|images/|brand/|favicon|apple-touch-icon).*)",
+      "source": "/((?!assets/|images/|brand/|favicon|apple-touch-icon|sw\\.js|admin\\.webmanifest).*)",
       "destination": "/index.html"
     }
   ],
   "headers": [
+    {
+      "source": "/sw.js",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-cache"
+        },
+        {
+          "key": "Content-Type",
+          "value": "application/javascript; charset=utf-8"
+        }
+      ]
+    },
     {
       "source": "/assets/(.*)",
       "headers": [

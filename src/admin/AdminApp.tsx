@@ -14,11 +14,15 @@ export default function AdminApp() {
   useEffect(() => {
     void check();
     document.title = 'Panel · Frésia Office';
-    const meta = document.createElement('meta');
-    meta.name = 'robots';
-    meta.content = 'noindex';
-    document.head.appendChild(meta);
-    return () => meta.remove();
+    // Panel instalable (pantalla de inicio) para recibir notificaciones, sobre todo en iPhone.
+    const tags = [
+      Object.assign(document.createElement('meta'), { name: 'robots', content: 'noindex' }),
+      Object.assign(document.createElement('link'), { rel: 'manifest', href: '/admin.webmanifest' }),
+      Object.assign(document.createElement('meta'), { name: 'apple-mobile-web-app-capable', content: 'yes' }),
+      Object.assign(document.createElement('meta'), { name: 'apple-mobile-web-app-title', content: 'Frésia Panel' }),
+    ];
+    tags.forEach((t) => document.head.appendChild(t));
+    return () => tags.forEach((t) => t.remove());
   }, []);
 
   if (!state) return <main className="page" style={{ paddingTop: 40 }}><Spinner label="Cargando…" /></main>;

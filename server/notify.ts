@@ -6,6 +6,8 @@ import { sendWhatsApp, whatsappConfigured } from './whatsapp';
 import type { WhatsAppMessage } from './whatsapp';
 import { money } from '../shared/money';
 import { background } from './background';
+import { sendPushToAll } from './push';
+import type { PushPayload } from './push';
 import type { AdminOrder } from '../shared/types';
 
 export type NotifyKind = 'pedido_pagado' | 'pedido_contra_entrega' | 'cotizacion_envio' | 'revision';
@@ -27,6 +29,8 @@ export class Notifier {
   sent: { kind: NotifyKind; number: string }[] = [];
   /** Solo pruebas: mensajes de WhatsApp que se habrían enviado. */
   whatsappOutbox: WhatsAppMessage[] = [];
+  /** Solo pruebas: notificaciones push que se habrían enviado. */
+  pushOutbox: PushPayload[] = [];
 
   notify(ctx: Ctx, kind: NotifyKind, order: OrderRow) {
     this.sent.push({ kind, number: order.number });
@@ -37,7 +41,17 @@ export class Notifier {
   private async deliverAll(ctx: Ctx, kind: NotifyKind, order: OrderRow) {
     const full = await toAdmin(ctx.db, order);
     const adminUrl = `${ctx.config.publicUrl}/admin/pedidos/${order.id}`;
-    await Promise.all([this.whatsapp(ctx, kind, full, adminUrl), this.webhook(ctx, kind, full, adminUrl)]);
+    await Promise.all([this.push(ctx, kind, full), this.whatsapp(ctx, kind, full, adminUrl), this.webhook(ctx, kind, full, adminUrl)]);
+  }
+
+  private async push(ctx: Ctx, kind: NotifyKind, order: AdminOrder) {
+    const payload = buildPush(kind, order);
+    if (process.env.NODE_ENV === 'test' || process.env.VITEST) {
+      this.pushOutbox.push(payload);
+      return;
+    }
+    const r = await sendPushToAll(ctx.config, ctx.db, payload);
+    if (r.sent || r.failed) await addEvent(ctx.db, order.id, 'push', `Notificación a ${r.sent} dispositivo(s)${r.failed ? `, ${r.failed} fallaron` : ''}`, 'sistema').catch(() => undefined);
   }
 
   private async whatsapp(ctx: Ctx, kind: NotifyKind, order: AdminOrder, adminUrl: string) {
@@ -177,5 +191,19 @@ export function buildWhatsApp(kind: NotifyKind, o: AdminOrder, adminUrl: string,
       o.notes || 'Sin notas',
     ],
     buttonParam: o.id,
+  };
+}
+
+/** Notificación corta para el celular o la laptop: lo esencial para decidir si atender ya. */
+export function buildPush(kind: NotifyKind, o: AdminOrder): PushPayload {
+  const total = o.total != null ? money(o.total) : 'envío por cotizar';
+  const pay = o.paymentMethod === 'contra_entrega' ? (o.fulfillment === 'pickup' ? 'Paga al recoger' : 'Paga al recibir') : o.paymentStatus === 'aprobado' ? 'Pagado' : 'Pago pendiente';
+  const where = o.fulfillment === 'pickup' ? 'Recoge en Frésia' : 'A domicilio';
+  const pieces = o.items.reduce((n, l) => n + l.qty * (l.choices?.length ?? 1), 0);
+  return {
+    title: `🍓 ${TITLES[kind]} · ${o.number}`,
+    body: `${pay} ${total} · ${where} · ${pieces} pieza${pieces === 1 ? '' : 's'} · ${o.customerName}`,
+    url: `/admin/pedidos/${o.id}`,
+    tag: `pedido-${o.number}`,
   };
 }

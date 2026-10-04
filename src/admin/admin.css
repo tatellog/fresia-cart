@@ -118,3 +118,27 @@ details.editor > summary {
 details.editor > summary::-webkit-details-marker {
   display: none;
 }
+
+.new-order-alert {
+  position: sticky;
+  top: 108px;
+  z-index: 4;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 20px;
+  border-radius: var(--radius);
+  background: var(--red);
+  color: #fff;
+  box-shadow: 0 10px 30px rgb(217 58 50 / 0.35);
+  animation: pop 0.35s ease;
+}
+.new-order-alert a {
+  color: #fff;
+  font-weight: 600;
+}
+@keyframes pop {
+  from { transform: scale(0.97); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}

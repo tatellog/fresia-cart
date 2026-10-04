@@ -21,6 +21,7 @@ import * as S from './schemas';
 import { clearSession, isAdmin, passwordMatches, rateLimit, requireAdmin, setSession } from './auth';
 import { whatsappConfigured } from './whatsapp';
 import { background, sleep } from './background';
+import { listSubscriptions, pushConfigured, removeSubscription, saveSubscription, sendPushToAll } from './push';
 import type { LegalSlug, MenuResponse } from '../shared/types';
 import { ADMIN_FLOW } from '../shared/status';
 
@@ -262,6 +263,28 @@ export async function createApp(config: Config, opts: { demoWebhookDelayMs?: num
       res.json({ ok: true });
     });
   }
+
+  // ── Notificaciones push de los dispositivos del negocio ──
+  admin.get('/push', async (_req, res) => {
+    const subs = await listSubscriptions(db);
+    res.json({
+      configured: pushConfigured(config),
+      publicKey: config.vapidPublicKey,
+      devices: subs.map((s) => ({ endpoint: s.endpoint, label: s.label, createdAt: iso(s.created_at), lastSuccessAt: s.last_success_at ? iso(s.last_success_at) : null })),
+    });
+  });
+  admin.post('/push/subscribe', async (req, res) => {
+    const { subscription, label } = S.pushSubscribeSchema.parse(req.body);
+    await saveSubscription(db, subscription, label);
+    res.json({ ok: true });
+  });
+  admin.post('/push/unsubscribe', async (req, res) => {
+    await removeSubscription(db, S.pushEndpointSchema.parse(req.body).endpoint);
+    res.json({ ok: true });
+  });
+  admin.post('/push/test', async (_req, res) => {
+    res.json(await sendPushToAll(config, db, { title: '🍓 Prueba de Frésia Office', body: 'Así te llegarán los pedidos nuevos.', url: '/admin', tag: 'prueba' }));
+  });
 
   admin.get('/catalog', async (_req, res) => res.json({ products: await store.listProducts(db), toppings: await store.listToppings(db), images: listImages() }));
   admin.put('/products/:id', async (req, res) => {

@@ -5,6 +5,7 @@ import { formatDate, money } from '../lib/format';
 import { LoadError, Spinner } from '../components/ui';
 import { ORDER_LABEL, PAYMENT_LABEL } from '../../shared/status';
 import type { AdminOrder } from '../../shared/types';
+import { DeskControls, PushSetup, chime } from './Alerts';
 
 type Filter = 'activos' | 'sin_pagar' | 'revision' | 'todos';
 const FILTERS: { key: Filter; label: string }[] = [
@@ -19,7 +20,8 @@ export default function Orders() {
   const [orders, setOrders] = useState<AdminOrder[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [summary, setSummary] = useState({ nuevos: 0, cotizar: 0, revision: 0 });
-  const prevNew = useRef<number | null>(null);
+  const seen = useRef<Set<string> | null>(null);
+  const [fresh, setFresh] = useState<AdminOrder[]>([]);
 
   const load = useCallback(async () => {
     try {
@@ -30,8 +32,18 @@ export default function Orders() {
       setOrders(o.orders);
       setSummary(s);
       setError(null);
-      if (prevNew.current != null && s.nuevos > prevNew.current) chime();
-      prevNew.current = s.nuevos;
+      // Pedidos que entraron desde la última revisión (no al abrir el panel).
+      const incoming = o.orders.filter((x) => x.orderStatus === 'recibido' || x.orderStatus === 'cotizando_envio');
+      if (seen.current) {
+        const added = incoming.filter((x) => !seen.current!.has(x.id));
+        if (added.length) {
+          setFresh((f) => [...added, ...f.filter((y) => !added.some((a) => a.id === y.id))]);
+          chime();
+        }
+        incoming.forEach((x) => seen.current!.add(x.id));
+      } else if (filter === 'activos') {
+        seen.current = new Set(incoming.map((x) => x.id));
+      }
       document.title = s.nuevos ? `(${s.nuevos}) Nuevos · Frésia` : 'Panel · Frésia Office';
     } catch (e) {
       setError((e as Error).message);
@@ -47,12 +59,26 @@ export default function Orders() {
 
   return (
     <div className="stack-lg">
+      {fresh.length > 0 && (
+        <div className="new-order-alert" role="alert">
+          <div className="stack" style={{ gap: 4 }}>
+            <strong>🔔 {fresh.length === 1 ? 'Pedido nuevo' : `${fresh.length} pedidos nuevos`}</strong>
+            {fresh.map((o) => (
+              <Link key={o.id} to={`/admin/pedidos/${o.id}`} onClick={() => setFresh((f) => f.filter((x) => x.id !== o.id))}>
+                {o.number} · {o.customerName} · {o.total != null ? money(o.total) : 'envío por cotizar'} →
+              </Link>
+            ))}
+          </div>
+          <button className="btn ghost small" onClick={() => setFresh([])}>Entendido</button>
+        </div>
+      )}
       <div className="row between" style={{ flexWrap: 'wrap' }}>
         <h1>Pedidos</h1>
         <p className="muted small" aria-live="polite">
           {summary.nuevos} nuevos · {summary.cotizar} por cotizar · {summary.revision} en revisión · se actualiza cada 15 s
         </p>
       </div>
+      <DeskControls />
       <div className="tabs" role="group" aria-label="Filtrar pedidos">
         {FILTERS.map((f) => (
           <button key={f.key} aria-pressed={filter === f.key} onClick={() => setFilter(f.key)}>
@@ -82,22 +108,8 @@ export default function Orders() {
           </Link>
         ))}
       </div>
+      <PushSetup />
     </div>
   );
 }
 
-function chime() {
-  try {
-    const ctx = new AudioContext();
-    const o = ctx.createOscillator();
-    const g = ctx.createGain();
-    o.frequency.value = 880;
-    g.gain.setValueAtTime(0.15, ctx.currentTime);
-    g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6);
-    o.connect(g).connect(ctx.destination);
-    o.start();
-    o.stop(ctx.currentTime + 0.6);
-  } catch {
-    /* sin audio */
-  }
-}
