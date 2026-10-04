@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync, mkdirSync } from 'node:fs';
+import { readFileSync, readdirSync, mkdirSync, existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import pg from 'pg';
 
@@ -19,28 +19,54 @@ export type DB = Sql;
 
 const MIGRATIONS = resolve('supabase/migrations');
 
-function migrationSql() {
+export function migrationFiles() {
   return readdirSync(MIGRATIONS)
     .filter((f) => f.endsWith('.sql'))
     .sort()
-    .map((f) => readFileSync(join(MIGRATIONS, f), 'utf8'))
-    .join('\n');
+    .map((name) => ({ name, sql: readFileSync(join(MIGRATIONS, name), 'utf8') }));
 }
 
 // pg devuelve bigint/numeric como texto; nuestros importes son integer, así que basta.
 pg.types.setTypeParser(20, (v) => Number(v));
 
-export async function openDb(opts: { url?: string; pglitePath?: string }): Promise<Sql> {
-  const sql = opts.url ? postgres(opts.url) : await pglite(opts.pglitePath ?? 'memory://');
-  await sql.query(migrationSql());
+/**
+ * Abre la base. Con Postgres (Supabase) NO aplica migraciones: eso lo hace
+ * `npm run db:migrate` con el usuario administrador; el servidor usa un rol
+ * de mínimo privilegio que no puede cambiar el esquema.
+ */
+export async function openDb(opts: { url?: string; pglitePath?: string; production?: boolean }): Promise<Sql> {
+  if (!opts.url) {
+    const sql = await pglite(opts.pglitePath ?? 'memory://');
+    for (const m of migrationFiles()) await sql.query(m.sql);
+    return sql;
+  }
+  const sql = postgres(opts.url);
+  const exists = await sql.one<{ ok: boolean }>("select to_regclass('office.orders') is not null as ok");
+  if (!exists?.ok) throw new Error('El esquema office no existe. Ejecuta `npm run db:migrate`.');
+  const role = await sql.one<{ name: string; bypass: boolean; super: boolean }>(
+    'select current_user as name, rolbypassrls as bypass, rolsuper as super from pg_roles where rolname = current_user',
+  );
+  if (role && (role.bypass || role.super)) {
+    const msg = `[db] El servidor está conectado como "${role.name}", que se salta RLS. Usa el rol fresia_office_app (npm run db:setup).`;
+    if (opts.production && process.env.ALLOW_ADMIN_DB !== '1') throw new Error(msg);
+    console.warn(msg);
+  }
   return sql;
 }
 
-function postgres(url: string): Sql {
+/** TLS verificado contra la CA oficial de Supabase (server/certs). Nunca rejectUnauthorized: false. */
+export function sslFor(url: string): pg.ConnectionConfig['ssl'] {
+  if (/@(localhost|127\.0\.0\.1)[:/]/.test(url)) return undefined;
+  const caFile = process.env.DATABASE_CA_FILE || resolve('server/certs/supabase-prod-ca-2021.crt');
+  if (!existsSync(caFile)) throw new Error(`No encuentro el certificado de la base de datos: ${caFile}`);
+  return { ca: readFileSync(caFile, 'utf8'), rejectUnauthorized: true };
+}
+
+export function postgres(url: string): Sql {
   const pool = new pg.Pool({
-    connectionString: url,
+    connectionString: url.replace(/[?&]sslmode=[^&]*/, ''),
     max: 5,
-    ssl: /localhost|127\.0\.0\.1/.test(url) ? undefined : { rejectUnauthorized: false },
+    ssl: sslFor(url),
   });
   pool.on('error', (e) => console.error('[db] error de conexión', e.message));
 
@@ -91,7 +117,8 @@ async function pglite(path: string): Promise<Sql> {
   const db = new PGlite(path);
   // Roles que Supabase ya trae y la migración referencia.
   await db.exec(`do $$ begin create role anon; exception when duplicate_object then null; end $$;
-                 do $$ begin create role authenticated; exception when duplicate_object then null; end $$;`);
+                 do $$ begin create role authenticated; exception when duplicate_object then null; end $$;
+                 do $$ begin create role service_role; exception when duplicate_object then null; end $$;`);
 
   type Q = { query: (t: string, p?: unknown[]) => Promise<{ rows: unknown[] }>; exec: (t: string) => Promise<unknown> };
   const wrap = (c: Q): Omit<Sql, 'tx' | 'withLock' | 'close'> => ({

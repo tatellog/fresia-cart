@@ -57,24 +57,32 @@ Panel: `/admin` (contraseña = `ADMIN_PASSWORD`).
 
 ## Supabase
 
-Proyecto: `gdpggpebuioeiserpwyc`. El esquema está en `supabase/migrations/` (idempotente; el servidor también lo aplica al arrancar).
+Proyecto `gdpggpebuioeiserpwyc` (ca-central-1). Migraciones en `supabase/migrations/`.
 
 ```bash
-supabase login                                   # con la cuenta dueña del proyecto
-supabase link --project-ref gdpggpebuioeiserpwyc
-supabase db push                                 # crea el esquema office
+npm run db:setup   # aplica migraciones, crea/rota la contraseña del rol de la app y escribe DATABASE_URL en .env
+npm run db:check   # 32 comprobaciones de seguridad contra la base real
+npm run db:migrate # solo migraciones (tras cambiar el esquema)
 ```
 
-Luego en `.env`:
+Requiere en `.env` el usuario administrador en `DATABASE_ADMIN_URL` (o `SESSION_POOLER`), cadena *Session pooler*.
 
-```
-DATABASE_URL=postgresql://postgres.gdpggpebuioeiserpwyc:[PASSWORD]@aws-0-<region>.pooler.supabase.com:5432/postgres
-```
+### Seguridad de la base de datos
 
-- Usa el **Session pooler** (puerto 5432) si tu red u hosting no tiene IPv6; la *Direct connection* (`db.…supabase.co`) es solo IPv6.
-  No uses el *Transaction pooler* (6543): el servidor usa transacciones y `pg_advisory_lock`.
-- La **publishable key no se usa**: el navegador nunca habla con Supabase, todo pasa por el servidor. Así los pedidos y datos personales no quedan expuestos.
-- La contraseña de la base de datos va solo en `.env` / variables del hosting, nunca en el código.
+| Medida | Cómo |
+|---|---|
+| Los datos no son accesibles desde internet con las claves públicas | Esquema `office` fuera de los esquemas expuestos; `anon`, `authenticated` y `service_role` sin ningún permiso; RLS activo y forzado en todas las tablas |
+| El servidor opera con mínimo privilegio | Rol `fresia_office_app`: sin superusuario, sin `bypassrls`, solo el esquema `office`; no puede borrar pedidos ni pagos, ni alterar el historial, ni cambiar el esquema; sin acceso a `auth`, `vault` ni `storage`; `statement_timeout` 15 s |
+| Conexión cifrada y verificada | TLS contra la CA oficial de Supabase (`server/certs/supabase-prod-ca-2021.crt`, válida hasta 2031) — nunca `rejectUnauthorized: false` |
+| Tablas futuras seguras por defecto | `alter default privileges` en `office` revoca todo a los roles de la API |
+| El servidor no arranca en producción con un usuario administrador | Comprobación al iniciar (`rolbypassrls`/`rolsuper`) |
+| Verificable | `npm run db:check` y `tests/permissions.test.ts` (toda la suite corre con el rol limitado) |
+
+Pendiente en el dashboard de Supabase (requiere tu cuenta):
+1. **Database → Settings → SSL Configuration → Enforce SSL**: rechaza conexiones sin cifrar.
+2. **Database → Settings → Network Restrictions**: al desplegar, permite solo la IP del hosting (y la tuya para `db:setup`).
+3. **Project Settings → Data API**: desactívala; la app no la usa.
+4. **Backups**: el plan gratuito no incluye respaldos descargables ni restauración a un punto en el tiempo; considera el plan Pro antes de operar con pedidos reales.
 
 ## Estructura
 

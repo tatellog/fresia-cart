@@ -12,7 +12,10 @@
     "start": "NODE_ENV=production tsx server/index.ts",
     "preview": "npm run build && npm start",
     "test": "vitest run",
-    "typecheck": "tsc -b"
+    "typecheck": "tsc -b",
+    "db:migrate": "tsx scripts/db.ts migrate",
+    "db:setup": "tsx scripts/db.ts setup",
+    "db:check": "tsx scripts/db.ts check"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.8",

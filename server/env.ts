@@ -29,7 +29,7 @@ export function loadConfig(overrides: Partial<Config> = {}): Config {
   const cfg: Config = {
     port,
     publicUrl: (process.env.PUBLIC_URL || `http://localhost:${port}`).replace(/\/$/, ''),
-    databaseUrl: process.env.DATABASE_URL || process.env.SESSION_POOLER || '',
+    databaseUrl: process.env.DATABASE_URL || '',
     pglitePath: process.env.PGLITE_PATH || './data/pglite',
     adminPassword: process.env.ADMIN_PASSWORD || '',
     sessionSecret: process.env.SESSION_SECRET || '',

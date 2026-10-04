@@ -2,6 +2,7 @@ import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { createApp } from '../server/app';
+import { openDb } from '../server/db';
 import type { Config } from '../server/env';
 
 export function testConfig(over: Partial<Config> = {}): Config {
@@ -12,7 +13,11 @@ export function testConfig(over: Partial<Config> = {}): Config {
 }
 
 export async function start(over: Partial<Config> = {}) {
-  const { app, ctx } = await createApp(testConfig(over), { demoWebhookDelayMs: 0 });
+  const cfg = testConfig(over);
+  // Igual que en producción: el servidor opera con el rol de mínimo privilegio.
+  const db = await openDb({ pglitePath: cfg.pglitePath });
+  await db.query('set role fresia_office_app');
+  const { app, ctx } = await createApp(cfg, { demoWebhookDelayMs: 0, db });
   const server: Server = await new Promise((r) => {
     const s = app.listen(0, () => r(s));
   });

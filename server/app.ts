@@ -25,7 +25,7 @@ import { ADMIN_FLOW } from '../shared/status';
 const LEGAL: LegalSlug[] = ['privacidad', 'entregas', 'cancelaciones'];
 
 export async function createApp(config: Config, opts: { demoWebhookDelayMs?: number; db?: DB } = {}) {
-  const db = opts.db ?? (await openDb({ url: config.databaseUrl || undefined, pglitePath: config.pglitePath }));
+  const db = opts.db ?? (await openDb({ url: config.databaseUrl || undefined, pglitePath: config.pglitePath, production: config.production }));
   await store.seedIfEmpty(db);
   const provider = config.mpAccessToken ? new MercadoPagoProvider(config.mpAccessToken) : new DemoProvider(db);
   const ctx: Ctx = { db, config, provider, notifier: new Notifier() };
