@@ -821,3 +821,20 @@ legend {
   border-color: var(--choc);
   color: var(--ivory);
 }
+
+.live-map {
+  height: 280px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--cream);
+  display: grid;
+  place-items: center;
+  z-index: 0;
+}
+.map-pin {
+  display: grid;
+  place-items: center;
+  font-size: 28px;
+  line-height: 1;
+  filter: drop-shadow(0 2px 3px rgb(0 0 0 / 0.35));
+}

@@ -7,6 +7,7 @@ import { ORDER_LABEL } from '../../shared/status';
 import type { AdminOrder } from '../../shared/types';
 import { DeskControls, PushSetup, chime } from './Alerts';
 import { CollectPill } from './Collect';
+import { nextAction } from './StatusFlow';
 
 type Filter = 'activos' | 'sin_pagar' | 'revision' | 'todos';
 const FILTERS: { key: Filter; label: string }[] = [
@@ -92,21 +93,7 @@ export default function Orders() {
       {orders && orders.length === 0 && <p className="muted">No hay pedidos aquí.</p>}
       <div className="stack">
         {orders?.map((o) => (
-          <Link key={o.id} to={`/admin/pedidos/${o.id}`} className={`order-row ${o.orderStatus === 'recibido' ? 'new' : ''}`}>
-            <div className="row" style={{ flexWrap: 'wrap', gap: 8 }}>
-              <strong>{o.number}</strong>
-              <span className={`badge ${o.orderStatus === 'recibido' ? 'red' : ''}`}>{ORDER_LABEL[o.orderStatus]}</span>
-              {o.needsReview && <span className="badge example">Revisar</span>}
-              {o.refundStatus === 'pendiente' && <span className="badge example">Reembolso pendiente</span>}
-              {o.demo && o.paymentMethod === 'online' && <span className="badge">Demo</span>}
-            </div>
-            <span className="price">{o.total != null ? money(o.total) : 'Envío por cotizar'}</span>
-            <span style={{ gridColumn: '1 / -1' }}><CollectPill order={o} /></span>
-            <span className="muted small">
-              {o.customerName} · {o.fulfillment === 'delivery' ? `Domicilio · CP ${o.address?.postalCode}` : 'Recoge'} · {o.items.reduce((s, l) => s + l.qty, 0)} productos
-            </span>
-            <span className="muted small">{formatDate(o.createdAt)}</span>
-          </Link>
+          <OrderRow key={o.id} o={o} onChanged={load} />
         ))}
       </div>
       <PushSetup />
@@ -114,3 +101,47 @@ export default function Orders() {
   );
 }
 
+
+function OrderRow({ o, onChanged }: { o: AdminOrder; onChanged: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const next = nextAction(o);
+  async function advance() {
+    if (!next) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      await api(`/api/admin/orders/${o.id}/status`, { body: { status: next.status } });
+      if (next.collect) await api(`/api/admin/orders/${o.id}/collected`, { body: {} });
+      onChanged();
+    } catch (e) {
+      setErr((e as Error).message);
+    }
+    setBusy(false);
+  }
+  return (
+    <div className={`order-card ${o.orderStatus === 'recibido' ? 'new' : ''}`}>
+      <Link to={`/admin/pedidos/${o.id}`} className="order-row">
+        <div className="row" style={{ flexWrap: 'wrap', gap: 8 }}>
+          <strong>{o.number}</strong>
+          <span className={`badge ${o.orderStatus === 'recibido' ? 'red' : ''}`}>{ORDER_LABEL[o.orderStatus]}</span>
+          {o.needsReview && <span className="badge example">Revisar</span>}
+          {o.refundStatus === 'pendiente' && <span className="badge example">Reembolso pendiente</span>}
+          {o.demo && o.paymentMethod === 'online' && <span className="badge">Demo</span>}
+        </div>
+        <span className="price">{o.total != null ? money(o.total) : 'Envío por cotizar'}</span>
+        <span style={{ gridColumn: '1 / -1' }}><CollectPill order={o} /></span>
+        <span className="muted small">
+          {o.customerName} · {o.fulfillment === 'delivery' ? 'A domicilio' : 'Recoge'} · {o.items.reduce((s, l) => s + l.qty, 0)} productos
+        </span>
+        <span className="muted small">{formatDate(o.createdAt)}</span>
+      </Link>
+      {next && (
+        <div className="order-card-actions">
+          <button className="btn primary small" disabled={busy} onClick={advance}>{busy ? '…' : next.label}</button>
+          {err && <span className="error-text small">{err}</span>}
+        </div>
+      )}
+    </div>
+  );
+}

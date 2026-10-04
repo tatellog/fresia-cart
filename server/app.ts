@@ -14,7 +14,7 @@ import { DemoProvider } from './payments/demo';
 import { MercadoPagoProvider, verifyMercadoPagoSignature } from './payments/mercadopago';
 import { checkReturnedPayment, handlePaymentNotification, reconcile, startCheckout } from './payments/service';
 import {
-  createOrder, getOrderById, getOrderForCustomer, listOrders, markCollected, quoteOrder, setOrderStatus, setRefundStatus, setShippingQuote, toAdmin, toPublic,
+  createOrder, getOrderById, getOrderForCustomer, listOrders, markCollected, quoteOrder, saveCourierLocation, setOrderStatus, setRefundStatus, setShippingQuote, toAdmin, toPublic, trackingFor,
 } from './orders';
 import * as store from './store';
 import * as S from './schemas';
@@ -43,7 +43,7 @@ export async function createApp(config: Config, opts: { demoWebhookDelayMs?: num
     res.setHeader('X-Frame-Options', 'DENY');
     res.setHeader(
       'Content-Security-Policy',
-      "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+      "default-src 'self'; img-src 'self' data: https://tile.openstreetmap.org; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
     );
     next();
   });
@@ -108,6 +108,12 @@ export async function createApp(config: Config, opts: { demoWebhookDelayMs?: num
     }
     order = (await getOrderById(db, order.id))!;
     res.json({ order: toPublic(order) });
+  });
+
+  // Seguimiento en vivo: solo con el token del pedido y solo mientras va en camino.
+  app.get('/api/orders/:number/tracking', rateLimit(240, 60_000), async (req, res) => {
+    const order = await getOrderForCustomer(db, String(req.params.number), String(req.query.t ?? ''));
+    res.json(await trackingFor(ctx, order));
   });
 
   app.post('/api/orders/:number/checkout', rateLimit(20, 60_000), async (req, res) => {
@@ -241,6 +247,10 @@ export async function createApp(config: Config, opts: { demoWebhookDelayMs?: num
     const { fee, etaText } = S.shippingQuote.parse(req.body);
     await orderOr404(String(req.params.id));
     res.json({ order: await toAdmin(db, await setShippingQuote(ctx, String(req.params.id), fee, etaText, 'panel')) });
+  });
+  admin.post('/orders/:id/tracking', async (req, res) => {
+    await saveCourierLocation(ctx, String(req.params.id), S.courierLocationSchema.parse(req.body));
+    res.json({ ok: true });
   });
   admin.post('/orders/:id/collected', async (req, res) => {
     await orderOr404(String(req.params.id));

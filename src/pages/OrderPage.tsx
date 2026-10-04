@@ -7,6 +7,7 @@ import { recentOrders } from '../lib/checkout';
 import { formatDate, money, whatsappLink } from '../lib/format';
 import { DemoBanner, Footer, Spinner, TopBar } from '../components/ui';
 import { OrderLines, Totals } from './parts';
+import { LiveTracking } from '../components/LiveTracking';
 import { PAYMENT_LABEL, REFUND_LABEL } from '../../shared/status';
 import type { OrderStatus, PublicOrder } from '../../shared/types';
 
@@ -44,7 +45,7 @@ export default function OrderPage() {
   }, [number, token, params]);
 
   const verifying = returned && order?.paymentStatus === 'sin_pagar' && now - startedAt.current < VERIFY_WINDOW_MS;
-  const fast = verifying || order?.paymentStatus === 'pendiente';
+  const fast = verifying || order?.paymentStatus === 'pendiente' || order?.orderStatus === 'en_camino' || order?.orderStatus === 'en_preparacion';
   const finished = order && (order.orderStatus === 'entregado' || order.orderStatus === 'cancelado');
 
   useEffect(() => {
@@ -143,6 +144,8 @@ export default function OrderPage() {
             />
           )}
         </section>
+
+        {order.orderStatus === 'en_camino' && order.fulfillment === 'delivery' && <LiveTracking number={order.number} token={token} />}
 
         {(order.paymentStatus === 'aprobado' || (order.paymentMethod === 'contra_entrega' && order.orderStatus !== 'cotizando_envio' && order.orderStatus !== 'cancelado')) && (
           <Progress order={order} />
@@ -266,23 +269,22 @@ function nextStep(s: OrderStatus, delivery: boolean): string {
 
 function Progress({ order }: { order: PublicOrder }) {
   const delivery = order.fulfillment === 'delivery';
+  const first = order.paymentMethod === 'contra_entrega' ? 'Pedido recibido' : 'Pago recibido';
   const steps: { key: OrderStatus; label: string }[] = [
-    { key: 'recibido', label: order.paymentMethod === 'contra_entrega' ? 'Pedido recibido' : 'Pago recibido' },
-    { key: 'confirmado', label: 'Pedido confirmado' },
+    { key: 'recibido', label: first },
     { key: 'en_preparacion', label: 'En preparación' },
     delivery ? { key: 'en_camino', label: 'En camino' } : { key: 'listo', label: 'Listo para recoger' },
     { key: 'entregado', label: 'Entregado' },
   ];
-  const order_ = ['recibido', 'confirmado', 'en_preparacion', 'listo', 'en_camino', 'entregado'];
-  const current = order_.indexOf(order.orderStatus);
+  const rank: Record<string, number> = { recibido: 0, confirmado: 0, en_preparacion: 1, listo: 2, en_camino: 2, entregado: 3 };
+  const current = rank[order.orderStatus] ?? 0;
   return (
     <section className="card" aria-label="Avance del pedido">
       <ol className="timeline">
-        {steps.map((s) => {
-          const idx = order_.indexOf(s.key);
-          const state = idx < current || (idx === current && s.key === 'entregado') ? 'done' : idx === current ? 'done current' : idx < current ? 'done' : 'todo';
+        {steps.map((s, i) => {
+          const state = i < current || order.orderStatus === 'entregado' ? 'done' : i === current ? 'done current' : 'todo';
           return (
-            <li key={s.key} className={state} aria-current={idx === current ? 'step' : undefined}>
+            <li key={s.key} className={state} aria-current={i === current ? 'step' : undefined}>
               <span className="dot" aria-hidden="true" />
               <span>{s.label}</span>
             </li>

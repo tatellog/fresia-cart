@@ -159,6 +159,14 @@ export type Address = {
 
 export type CustomerLocation = LatLng & { accuracyM: number };
 
+/** Seguimiento en vivo para el cliente (solo mientras va en camino). */
+export type TrackingInfo = {
+  active: boolean;
+  courier: (LatLng & { accuracyM: number; updatedAt: string }) | null;
+  destination: LatLng | null;
+  store: LatLng | null;
+};
+
 export type Fulfillment = 'delivery' | 'pickup';
 
 export type DeliveryQuote =

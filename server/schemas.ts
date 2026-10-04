@@ -151,3 +151,9 @@ export const pushSubscribeSchema = z.object({
   }),
   label: text(80).default(''),
 });
+
+export const courierLocationSchema = z.object({
+  lat: z.number().min(-90).max(90),
+  lng: z.number().min(-180).max(180),
+  accuracyM: z.number().min(0).max(100000),
+});

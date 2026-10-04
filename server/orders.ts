@@ -7,7 +7,7 @@ import { getDelivery, getRules, listProducts, listToppings, nextOrderNumber } fr
 import { minimumMessage, priceCart } from '../shared/pricing';
 import { quoteDelivery } from '../shared/coverage';
 import type {
-  Address, AdminOrder, CartLineInput, Quote, DeliveryQuote, Fulfillment, OrderStatus, PaymentMethod, PaymentStatus, PricedLine, PublicOrder, RefundStatus,
+  Address, AdminOrder, CartLineInput, Quote, DeliveryQuote, Fulfillment, OrderStatus, PaymentMethod, PaymentStatus, PricedLine, PublicOrder, RefundStatus, TrackingInfo,
 } from '../shared/types';
 
 export type OrderInput = {
@@ -235,6 +235,7 @@ export async function setOrderStatus(ctx: Ctx, id: string, status: OrderStatus, 
     if (status === 'cancelado') {
       const paid = row.payment_status === 'aprobado';
       const refund = paid && row.refund_status === 'no_aplica' ? 'pendiente' : row.refund_status;
+      await q.query('delete from office.order_tracking where order_id = $1', [id]);
       await addEvent(q, id, 'estado', paid ? 'Cancelado · reembolso pendiente' : 'Cancelado', actor);
       return (await q.one<OrderRow>(
         "update office.orders set order_status = 'cancelado', refund_status = $2, updated_at = now() where id = $1 returning *",
@@ -246,6 +247,8 @@ export async function setOrderStatus(ctx: Ctx, id: string, status: OrderStatus, 
     const codReady = row.payment_method === 'contra_entrega' && row.order_status !== 'cotizando_envio';
     if (row.payment_status !== 'aprobado' && !codReady) throw new HttpError(409, 'Solo puedes avanzar pedidos con pago recibido.');
     if (status === 'en_camino' && row.fulfillment !== 'delivery') throw new HttpError(409, 'Este pedido es para recoger.');
+    // Al dejar de ir en camino, se borra la ubicación del repartidor (privacidad).
+    if (status !== 'en_camino') await q.query('delete from office.order_tracking where order_id = $1', [id]);
     await addEvent(q, id, 'estado', status, actor);
     return (await q.one<OrderRow>('update office.orders set order_status = $2, updated_at = now() where id = $1 returning *', [id, status]))!;
   });
@@ -306,4 +309,36 @@ export function listOrders(db: DB, filter: 'activos' | 'sin_pagar' | 'todos' | '
     todos: '',
   }[filter];
   return db.query<OrderRow>(`select * from office.orders ${where} order by created_at desc limit 200`);
+}
+
+// ── Seguimiento en vivo ─────────────────────────────────────────────────
+
+const TRACKING_STALE_MS = 10 * 60 * 1000;
+
+export async function saveCourierLocation(ctx: Ctx, id: string, loc: { lat: number; lng: number; accuracyM: number }) {
+  const row = await getOrderById(ctx.db, id);
+  if (!row) throw new HttpError(404, 'Pedido no encontrado.');
+  if (row.order_status !== 'en_camino') throw new HttpError(409, 'Solo se comparte la ubicación mientras el pedido va en camino.');
+  await ctx.db.query(
+    `insert into office.order_tracking (order_id, lat, lng, accuracy_m, updated_at) values ($1, $2, $3, $4, now())
+     on conflict (order_id) do update set lat = excluded.lat, lng = excluded.lng, accuracy_m = excluded.accuracy_m, updated_at = now()`,
+    [id, loc.lat, loc.lng, Math.round(loc.accuracyM)],
+  );
+}
+
+export async function trackingFor(ctx: Ctx, row: OrderRow): Promise<TrackingInfo> {
+  const store = (await getDelivery(ctx.db)).origin;
+  const destination = row.address?.location ? { lat: row.address.location.lat, lng: row.address.location.lng } : null;
+  if (row.order_status !== 'en_camino') return { active: false, courier: null, destination, store };
+  const t = await ctx.db.one<{ lat: number; lng: number; accuracy_m: number; updated_at: Date }>(
+    'select lat, lng, accuracy_m, updated_at from office.order_tracking where order_id = $1',
+    [row.id],
+  );
+  const fresh = t && Date.now() - new Date(t.updated_at).getTime() < TRACKING_STALE_MS;
+  return {
+    active: true,
+    courier: fresh ? { lat: t!.lat, lng: t!.lng, accuracyM: t!.accuracy_m, updatedAt: iso(t!.updated_at) } : null,
+    destination,
+    store,
+  };
 }

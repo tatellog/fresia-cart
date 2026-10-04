@@ -40,8 +40,23 @@
   box-shadow: var(--shadow);
   text-decoration: none;
 }
-.order-row.new {
+.order-card {
+  background: #fff;
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow);
+}
+.order-card.new {
   outline: 2px solid var(--red);
+}
+.order-card .order-row {
+  box-shadow: none;
+  background: transparent;
+}
+.order-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 20px 16px;
 }
 .kv {
   display: grid;
@@ -145,3 +160,43 @@ details.editor > summary::-webkit-details-marker {
   font-size: 1.05rem;
 }
 .collect-box strong { font-size: 1.35rem; }
+
+.flow {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+.flow-step button {
+  width: 100%;
+  min-height: 64px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: #fff;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--choc-2);
+  cursor: pointer;
+}
+.flow-step button:disabled { cursor: default; }
+.flow-dot {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--cream);
+  font-size: 0.75rem;
+}
+.flow-step.done button { color: var(--ok); border-color: var(--ok-bg); background: var(--ok-bg); }
+.flow-step.done .flow-dot { background: var(--ok); color: #fff; }
+.flow-step.current button { color: #fff; border-color: var(--red); background: var(--red); }
+.flow-step.current .flow-dot { background: #fff; color: var(--red); }
+.big-action { min-height: 60px; font-size: 1.1rem; }

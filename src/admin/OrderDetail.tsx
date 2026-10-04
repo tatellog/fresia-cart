@@ -6,16 +6,11 @@ import { parseMoney } from '../../shared/money';
 import { LoadError, Spinner } from '../components/ui';
 import { LineDetails } from '../pages/parts';
 import { CollectBox } from './Collect';
+import { StatusFlow } from './StatusFlow';
+import { CourierShare } from './CourierShare';
 import { ORDER_LABEL, PAYMENT_LABEL, REFUND_LABEL } from '../../shared/status';
 import type { AdminOrder, OrderStatus, RefundStatus } from '../../shared/types';
 
-const NEXT: Partial<Record<OrderStatus, OrderStatus[]>> = {
-  recibido: ['confirmado'],
-  confirmado: ['en_preparacion'],
-  en_preparacion: ['listo'],
-  listo: ['en_camino', 'entregado'],
-  en_camino: ['entregado'],
-};
 
 export default function OrderDetail() {
   const { id = '' } = useParams();
@@ -24,6 +19,7 @@ export default function OrderDetail() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
+  const [shareNow, setShareNow] = useState(false);
 
   const load = useCallback(() => {
     api<{ order: AdminOrder }>(`/api/admin/orders/${id}`).then((r) => setOrder(r.order), (e: Error) => setError(e.message));
@@ -48,13 +44,17 @@ export default function OrderDetail() {
     setConfirmCancel(false);
   }
 
+  async function setStatus(status: OrderStatus, collect: boolean) {
+    if (status === 'en_camino') setShareNow(true);
+    await act(`orders/${order!.id}/status`, { status });
+    if (collect) await act(`orders/${order!.id}/collected`, {});
+  }
+
   if (error) return <LoadError message={error} retry={load} />;
   if (!order) return <Spinner label="Cargando…" />;
 
   const paid = order.paymentStatus === 'aprobado';
   const cod = order.paymentMethod === 'contra_entrega';
-  const canAdvance = paid || (cod && order.orderStatus !== 'cotizando_envio');
-  const nexts = (NEXT[order.orderStatus] ?? []).filter((s) => s !== 'en_camino' || order.fulfillment === 'delivery');
 
   return (
     <div className="stack-lg">
@@ -88,40 +88,34 @@ export default function OrderDetail() {
           <dd>{REFUND_LABEL[order.refundStatus]}</dd>
         </dl>
 
-        {order.orderStatus !== 'cancelado' && (
-          <div className="status-actions">
-            {nexts.map((s) => (
-              <button key={s} className="btn primary small" disabled={busy || !canAdvance} onClick={() => act(`orders/${order.id}/status`, { status: s })}>
-                Marcar «{ORDER_LABEL[s]}»
-              </button>
-            ))}
-            {cod && !paid && order.orderStatus !== 'cotizando_envio' && (
-              <button className="btn secondary small" disabled={busy} onClick={() => act(`orders/${order.id}/collected`, {})}>
-                {order.fulfillment === 'pickup' ? 'Marcar cobrado' : 'Marcar cobrado en efectivo'} {order.total != null && money(order.total)}
-              </button>
-            )}
-            {!confirmCancel ? (
-              <button className="btn secondary small" disabled={busy || order.orderStatus === 'entregado'} onClick={() => setConfirmCancel(true)}>
-                Cancelar pedido
-              </button>
-            ) : (
-              <div className="notice warn stack" style={{ width: '100%' }}>
-                <p>
-                  {paid
-                    ? 'Cancelar no reembolsa el pago. Deberás reembolsarlo en Mercado Pago y después marcarlo aquí como reembolsado.'
-                    : '¿Seguro? El cliente ya no podrá pagar este pedido.'}
-                </p>
-                <div className="row">
-                  <button className="btn primary small" disabled={busy} onClick={() => act(`orders/${order.id}/status`, { status: 'cancelado' })}>Sí, cancelar</button>
-                  <button className="btn ghost small" onClick={() => setConfirmCancel(false)}>No</button>
-                </div>
+        {order.orderStatus !== 'cancelado' && order.orderStatus !== 'cotizando_envio' && (
+          <StatusFlow order={order} busy={busy} onSet={setStatus} />
+        )}
+
+        <div className="status-actions">
+          {cod && !paid && order.orderStatus !== 'cotizando_envio' && order.orderStatus !== 'cancelado' && (
+            <button className="btn secondary small" disabled={busy} onClick={() => act(`orders/${order.id}/collected`, {})}>
+              {order.fulfillment === 'pickup' ? 'Solo marcar cobrado' : 'Solo marcar cobrado en efectivo'} {order.total != null && money(order.total)}
+            </button>
+          )}
+          {order.orderStatus !== 'cancelado' && order.orderStatus !== 'entregado' && (!confirmCancel ? (
+            <button className="linkbtn" disabled={busy} onClick={() => setConfirmCancel(true)}>
+              Cancelar pedido
+            </button>
+          ) : (
+            <div className="notice warn stack" style={{ width: '100%' }}>
+              <p>
+                {paid
+                  ? 'Cancelar no reembolsa el pago. Deberás reembolsarlo en Mercado Pago y después marcarlo aquí como reembolsado.'
+                  : '¿Seguro? El cliente verá su pedido como cancelado.'}
+              </p>
+              <div className="row">
+                <button className="btn primary small" disabled={busy} onClick={() => act(`orders/${order.id}/status`, { status: 'cancelado' })}>Sí, cancelar</button>
+                <button className="btn ghost small" onClick={() => setConfirmCancel(false)}>No</button>
               </div>
-            )}
-          </div>
-        )}
-        {!canAdvance && order.orderStatus !== 'cancelado' && order.orderStatus !== 'cotizando_envio' && (
-          <p className="muted small">El pedido avanza cuando el pago se confirma con la plataforma de pago.</p>
-        )}
+            </div>
+          ))}
+        </div>
 
         {(order.paymentStatus === 'aprobado' || order.paymentStatus === 'devuelto') && (
           <div className="field">
@@ -134,6 +128,8 @@ export default function OrderDetail() {
           </div>
         )}
       </section>
+
+      {order.orderStatus === 'en_camino' && order.fulfillment === 'delivery' && <CourierShare orderId={order.id} autoStart={shareNow} />}
 
       {order.orderStatus === 'cotizando_envio' && <ShippingQuoteForm order={order} busy={busy} onSubmit={(fee, etaText) => act(`orders/${order.id}/shipping`, { fee, etaText })} />}
 

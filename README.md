@@ -20,6 +20,14 @@ Por qué GPS y no la dirección escrita: los geocodificadores gratuitos solo ubi
 Si se agrega una clave de Google Maps, se puede validar también la dirección. La ubicación requiere HTTPS (o `localhost`).
 El repartidor ve en el panel el punto GPS del cliente para compararlo con la dirección.
 
+### Panel: avanzar pedidos y seguimiento en vivo
+
+- Cada pedido muestra **un botón con la siguiente acción** (también en la lista): «Empezar a preparar» → «Salir a entregar»
+  (o «Listo para recoger») → «Entregado» / «Entregado y cobrado $X». Los pasos de arriba permiten corregir un estado.
+- **Seguimiento en vivo:** al tocar «Salir a entregar» en el celular de quien reparte, ese celular comparte su ubicación cada
+  ~8 s mientras la página esté abierta (límite de la web: sin app nativa no hay rastreo en segundo plano). El cliente ve en su
+  página un mapa (OpenStreetMap) con Frésia, el repartidor y su destino, y la distancia que falta. Al entregar se borra la ubicación.
+
 ### Datos del negocio
 
 - **Horario:** lunes a jueves 12:00–20:30 · viernes y sábado 12:00–20:00 · domingo cerrado.
