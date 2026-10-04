@@ -4,6 +4,7 @@ export { nextAction } from '../../shared/flow';
 
 export function StatusFlow({ order, busy, onSet }: { order: AdminOrder; busy: boolean; onSet: (s: OrderStatus, collect: boolean) => void }) {
   const steps = flowSteps(order);
+  const done = order.orderStatus === 'entregado';
   const rank = RANK[order.orderStatus] ?? -1;
   const next = nextAction(order);
   const canAdvance = order.paymentStatus === 'aprobado' || order.paymentMethod === 'contra_entrega';
@@ -11,7 +12,7 @@ export function StatusFlow({ order, busy, onSet }: { order: AdminOrder; busy: bo
     <div className="stack">
       <ol className="flow" aria-label="Avance del pedido">
         {steps.map((s, i) => {
-          const state = i < rank ? 'done' : i === rank ? 'current' : 'todo';
+          const state = done || i < rank ? 'done' : i === rank ? 'current' : 'todo';
           return (
             <li key={s.key} className={`flow-step ${state}`}>
               <button
@@ -19,10 +20,11 @@ export function StatusFlow({ order, busy, onSet }: { order: AdminOrder; busy: bo
                 disabled={busy || !canAdvance || order.orderStatus === 'cancelado' || i === rank}
                 onClick={() => onSet(s.key, false)}
                 aria-current={i === rank ? 'step' : undefined}
-                title={i === rank ? 'Estado actual' : `Cambiar a «${s.label}»`}
+                title={i === rank ? 'Estado actual' : `Corregir a «${s.label}»`}
               >
-                <span className="flow-dot" aria-hidden="true">{i < rank ? '✓' : i + 1}</span>
+                <span className="flow-dot" aria-hidden="true">{state === 'done' ? '✓' : i + 1}</span>
                 {s.label}
+                {state === 'current' && <span className="flow-now">Ahora</span>}
               </button>
             </li>
           );
@@ -30,7 +32,8 @@ export function StatusFlow({ order, busy, onSet }: { order: AdminOrder; busy: bo
       </ol>
       {next && (
         <button type="button" className="btn primary block big-action" disabled={busy} onClick={() => onSet(next.status, next.collect)}>
-          {next.label}
+          <span className="big-action-hint">Siguiente paso</span>
+          <span>{next.label}</span>
         </button>
       )}
       {!canAdvance && order.orderStatus !== 'cancelado' && order.orderStatus !== 'cotizando_envio' && (

@@ -4,11 +4,20 @@ import { orderBody, start } from './helpers';
 
 const base = { fulfillment: 'delivery' as const, paymentMethod: 'contra_entrega' as const, paymentStatus: 'por_cobrar' as const, total: 33000 };
 
+describe('tiempo estimado', () => {
+  it('a pie ~75 m/min con 30% extra por calles; nunca menos de 1 min', async () => {
+    const { etaMinutes } = await import('../shared/coverage');
+    expect(etaMinutes(150, 'walk')).toBe(3);
+    expect(etaMinutes(150, 'moto')).toBe(1);
+    expect(etaMinutes(5, 'walk')).toBe(1);
+  });
+});
+
 describe('un solo botón con la siguiente acción', () => {
   it('a domicilio: preparar → salir a entregar → entregado y cobrado', () => {
     expect(nextAction({ ...base, orderStatus: 'recibido' })?.label).toBe('👩‍🍳 Empezar a preparar');
     expect(nextAction({ ...base, orderStatus: 'confirmado' })?.status).toBe('en_preparacion');
-    expect(nextAction({ ...base, orderStatus: 'en_preparacion' })?.label).toBe('🛵 Salir a entregar');
+    expect(nextAction({ ...base, orderStatus: 'en_preparacion' })?.label).toBe('📦 Salir a entregar');
     expect(nextAction({ ...base, orderStatus: 'en_camino' })).toMatchObject({ status: 'entregado', label: '✅ Entregado y cobrado $330', collect: true });
     expect(nextAction({ ...base, orderStatus: 'entregado' })).toBeNull();
   });
@@ -33,14 +42,14 @@ describe('seguimiento en vivo', () => {
     const r = await t.api('POST', '/api/orders', orderBody({ paymentMethod: 'contra_entrega' }));
     await t.api('POST', '/api/admin/login', { password: 'secreto-de-prueba' });
     const id = (await t.api('GET', '/api/admin/orders?filter=todos')).body.orders[0].id;
-    const here = { lat: 19.3975, lng: -99.1712, accuracyM: 8 };
+    const here = { lat: 19.3975, lng: -99.1712, accuracyM: 8, mode: 'bike' };
 
     expect((await t.api('POST', `/api/admin/orders/${id}/tracking`, here)).status).toBe(409);
     await t.api('POST', `/api/admin/orders/${id}/status`, { status: 'en_camino' });
     expect((await t.api('POST', `/api/admin/orders/${id}/tracking`, here)).status).toBe(200);
 
     const tr = await t.api('GET', `/api/orders/${r.body.number}/tracking?t=${r.body.token}`);
-    expect(tr.body).toMatchObject({ active: true, courier: { lat: 19.3975, lng: -99.1712, accuracyM: 8 }, store: { lat: 19.39725, lng: -99.1712 } });
+    expect(tr.body).toMatchObject({ active: true, courier: { lat: 19.3975, lng: -99.1712, accuracyM: 8, mode: 'bike' }, store: { lat: 19.39725, lng: -99.1712 } });
     expect(tr.body.destination).toMatchObject({ lng: -99.1712 });
     expect((await t.api('GET', `/api/orders/${r.body.number}/tracking?t=otro`)).status).toBe(404);
 

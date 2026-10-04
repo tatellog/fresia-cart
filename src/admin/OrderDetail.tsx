@@ -8,7 +8,6 @@ import { LineDetails } from '../pages/parts';
 import { CollectBox } from './Collect';
 import { StatusFlow } from './StatusFlow';
 import { CourierShare } from './CourierShare';
-import { ORDER_LABEL, PAYMENT_LABEL, REFUND_LABEL } from '../../shared/status';
 import type { AdminOrder, OrderStatus, RefundStatus } from '../../shared/types';
 
 
@@ -56,6 +55,11 @@ export default function OrderDetail() {
 
   const paid = order.paymentStatus === 'aprobado';
   const cod = order.paymentMethod === 'contra_entrega';
+  // El reembolso solo importa si hubo pago en línea, si se canceló algo cobrado o si ya se registró uno.
+  const showRefund =
+    order.refundStatus !== 'no_aplica' ||
+    (order.paymentMethod === 'online' && (order.paymentStatus === 'aprobado' || order.paymentStatus === 'devuelto')) ||
+    (order.orderStatus === 'cancelado' && paid);
 
   return (
     <div className="stack-lg">
@@ -65,7 +69,7 @@ export default function OrderDetail() {
         <span className="price" style={{ fontSize: '1.25rem' }}>{order.total != null ? money(order.total) : 'Envío por cotizar'}</span>
       </div>
 
-      <CollectBox order={order} />
+      {order.orderStatus !== 'entregado' && <CollectBox order={order} />}
       {order.demo && order.paymentMethod === 'online' && <div className="notice">Pago en línea simulado (demostración): no hubo cobro real.</div>}
       {order.needsReview && (
         <div className="notice error stack" role="alert">
@@ -76,57 +80,54 @@ export default function OrderDetail() {
       {actionError && <div className="notice error" role="alert">{actionError}</div>}
 
       <section className="card stack">
-        <h2>Estados</h2>
-        <dl className="kv">
-          <dt>Pago</dt>
-          <dd>
-            <span className={`badge ${paid ? 'ok' : 'warn'}`}>{PAYMENT_LABEL[order.paymentStatus]}</span>{' '}
-            <span className="muted small">{cod ? (order.fulfillment === 'pickup' ? 'paga al recoger' : 'paga al recibir') : 'en línea'}</span>
-          </dd>
-          <dt>Pedido</dt>
-          <dd><span className="badge">{ORDER_LABEL[order.orderStatus]}</span></dd>
-          <dt>Reembolso</dt>
-          <dd>{REFUND_LABEL[order.refundStatus]}</dd>
-        </dl>
-
+        <h2>{order.orderStatus === 'cancelado' ? 'Pedido cancelado' : 'Avance'}</h2>
+        {order.orderStatus === 'entregado' && <CompletedBox order={order} />}
         {order.orderStatus !== 'cancelado' && order.orderStatus !== 'cotizando_envio' && (
           <StatusFlow order={order} busy={busy} onSet={setStatus} />
         )}
+        {order.orderStatus === 'cancelado' && (
+          <p className="muted">{paid ? `Se había cobrado ${order.total != null ? money(order.total) : ''}. Revisa el reembolso abajo.` : 'No se cobró.'}</p>
+        )}
 
-        <div className="status-actions">
-          {cod && !paid && order.orderStatus !== 'cotizando_envio' && order.orderStatus !== 'cancelado' && (
-            <button className="btn secondary small" disabled={busy} onClick={() => act(`orders/${order.id}/collected`, {})}>
-              {order.fulfillment === 'pickup' ? 'Solo marcar cobrado' : 'Solo marcar cobrado en efectivo'} {order.total != null && money(order.total)}
-            </button>
-          )}
-          {order.orderStatus !== 'cancelado' && order.orderStatus !== 'entregado' && (!confirmCancel ? (
-            <button className="linkbtn" disabled={busy} onClick={() => setConfirmCancel(true)}>
-              Cancelar pedido
-            </button>
-          ) : (
-            <div className="notice warn stack" style={{ width: '100%' }}>
-              <p>
-                {paid
-                  ? 'Cancelar no reembolsa el pago. Deberás reembolsarlo en Mercado Pago y después marcarlo aquí como reembolsado.'
-                  : '¿Seguro? El cliente verá su pedido como cancelado.'}
-              </p>
-              <div className="row">
-                <button className="btn primary small" disabled={busy} onClick={() => act(`orders/${order.id}/status`, { status: 'cancelado' })}>Sí, cancelar</button>
-                <button className="btn ghost small" onClick={() => setConfirmCancel(false)}>No</button>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {(order.paymentStatus === 'aprobado' || order.paymentStatus === 'devuelto') && (
+        {showRefund && (
           <div className="field">
-            <label htmlFor="refund">Estado del reembolso</label>
+            <label htmlFor="refund">Reembolso</label>
             <select id="refund" className="select" value={order.refundStatus} disabled={busy} onChange={(e) => act(`orders/${order.id}/refund`, { status: e.target.value as RefundStatus })}>
               <option value="no_aplica">Sin reembolso</option>
               <option value="pendiente">Reembolso pendiente</option>
-              <option value="reembolsado">Reembolsado (ya se hizo en Mercado Pago)</option>
+              <option value="reembolsado">{order.paymentMethod === 'online' ? 'Reembolsado (ya se hizo en Mercado Pago)' : 'Reembolsado (efectivo devuelto)'}</option>
             </select>
           </div>
+        )}
+
+        {order.orderStatus !== 'cancelado' && order.orderStatus !== 'entregado' && (
+          <details className="more">
+            <summary>Más opciones</summary>
+            <div className="status-actions" style={{ marginTop: 12 }}>
+              {cod && !paid && order.orderStatus !== 'cotizando_envio' && (
+                <button className="btn secondary small" disabled={busy} onClick={() => act(`orders/${order.id}/collected`, {})}>
+                  Marcar solo como cobrado {order.total != null && money(order.total)}
+                </button>
+              )}
+              {!confirmCancel ? (
+                <button className="btn ghost small" disabled={busy} onClick={() => setConfirmCancel(true)}>
+                  Cancelar pedido
+                </button>
+              ) : (
+                <div className="notice warn stack" style={{ width: '100%' }}>
+                  <p>
+                    {paid
+                      ? 'Cancelar no reembolsa el pago. Deberás devolverlo y después marcarlo aquí como reembolsado.'
+                      : '¿Seguro? El cliente verá su pedido como cancelado.'}
+                  </p>
+                  <div className="row">
+                    <button className="btn primary small" disabled={busy} onClick={() => act(`orders/${order.id}/status`, { status: 'cancelado' })}>Sí, cancelar</button>
+                    <button className="btn ghost small" onClick={() => setConfirmCancel(false)}>No</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </details>
         )}
       </section>
 
@@ -266,5 +267,21 @@ function ShippingQuoteForm({ order, busy, onSubmit }: { order: AdminOrder; busy:
       {err && <p className="error-text">{err}</p>}
       <button className="btn primary" disabled={busy}>Guardar cotización</button>
     </form>
+  );
+}
+
+function CompletedBox({ order }: { order: AdminOrder }) {
+  const delivered = [...order.events].reverse().find((e) => e.type === 'estado' && e.detail === 'entregado');
+  const time = delivered ? new Date(delivered.at).toLocaleTimeString('es-MX', { hour: 'numeric', minute: '2-digit' }) : null;
+  const paid = order.paymentStatus === 'aprobado';
+  return (
+    <div className="completed-box" role="status">
+      <strong>✅ Pedido completado</strong>
+      <span>
+        {order.fulfillment === 'delivery' ? 'Entregado' : 'Recogido'}
+        {time && ` a las ${time}`}
+        {order.total != null && (paid ? ` · ${order.paymentMethod === 'online' ? 'Pagado en línea' : 'Cobrado'} ${money(order.total)}` : ` · ⚠️ Falta registrar el cobro de ${money(order.total)}`)}
+      </span>
+    </div>
   );
 }

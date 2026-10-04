@@ -1,6 +1,6 @@
 import { Suspense, lazy, useEffect, useState } from 'react';
 import { api } from '../lib/api';
-import { distanceM } from '../../shared/coverage';
+import { distanceM, etaMinutes } from '../../shared/coverage';
 import type { TrackingInfo } from '../../shared/types';
 import { Spinner } from './ui';
 
@@ -31,12 +31,15 @@ export function LiveTracking({ number, token }: { number: string; token: string 
   if (!info) return null;
   const c = info.courier;
   const left = c && info.destination ? Math.round(distanceM(c, info.destination)) : null;
+  const mode = c?.mode ?? 'walk';
+  const how = { walk: { icon: '🚶', text: 'a pie' }, bike: { icon: '🚲', text: 'en bici' }, moto: { icon: '🛵', text: 'en moto' } }[mode];
+  const eta = left != null ? etaMinutes(left, mode) : null;
   const ago = c ? Math.max(0, Math.round((Date.now() - Date.parse(c.updatedAt)) / 1000)) : null;
 
   return (
     <section className="card stack" aria-labelledby="track-title">
       <div className="row between" style={{ flexWrap: 'wrap' }}>
-        <h2 id="track-title">🛵 Tu pedido va en camino</h2>
+        <h2 id="track-title">{how.icon} Tu pedido va en camino{c ? ` ${how.text}` : ''}</h2>
         {c && <span className="badge ok">En vivo</span>}
       </div>
       <p className="muted" aria-live="polite">
@@ -44,13 +47,13 @@ export function LiveTracking({ number, token }: { number: string; token: string 
           ? left != null
             ? left < 40
               ? '¡Está llegando!'
-              : `El repartidor está a unos ${left} m de tu entrega.`
+              : `Llega en ~${eta} min · a unos ${left} m de tu entrega.`
             : 'Puedes ver al repartidor en el mapa.'
           : 'En cuanto el repartidor comparta su ubicación, la verás aquí.'}
         {ago != null && <span className="small"> · actualizado hace {ago < 60 ? `${ago} s` : `${Math.round(ago / 60)} min`}</span>}
       </p>
       <Suspense fallback={<div className="live-map"><Spinner label="Cargando mapa…" /></div>}>
-        <LiveMap store={info.store} courier={c} destination={info.destination} trail={info.trail} />
+        <LiveMap store={info.store} courier={c} destination={info.destination} trail={info.trail} mode={mode} />
       </Suspense>
     </section>
   );

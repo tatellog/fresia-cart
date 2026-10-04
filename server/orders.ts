@@ -315,7 +315,7 @@ export function listOrders(db: DB, filter: 'activos' | 'sin_pagar' | 'todos' | '
 
 const TRACKING_STALE_MS = 10 * 60 * 1000;
 
-export async function saveCourierLocation(ctx: Ctx, id: string, loc: { lat: number; lng: number; accuracyM: number }) {
+export async function saveCourierLocation(ctx: Ctx, id: string, loc: { lat: number; lng: number; accuracyM: number; mode: 'walk' | 'bike' | 'moto' }) {
   const row = await getOrderById(ctx.db, id);
   if (!row) throw new HttpError(404, 'Pedido no encontrado.');
   if (row.order_status !== 'en_camino') throw new HttpError(409, 'Solo se comparte la ubicación mientras el pedido va en camino.');
@@ -328,9 +328,10 @@ export async function saveCourierLocation(ctx: Ctx, id: string, loc: { lat: numb
       trail.push([Number(loc.lat.toFixed(6)), Number(loc.lng.toFixed(6))]);
     }
     await q.query(
-      `insert into office.order_tracking (order_id, lat, lng, accuracy_m, trail, updated_at) values ($1, $2, $3, $4, $5::jsonb, now())
-       on conflict (order_id) do update set lat = excluded.lat, lng = excluded.lng, accuracy_m = excluded.accuracy_m, trail = excluded.trail, updated_at = now()`,
-      [id, loc.lat, loc.lng, Math.round(loc.accuracyM), JSON.stringify(trail.slice(-300))],
+      `insert into office.order_tracking (order_id, lat, lng, accuracy_m, trail, mode, updated_at) values ($1, $2, $3, $4, $5::jsonb, $6, now())
+       on conflict (order_id) do update set lat = excluded.lat, lng = excluded.lng, accuracy_m = excluded.accuracy_m, trail = excluded.trail,
+         mode = excluded.mode, updated_at = now()`,
+      [id, loc.lat, loc.lng, Math.round(loc.accuracyM), JSON.stringify(trail.slice(-300)), loc.mode],
     );
   });
 }
@@ -339,14 +340,14 @@ export async function trackingFor(ctx: Ctx, row: OrderRow): Promise<TrackingInfo
   const store = (await getDelivery(ctx.db)).origin;
   const destination = row.address?.location ? { lat: row.address.location.lat, lng: row.address.location.lng } : null;
   if (row.order_status !== 'en_camino') return { active: false, courier: null, trail: [], destination, store };
-  const t = await ctx.db.one<{ lat: number; lng: number; accuracy_m: number; updated_at: Date; trail: [number, number][] }>(
-    'select lat, lng, accuracy_m, updated_at, trail from office.order_tracking where order_id = $1',
+  const t = await ctx.db.one<{ lat: number; lng: number; accuracy_m: number; updated_at: Date; trail: [number, number][]; mode: 'walk' | 'bike' | 'moto' }>(
+    'select lat, lng, accuracy_m, updated_at, trail, mode from office.order_tracking where order_id = $1',
     [row.id],
   );
   const fresh = t && Date.now() - new Date(t.updated_at).getTime() < TRACKING_STALE_MS;
   return {
     active: true,
-    courier: fresh ? { lat: t!.lat, lng: t!.lng, accuracyM: t!.accuracy_m, updatedAt: iso(t!.updated_at) } : null,
+    courier: fresh ? { lat: t!.lat, lng: t!.lng, accuracyM: t!.accuracy_m, updatedAt: iso(t!.updated_at), mode: t!.mode } : null,
     trail: fresh ? t!.trail : [],
     destination,
     store,

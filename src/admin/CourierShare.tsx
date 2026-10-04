@@ -1,6 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../lib/api';
 import { distanceM } from '../../shared/coverage';
+import type { CourierMode } from '../../shared/types';
+import { load, save } from '../lib/storage';
+
+const MODES: { key: CourierMode; label: string }[] = [
+  { key: 'walk', label: '🚶 A pie' },
+  { key: 'bike', label: '🚲 Bici' },
+  { key: 'moto', label: '🛵 Moto' },
+];
 
 type WakeLock = { release: () => Promise<void> };
 
@@ -15,6 +23,14 @@ export function CourierShare({ orderId, autoStart }: { orderId: string; autoStar
   const watch = useRef<number | null>(null);
   const last = useRef<{ t: number; lat: number; lng: number } | null>(null);
   const lock = useRef<WakeLock | null>(null);
+  const [mode, setModeState] = useState<CourierMode>(() => load<CourierMode>('fo.courier.mode', 'walk'));
+  const modeRef = useRef(mode);
+  const setMode = (m: CourierMode) => {
+    setModeState(m);
+    modeRef.current = m;
+    save('fo.courier.mode', m);
+    last.current = null; // manda el cambio en la siguiente lectura del GPS
+  };
 
   function stop() {
     if (watch.current != null) navigator.geolocation.clearWatch(watch.current);
@@ -39,7 +55,7 @@ export function CourierShare({ orderId, autoStart }: { orderId: string; autoStar
         // Envía cada 8 s o si se movió más de 15 m.
         if (prev && now - prev.t < 8000 && distanceM(prev, p) < 15) return;
         last.current = { t: now, ...p };
-        api(`/api/admin/orders/${orderId}/tracking`, { body: { ...p, accuracyM: Math.round(pos.coords.accuracy) } }).then(
+        api(`/api/admin/orders/${orderId}/tracking`, { body: { ...p, accuracyM: Math.round(pos.coords.accuracy), mode: modeRef.current } }).then(
           () => setLastSent(Date.now()),
           () => setState('error'),
         );
@@ -64,7 +80,12 @@ export function CourierShare({ orderId, autoStart }: { orderId: string; autoStar
   const ago = lastSent ? Math.round((Date.now() - lastSent) / 1000) : null;
   return (
     <section className="card stack" aria-labelledby="courier-title">
-      <h2 id="courier-title">🛵 Ubicación para el cliente</h2>
+      <h2 id="courier-title">📍 Ubicación para el cliente</h2>
+      <div className="tabs" role="group" aria-label="¿Cómo vas?">
+        {MODES.map((m) => (
+          <button key={m.key} type="button" aria-pressed={mode === m.key} onClick={() => setMode(m.key)}>{m.label}</button>
+        ))}
+      </div>
       {state === 'sharing' ? (
         <>
           <p className="notice ok">

@@ -31,7 +31,7 @@ export function nextAction(o: FlowOrder): NextAction {
   if (!canAdvance) return null;
   const r = RANK[o.orderStatus] ?? 0;
   if (r === 0) return { status: 'en_preparacion', label: '👩‍🍳 Empezar a preparar', collect: false };
-  if (r === 1) return o.fulfillment === 'delivery' ? { status: 'en_camino', label: '🛵 Salir a entregar', collect: false } : { status: 'listo', label: '🛍️ Listo para recoger', collect: false };
+  if (r === 1) return o.fulfillment === 'delivery' ? { status: 'en_camino', label: '📦 Salir a entregar', collect: false } : { status: 'listo', label: '🛍️ Listo para recoger', collect: false };
   const collect = o.paymentMethod === 'contra_entrega' && o.paymentStatus !== 'aprobado';
   return { status: 'entregado', label: collect ? `✅ Entregado y cobrado ${o.total != null ? money(o.total) : ''}` : '✅ Entregado', collect };
 }

@@ -156,4 +156,5 @@ export const courierLocationSchema = z.object({
   lat: z.number().min(-90).max(90),
   lng: z.number().min(-180).max(180),
   accuracyM: z.number().min(0).max(100000),
+  mode: z.enum(['walk', 'bike', 'moto']).default('walk'),
 });

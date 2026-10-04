@@ -16,6 +16,8 @@ function el(className: string, html: string) {
   return d;
 }
 
+const WALK = `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="13" cy="4" r="2"/><path d="M10 21l2-6 3 3v5"/><path d="M7 12l3-4 4 1 2 4h3"/><path d="M12 15l-1-6"/></svg>`;
+const BIKE = `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5.5" cy="17" r="3.5"/><circle cx="18.5" cy="17" r="3.5"/><path d="M15 6h2l3 11"/><path d="M5.5 17l4-7h7l-4.5 7"/><path d="M9 6h3"/></svg>`;
 const SCOOTER = `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="17" r="2.5"/><circle cx="18" cy="17" r="2.5"/><path d="M8.5 17h6.5l2-6h-4"/><path d="M13 5h3l1.5 6"/><path d="M4 11h5l2 3"/></svg>`;
 const PIN = `<svg viewBox="0 0 24 24" width="30" height="30" aria-hidden="true"><path d="M12 22s7-6.2 7-12a7 7 0 1 0-14 0c0 5.8 7 12 7 12z" fill="${CHOC}"/><circle cx="12" cy="10" r="3" fill="#fff"/></svg>`;
 
@@ -27,8 +29,8 @@ const lineOf = (pts: [number, number][]) => ({
 
 /** Mapa del seguimiento: Frésia, el repartidor (se desliza entre actualizaciones), su recorrido y el destino. */
 export default function LiveMap({
-  store, courier, destination, trail,
-}: { store: LatLng | null; courier: LatLng | null; destination: LatLng | null; trail: [number, number][] }) {
+  store, courier, destination, trail, mode = 'walk',
+}: { store: LatLng | null; courier: LatLng | null; destination: LatLng | null; trail: [number, number][]; mode?: 'walk' | 'bike' | 'moto' }) {
   const box = useRef<HTMLDivElement>(null);
   const map = useRef<MlMap | null>(null);
   const ready = useRef(false);
@@ -36,8 +38,9 @@ export default function LiveMap({
   const shown = useRef<LatLng | null>(null);
   const anim = useRef<number | null>(null);
   const fitted = useRef(false);
-  const latest = useRef({ store, courier, destination, trail });
-  latest.current = { store, courier, destination, trail };
+  const latest = useRef({ store, courier, destination, trail, mode });
+  latest.current = { store, courier, destination, trail, mode };
+  const markerMode = useRef<string | null>(null);
 
   // Crear el mapa una vez.
   useEffect(() => {
@@ -89,13 +92,22 @@ export default function LiveMap({
     (m.getSource('trail') as GeoJSONSource | undefined)?.setData(lineOf(c ? [...t, [c.lat, c.lng]] : t));
 
     if (c) {
+      // Si cambió cómo va (a pie, bici, moto), rehace el marcador con el ícono correcto.
+      if (courierMarker.current && markerMode.current !== latest.current.mode) {
+        courierMarker.current.remove();
+        courierMarker.current = null;
+      }
       if (!courierMarker.current) {
-        courierMarker.current = new maplibregl.Marker({ element: el('map-courier', `<span class="pulse"></span><span class="dot">${SCOOTER}</span>`) })
+        const icon = { walk: WALK, bike: BIKE, moto: SCOOTER }[latest.current.mode];
+        markerMode.current = latest.current.mode;
+        courierMarker.current = new maplibregl.Marker({ element: el('map-courier', `<span class="pulse"></span><span class="dot">${icon}</span>`) })
           .setLngLat([c.lng, c.lat])
           .addTo(m);
-        shown.current = c;
-        setRemaining(c);
-      } else {
+        shown.current = shown.current ?? c;
+        courierMarker.current.setLngLat([shown.current.lng, shown.current.lat]);
+        setRemaining(shown.current);
+      }
+      {
         // Desliza el marcador desde donde estaba hasta la nueva posición (1 s).
         const from = shown.current ?? c;
         const start = performance.now();
@@ -124,7 +136,7 @@ export default function LiveMap({
     }
   }
 
-  useEffect(update, [store, courier, destination, trail]);
+  useEffect(update, [store, courier, destination, trail, mode]);
 
   return <div ref={box} className="live-map" role="img" aria-label="Mapa con la ubicación del repartidor" />;
 }

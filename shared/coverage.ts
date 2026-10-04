@@ -83,3 +83,11 @@ export function quoteDelivery(input: { postalCode: string; colonia: string; loca
 export function etaText(min: number, max: number): string {
   return min === max ? `${min} min` : `${min}–${max} min`;
 }
+
+/** Velocidad aproximada en ciudad (m/min) y factor por calles vs. línea recta. */
+const SPEED: Record<'walk' | 'bike' | 'moto', number> = { walk: 75, bike: 220, moto: 300 };
+
+/** Minutos estimados de llegada a partir de la distancia en línea recta. */
+export function etaMinutes(distance: number, mode: 'walk' | 'bike' | 'moto'): number {
+  return Math.max(1, Math.round((distance * 1.3) / SPEED[mode]));
+}

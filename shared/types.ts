@@ -159,10 +159,12 @@ export type Address = {
 
 export type CustomerLocation = LatLng & { accuracyM: number };
 
+export type CourierMode = 'walk' | 'bike' | 'moto';
+
 /** Seguimiento en vivo para el cliente (solo mientras va en camino). */
 export type TrackingInfo = {
   active: boolean;
-  courier: (LatLng & { accuracyM: number; updatedAt: string }) | null;
+  courier: (LatLng & { accuracyM: number; updatedAt: string; mode: CourierMode }) | null;
   /** Recorrido del repartidor desde que salió, como [lat, lng]. */
   trail: [number, number][];
   destination: LatLng | null;
