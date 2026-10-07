@@ -85,8 +85,8 @@ export const DEMO_TOPPINGS: Topping[] = [
   top('mermelada-zarzamora', 'Mermelada de zarzamora', 25, true),
 ];
 
-// Mínimo 2 piezas por producto suelto (los combos desde 1); sin mínimo de Frésias por pedido.
-export const DEFAULT_RULES: MenuRules = { extraToppingPrice: MXN(18), minFresias: 0, minQtyPerItem: 2 };
+// Sin compra mínima (oct 2026): el envío ya cubre el viaje. Se puede volver a poner desde el panel.
+export const DEFAULT_RULES: MenuRules = { extraToppingPrice: MXN(18), minFresias: 0, minQtyPerItem: 1 };
 
 export const DEMO_BUSINESS: BusinessInfo = {
   name: 'Frésia',

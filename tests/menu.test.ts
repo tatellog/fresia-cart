@@ -32,11 +32,8 @@ describe('menú en línea', () => {
 });
 
 describe('mínimos', () => {
-  it('cada producto suelto se pide desde 2 piezas: 1 no se acepta', async () => {
-    const r = await create([{ productId: 'clasica', sizeId: 'chico', toppingIds: [], qty: 1 }]);
-    expect(r.status).toBe(422);
-    expect(r.body.error).toMatch(/mínimo es de 2 piezas/);
-    expect((await create([{ productId: 'clasica', sizeId: 'chico', toppingIds: [], qty: 2 }])).status).toBe(201);
+  it('sin compra mínima: se puede pedir 1 sola pieza', async () => {
+    expect((await create([{ productId: 'clasica', sizeId: 'chico', toppingIds: [], qty: 1 }])).status).toBe(201);
   });
 
   it('no hay mínimo de Frésias por pedido: panes solos sí se aceptan', async () => {
