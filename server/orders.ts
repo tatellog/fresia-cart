@@ -71,13 +71,14 @@ export type OrderRow = {
 };
 
 /** Cotiza con el catálogo y la cobertura del servidor. Ignora cualquier importe del navegador. */
-export async function quoteOrder(db: DB, input: Pick<OrderInput, 'fulfillment' | 'address' | 'items'>, opts: { group?: boolean } = {}): Promise<Quote> {
+export async function quoteOrder(db: DB, input: Pick<OrderInput, 'fulfillment' | 'address' | 'items'>, opts: { group?: boolean; gift?: boolean } = {}): Promise<Quote> {
   const [products, toppings, cfg, rules] = await Promise.all([listProducts(db), listToppings(db), getDelivery(db), getRules(db)]);
   // En pedidos de equipo cada quien pide de a uno: el mínimo de piezas se revisa en el total.
   const priced = priceCart(input.items, products, toppings, rules, { ignoreMinQty: opts.group });
   const errors = priced.errors.map((e) => e.message);
   if (input.items.length === 0) errors.push('Tu carrito está vacío.');
-  else if (!priced.errors.length) {
+  // El mínimo de Frésias no aplica a pedidos de equipo, regalos ni pedidos con combo.
+  else if (!priced.errors.length && !opts.group && !opts.gift && !hasCombo(input.items, products)) {
     const min = minimumMessage(priced.fresias, rules);
     if (min) errors.push(min);
   }
@@ -109,6 +110,9 @@ export async function quoteOrder(db: DB, input: Pick<OrderInput, 'fulfillment' |
     errors,
   };
 }
+
+const hasCombo = (items: CartLineInput[], products: { id: string; combo: unknown }[]) =>
+  items.some((i) => products.find((p) => p.id === i.productId)?.combo);
 
 function requestHash(input: OrderInput): string {
   return createHash('sha256').update(JSON.stringify(input)).digest('hex');
@@ -174,7 +178,7 @@ export async function createOrder(ctx: Ctx, idempotencyKey: string, input: Order
     input = { ...input, address: { ...input.address, colonia: match.name } };
   }
 
-  const quote = await quoteOrder(db, input, { group: !!group });
+  const quote = await quoteOrder(db, input, { group: !!group, gift: !!gift });
   if (quote.errors.length) throw new HttpError(422, quote.errors[0], { errors: quote.errors });
   const cfg = await getDelivery(db);
   const cod = input.paymentMethod === 'contra_entrega';
