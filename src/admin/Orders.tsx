@@ -5,7 +5,7 @@ import { formatDate, money } from '../lib/format';
 import { LoadError, Spinner } from '../components/ui';
 import { ORDER_LABEL } from '../../shared/status';
 import type { AdminOrder } from '../../shared/types';
-import { DeskControls, PushSetup, announce, newOrdersText } from './Alerts';
+import { DeskControls, PushSetup, cancelChime, chime } from './Alerts';
 import { CollectPill } from './Collect';
 import { nextAction } from './StatusFlow';
 import { slotLabel } from '../../shared/schedule';
@@ -52,7 +52,7 @@ export default function Orders() {
         const added = incoming.filter((x) => !seen.current!.has(x.id));
         if (added.length) {
           setFresh((f) => [...added, ...f.filter((y) => !added.some((a) => a.id === y.id))]);
-          announce(newOrdersText(added.length));
+          chime();
         }
         incoming.forEach((x) => seen.current!.add(x.id));
       } else if (filter === 'activos') {
@@ -64,7 +64,7 @@ export default function Orders() {
         newly.forEach((c) => announced.add(c.id));
         sessionStorage.setItem('fo.admin.canceled', JSON.stringify([...announced]));
         setCanceled((cur) => [...newly, ...cur]);
-        announce(newly.length === 1 ? 'Se canceló un pedido. No lo prepares.' : `Se cancelaron ${newly.length} pedidos.`);
+        cancelChime();
       }
       document.title = s.nuevos ? `(${s.nuevos}) Nuevos · Frésia` : 'Panel · Frésia Office';
     } catch (e) {
@@ -78,7 +78,7 @@ export default function Orders() {
     let n = 0;
     const id = setInterval(() => {
       n += 1;
-      announce(`Recuerda: ${newOrdersText(fresh.length).charAt(0).toLowerCase()}${newOrdersText(fresh.length).slice(1)}`);
+      chime();
       if (n >= 5) clearInterval(id);
     }, 45_000);
     return () => clearInterval(id);
