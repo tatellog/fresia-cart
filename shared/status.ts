@@ -57,3 +57,6 @@ export function collectInfo(o: {
   }
   return { tone: 'pending', label: 'Pago en línea pendiente · no entregar', change: null };
 }
+
+/** El cliente puede cancelar mientras no se empiece a preparar. */
+export const CUSTOMER_CANCELABLE: OrderStatus[] = ['esperando_pago', 'cotizando_envio', 'recibido', 'confirmado'];

@@ -5,6 +5,7 @@ import { HttpError, onlinePaymentReady } from './context';
 import type { Ctx } from './context';
 import { getDelivery, getRules, getSchedule, listProducts, listToppings, nextOrderNumber } from './store';
 import { groupLinesForOrder } from './groups';
+import { CUSTOMER_CANCELABLE } from '../shared/status';
 import { PHOTO_RETENTION_DAYS } from '../shared/types';
 import { isOpenAt, isValidSlot, nextOpening } from '../shared/schedule';
 import { invoiceErrors, normalizeInvoice } from '../shared/invoice';
@@ -342,6 +343,30 @@ export async function setOrderStatus(ctx: Ctx, id: string, status: OrderStatus, 
     await addEvent(q, id, 'estado', status, actor);
     return (await q.one<OrderRow>('update office.orders set order_status = $2, updated_at = now() where id = $1 returning *', [id, status]))!;
   });
+}
+
+/** El cliente cancela desde la página de su pedido. Se revisa con el pedido bloqueado para no chocar con el panel. */
+export async function cancelByCustomer(ctx: Ctx, number: string, token: string): Promise<OrderRow> {
+  const found = await getOrderForCustomer(ctx.db, number, token);
+  const { row, changed } = await ctx.db.tx(async (q) => {
+    const cur = (await q.one<OrderRow>('select * from office.orders where id = $1 for update', [found.id]))!;
+    if (cur.order_status === 'cancelado') return { row: cur, changed: false };
+    if (!CUSTOMER_CANCELABLE.includes(cur.order_status)) {
+      throw new HttpError(409, 'Tu pedido ya se está preparando y no se puede cancelar.', { code: 'too_late' });
+    }
+    const paid = cur.payment_status === 'aprobado';
+    const refund = paid && cur.refund_status === 'no_aplica' ? 'pendiente' : cur.refund_status;
+    await q.query('delete from office.order_tracking where order_id = $1', [cur.id]);
+    await addEvent(q, cur.id, 'estado', paid ? 'Cancelado por el cliente · reembolso pendiente' : 'Cancelado por el cliente', 'cliente');
+    const updated = (await q.one<OrderRow>(
+      "update office.orders set order_status = 'cancelado', refund_status = $2, updated_at = now() where id = $1 returning *",
+      [cur.id, refund],
+    ))!;
+    return { row: updated, changed: true };
+  });
+  // Solo se avisa si el pedido ya le había llegado al negocio.
+  if (changed && found.order_status !== 'esperando_pago') ctx.notifier.notify(ctx, 'cancelado_cliente', row);
+  return row;
 }
 
 export async function setRefundStatus(ctx: Ctx, id: string, status: RefundStatus, actor: string): Promise<OrderRow> {

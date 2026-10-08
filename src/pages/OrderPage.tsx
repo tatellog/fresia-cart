@@ -10,7 +10,7 @@ import { OrderLines, Totals } from './parts';
 import { LiveTracking } from '../components/LiveTracking';
 import { ClubCardView } from '../components/ClubCard';
 import { slotLabel } from '../../shared/schedule';
-import { PAYMENT_LABEL, REFUND_LABEL } from '../../shared/status';
+import { CUSTOMER_CANCELABLE, PAYMENT_LABEL, REFUND_LABEL } from '../../shared/status';
 import type { OrderStatus, PublicOrder } from '../../shared/types';
 
 const FAST_POLL_MS = 3000;
@@ -236,6 +236,10 @@ export default function OrderPage() {
           </div>
         )}
 
+        {CUSTOMER_CANCELABLE.includes(order.orderStatus) && (
+          <CancelOrder number={order.number} token={token} paid={order.paymentStatus === 'aprobado'} onDone={setOrder} />
+        )}
+
         <p className="muted small">Guarda esta página para consultar el estado. Solo quien tenga este enlace puede verla.</p>
         {(order.orderStatus === 'entregado' || order.orderStatus === 'cancelado') && (
           <button type="button" className="btn primary block" onClick={repeat}>🔁 Repetir este pedido</button>
@@ -349,5 +353,42 @@ function Progress({ order }: { order: PublicOrder }) {
         })}
       </ol>
     </section>
+  );
+}
+
+/** Cancelar mientras no se empiece a preparar: pide confirmación en la misma página. */
+function CancelOrder({ number, token, paid, onDone }: { number: string; token: string; paid: boolean; onDone: (o: PublicOrder) => void }) {
+  const [asking, setAsking] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  async function cancel() {
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await api<{ order: PublicOrder }>(`/api/orders/${encodeURIComponent(number)}/cancel`, { body: { t: token } });
+      onDone(r.order);
+    } catch (e) {
+      setError((e as Error).message);
+      setAsking(false);
+    }
+    setBusy(false);
+  }
+  if (!asking) {
+    return (
+      <div className="stack" style={{ gap: 6 }}>
+        <button type="button" className="btn ghost block" onClick={() => setAsking(true)}>Cancelar pedido</button>
+        <p className="muted small" style={{ textAlign: 'center' }}>Puedes cancelar mientras no empecemos a prepararlo.</p>
+        {error && <p className="notice error" role="alert">{error}</p>}
+      </div>
+    );
+  }
+  return (
+    <div className="notice warn stack" role="alertdialog" aria-labelledby="cancel-q">
+      <p id="cancel-q"><strong>¿Cancelar el pedido {number}?</strong> {paid ? 'Te devolvemos tu pago por Mercado Pago.' : 'No se te cobra nada.'}</p>
+      <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+        <button type="button" className="btn primary small" onClick={cancel} disabled={busy}>{busy ? 'Cancelando…' : 'Sí, cancelar'}</button>
+        <button type="button" className="btn ghost small" onClick={() => setAsking(false)} disabled={busy}>No, mantenerlo</button>
+      </div>
+    </div>
   );
 }
