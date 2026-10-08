@@ -123,22 +123,64 @@ export function PushSetup() {
 // ── Sonido y pantalla encendida (laptop del local) ──────────────────────
 
 let audio: AudioContext | null = null;
+export const soundOn = () => audio?.state === 'running';
 
+/** Melodía suave tipo marimba (sol–si–re, ~1.5 s): se nota sin ser estridente. */
 export function chime() {
   if (!audio || audio.state !== 'running') return;
-  const t0 = audio.currentTime;
-  [0, 0.35, 0.7].forEach((d, i) => {
-    const o = audio!.createOscillator();
-    const g = audio!.createGain();
-    o.frequency.value = i === 2 ? 1175 : 880;
-    g.gain.setValueAtTime(0.0001, t0 + d);
-    g.gain.exponentialRampToValueAtTime(0.25, t0 + d + 0.02);
-    g.gain.exponentialRampToValueAtTime(0.0001, t0 + d + 0.3);
-    o.connect(g).connect(audio!.destination);
-    o.start(t0 + d);
-    o.stop(t0 + d + 0.32);
+  const ctx = audio;
+  const t0 = ctx.currentTime + 0.05;
+  [784, 988, 1175].forEach((f, i) => {
+    const at = t0 + i * 0.2;
+    // Fundamental + un armónico suave, con caída larga: suena a madera, no a alarma.
+    [[f, 0.22], [f * 4, 0.025]].forEach(([freq, peak]) => {
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = 'sine';
+      o.frequency.value = freq;
+      g.gain.setValueAtTime(0.0001, at);
+      g.gain.exponentialRampToValueAtTime(peak, at + 0.012);
+      g.gain.exponentialRampToValueAtTime(0.0001, at + 1.1);
+      o.connect(g).connect(ctx.destination);
+      o.start(at);
+      o.stop(at + 1.15);
+    });
   });
 }
+
+// Voces naturales primero (Paulina en Mac/iPhone, Google en Android/Chrome); se evitan las de juguete de macOS.
+const NOVELTY = /Eddy|Flo|Grandma|Grandpa|Reed|Rocko|Sandy|Shelley/;
+function spanishVoice(): SpeechSynthesisVoice | null {
+  const voices = (window.speechSynthesis?.getVoices() ?? []).filter((v) => !NOVELTY.test(v.name));
+  return (
+    voices.find((v) => /Paulina/.test(v.name)) ??
+    voices.find((v) => v.lang === 'es-MX') ??
+    voices.find((v) => v.lang === 'es-US') ??
+    voices.find((v) => v.lang.startsWith('es')) ??
+    null
+  );
+}
+
+/** Melodía y, al terminar, una voz tranquila que dice qué pasó. */
+export function announce(text: string) {
+  if (!soundOn()) return;
+  chime();
+  const synth = window.speechSynthesis;
+  if (!synth) return;
+  window.setTimeout(() => {
+    const u = new SpeechSynthesisUtterance(text);
+    const v = spanishVoice();
+    if (v) u.voice = v;
+    u.lang = v?.lang ?? 'es-MX';
+    u.rate = 0.95;
+    u.pitch = 1.05;
+    u.volume = 0.9;
+    synth.cancel();
+    synth.speak(u);
+  }, 1100);
+}
+
+export const newOrdersText = (n: number) => (n === 1 ? 'Tienes un pedido nuevo.' : `Tienes ${n} pedidos nuevos.`);
 
 type WakeLock = { release: () => Promise<void>; addEventListener: (e: string, f: () => void) => void };
 
@@ -178,7 +220,9 @@ export function DeskControls() {
     await audio.resume();
     setSound(true);
     save('fo.admin.sound', true);
-    chime();
+    // Algunos navegadores cargan las voces después: se piden ya para la primera vez.
+    window.speechSynthesis?.getVoices();
+    announce('Listo. Así te avisaré de cada pedido nuevo.');
   }
 
   async function toggleAwake() {

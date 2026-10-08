@@ -15,6 +15,8 @@ self.addEventListener('push', (event) => {
       tag: data.tag,
       renotify: true,
       requireInteraction: true,
+      // Android: vibración más larga, en tres pulsos (iOS usa el sonido del sistema).
+      vibrate: [400, 200, 400, 200, 800],
       icon: '/brand/icon-192.png',
       badge: '/brand/icon-192.png',
       data: { url: data.url },

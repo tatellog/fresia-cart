@@ -177,9 +177,9 @@ Recepción en oficinas: ${PENDING} (p. ej. quién recibe en recepción, tiempo d
     slug: 'cancelaciones',
     title: 'Cancelaciones y reembolsos',
     approved: false,
-    body: `Antes de la preparación: ${PENDING}.
+    body: `Antes de la preparación: puedes cancelar desde la página de tu pedido mientras no hayamos empezado a prepararlo. Si pagaste en línea, te devolvemos el pago.
 
-Después de iniciar la preparación: ${PENDING}.
+Después de iniciar la preparación: ya no se puede cancelar, porque cada pedido se prepara al momento.
 
 Reembolsos: se hacen al mismo medio de pago a través de Mercado Pago. Plazo: ${PENDING}.
 

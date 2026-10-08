@@ -13,13 +13,14 @@ import type { AdminOrder } from '../shared/types';
 import { collectInfo } from '../shared/status';
 import { slotLabel } from '../shared/schedule';
 
-export type NotifyKind = 'pedido_pagado' | 'pedido_contra_entrega' | 'cotizacion_envio' | 'revision';
+export type NotifyKind = 'pedido_pagado' | 'pedido_contra_entrega' | 'cotizacion_envio' | 'revision' | 'cancelado_cliente';
 
 const TITLES: Record<NotifyKind, string> = {
   pedido_pagado: 'Nuevo pedido pagado',
   pedido_contra_entrega: 'Nuevo pedido · paga al recibir',
   cotizacion_envio: 'Pedido esperando cotización de envío',
   revision: 'Pedido requiere revisión',
+  cancelado_cliente: 'El cliente canceló su pedido',
 };
 
 /**
@@ -44,6 +45,8 @@ export class Notifier {
   private async deliverAll(ctx: Ctx, kind: NotifyKind, order: OrderRow) {
     const full = await toAdmin(ctx.db, order);
     const adminUrl = `${ctx.config.publicUrl}/admin/pedidos/${order.id}`;
+    // Una cancelación solo avisa al panel y al celular: el WhatsApp es para pedidos nuevos.
+    if (kind === 'cancelado_cliente') return this.push(ctx, kind, full);
     await Promise.all([this.push(ctx, kind, full), this.whatsapp(ctx, kind, full, adminUrl), this.webhook(ctx, kind, full, adminUrl)]);
   }
 
@@ -199,6 +202,14 @@ export function buildPush(kind: NotifyKind, o: AdminOrder): PushPayload {
   const pay = when + lines.map((l) => l.trim()).join(' · ');
   const where = o.fulfillment === 'pickup' ? 'Recoge en Frésia' : 'A domicilio';
   const pieces = o.items.reduce((n, l) => n + l.qty * (l.choices?.length ?? 1), 0);
+  if (kind === 'cancelado_cliente') {
+    return {
+      title: `❌ ${o.customerName} canceló ${o.number}`,
+      body: o.refundStatus === 'pendiente' ? 'Ya estaba pagado: queda el reembolso pendiente.' : 'No lo prepares. No había cobro.',
+      url: `/admin/pedidos/${o.id}`,
+      tag: `pedido-${o.number}`,
+    };
+  }
   return {
     title: `🍓 ${TITLES[kind]} · ${o.number}`,
     body: `${pay} · ${where} · ${pieces} pieza${pieces === 1 ? '' : 's'} · ${o.customerName}`,

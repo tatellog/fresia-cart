@@ -14,7 +14,7 @@ import { DemoProvider } from './payments/demo';
 import { MercadoPagoProvider, verifyMercadoPagoSignature } from './payments/mercadopago';
 import { checkReturnedPayment, handlePaymentNotification, reconcile, startCheckout } from './payments/service';
 import {
-  createOrder, purgeOldDeliveryPhotos, setInvoiceStatus, getDeliveryPhoto, getOrderById, getOrderForCustomer, listOrders, markCollected, quoteOrder, saveCourierLocation, saveDeliveryPhoto, setOrderStatus, setRefundStatus, setShippingQuote, toAdmin, toPublic, trackingFor,
+  cancelByCustomer, createOrder, purgeOldDeliveryPhotos, setInvoiceStatus, getDeliveryPhoto, getOrderById, getOrderForCustomer, listOrders, markCollected, quoteOrder, saveCourierLocation, saveDeliveryPhoto, setOrderStatus, setRefundStatus, setShippingQuote, toAdmin, toPublic, trackingFor,
 } from './orders';
 import * as store from './store';
 import * as S from './schemas';
@@ -183,6 +183,12 @@ export async function createApp(config: Config, opts: { demoWebhookDelayMs?: num
     res.json({ club: await clubCardFor(ctx, order) });
   });
 
+  // El cliente cancela antes de que se empiece a preparar.
+  app.post('/api/orders/:number/cancel', rateLimit(10, 60_000), async (req, res) => {
+    const order = await cancelByCustomer(ctx, String(req.params.number), String(req.body?.t ?? ''));
+    res.json({ order: toPublic(order) });
+  });
+
   app.post('/api/orders/:number/checkout', rateLimit(20, 60_000), async (req, res) => {
     const order = await getOrderForCustomer(db, String(req.params.number), String(req.body?.t ?? ''));
     res.json(await startCheckout(ctx, order.id));
@@ -286,13 +292,18 @@ export async function createApp(config: Config, opts: { demoWebhookDelayMs?: num
     res.json({ orders: await Promise.all(rows.map((o) => toAdmin(db, o))) });
   });
   admin.get('/summary', async (_req, res) => {
+    // Cancelaciones del cliente de los últimos 30 min: el panel las anuncia una vez.
+    const canceled = await db.query<{ id: string; number: string; at: Date }>(
+      `select o.id, o.number, e.at from office.order_events e join office.orders o on o.id = e.order_id
+       where e.actor = 'cliente' and e.type = 'estado' and e.at > now() - interval '30 minutes' order by e.at desc limit 10`,
+    );
     const r = await db.one<{ nuevos: number; cotizar: number; revision: number }>(
       `select count(*) filter (where order_status = 'recibido')::int as nuevos,
               count(*) filter (where order_status = 'cotizando_envio')::int as cotizar,
               count(*) filter (where needs_review is not null or refund_status = 'pendiente')::int as revision
        from office.orders`,
     );
-    res.json(r);
+    res.json({ ...r, canceladosCliente: canceled.map((c) => ({ id: c.id, number: c.number, at: iso(c.at) })) });
   });
   const orderOr404 = async (id: string) => {
     const o = await getOrderById(db, id);

@@ -5,7 +5,7 @@ import { formatDate, money } from '../lib/format';
 import { LoadError, Spinner } from '../components/ui';
 import { ORDER_LABEL } from '../../shared/status';
 import type { AdminOrder } from '../../shared/types';
-import { DeskControls, PushSetup, chime } from './Alerts';
+import { DeskControls, PushSetup, announce, newOrdersText } from './Alerts';
 import { CollectPill } from './Collect';
 import { nextAction } from './StatusFlow';
 import { slotLabel } from '../../shared/schedule';
@@ -23,7 +23,9 @@ export default function Orders() {
   const [filter, setFilter] = useState<Filter>('activos');
   const [orders, setOrders] = useState<AdminOrder[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [summary, setSummary] = useState({ nuevos: 0, cotizar: 0, revision: 0 });
+  const [summary, setSummary] = useState<{ nuevos: number; cotizar: number; revision: number; canceladosCliente?: { id: string; number: string; at: string }[] }>({ nuevos: 0, cotizar: 0, revision: 0 });
+  // Cancelaciones del cliente ya anunciadas (sobrevive a cambiar de pantalla).
+  const [canceled, setCanceled] = useState<{ id: string; number: string }[]>([]);
   const location = useLocation();
   const [completed, setCompleted] = useState(() => (location.state as { completed?: { number: string; collected: number | null } } | null)?.completed ?? null);
   useEffect(() => {
@@ -50,17 +52,37 @@ export default function Orders() {
         const added = incoming.filter((x) => !seen.current!.has(x.id));
         if (added.length) {
           setFresh((f) => [...added, ...f.filter((y) => !added.some((a) => a.id === y.id))]);
-          chime();
+          announce(newOrdersText(added.length));
         }
         incoming.forEach((x) => seen.current!.add(x.id));
       } else if (filter === 'activos') {
         seen.current = new Set(incoming.map((x) => x.id));
+      }
+      const announced = new Set<string>(JSON.parse(sessionStorage.getItem('fo.admin.canceled') ?? '[]'));
+      const newly = (s.canceladosCliente ?? []).filter((c) => !announced.has(c.id));
+      if (newly.length) {
+        newly.forEach((c) => announced.add(c.id));
+        sessionStorage.setItem('fo.admin.canceled', JSON.stringify([...announced]));
+        setCanceled((cur) => [...newly, ...cur]);
+        announce(newly.length === 1 ? 'Se canceló un pedido. No lo prepares.' : `Se cancelaron ${newly.length} pedidos.`);
       }
       document.title = s.nuevos ? `(${s.nuevos}) Nuevos · Frésia` : 'Panel · Frésia Office';
     } catch (e) {
       setError((e as Error).message);
     }
   }, [filter]);
+
+  // Recordatorio suave cada 45 s mientras nadie atienda el aviso (máximo 5 veces).
+  useEffect(() => {
+    if (!fresh.length) return;
+    let n = 0;
+    const id = setInterval(() => {
+      n += 1;
+      announce(`Recuerda: ${newOrdersText(fresh.length).charAt(0).toLowerCase()}${newOrdersText(fresh.length).slice(1)}`);
+      if (n >= 5) clearInterval(id);
+    }, 45_000);
+    return () => clearInterval(id);
+  }, [fresh.length]);
 
   useEffect(() => {
     setOrders(null);
@@ -82,6 +104,14 @@ export default function Orders() {
             ))}
           </div>
           <button className="btn ghost small" onClick={() => setFresh([])}>Entendido</button>
+        </div>
+      )}
+      {canceled.length > 0 && (
+        <div className="notice error row between" role="alert">
+          <span>
+            <strong>❌ El cliente canceló {canceled.map((c) => c.number).join(', ')}</strong> · no lo prepares.
+          </span>
+          <button className="linkbtn" onClick={() => setCanceled([])}>Entendido</button>
         </div>
       )}
       {completed && (
