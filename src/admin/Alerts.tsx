@@ -123,64 +123,40 @@ export function PushSetup() {
 // ── Sonido y pantalla encendida (laptop del local) ──────────────────────
 
 let audio: AudioContext | null = null;
-export const soundOn = () => audio?.state === 'running';
 
-/** Melodía suave tipo marimba (sol–si–re, ~1.5 s): se nota sin ser estridente. */
-export function chime() {
-  if (!audio || audio.state !== 'running') return;
-  const ctx = audio;
-  const t0 = ctx.currentTime + 0.05;
-  [784, 988, 1175].forEach((f, i) => {
-    const at = t0 + i * 0.2;
-    // Fundamental + un armónico suave, con caída larga: suena a madera, no a alarma.
-    [[f, 0.22], [f * 4, 0.025]].forEach(([freq, peak]) => {
-      const o = ctx.createOscillator();
-      const g = ctx.createGain();
-      o.type = 'sine';
-      o.frequency.value = freq;
-      g.gain.setValueAtTime(0.0001, at);
-      g.gain.exponentialRampToValueAtTime(peak, at + 0.012);
-      g.gain.exponentialRampToValueAtTime(0.0001, at + 1.1);
-      o.connect(g).connect(ctx.destination);
-      o.start(at);
-      o.stop(at + 1.15);
-    });
+/** Una nota suave tipo marimba: fundamental + armónico tenue con caída larga (suena a madera, no a alarma). */
+function note(ctx: AudioContext, freq: number, at: number, length = 1.1, peak = 0.22) {
+  [[freq, peak], [freq * 4, peak / 9]].forEach(([f, p]) => {
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.type = 'sine';
+    o.frequency.value = f;
+    g.gain.setValueAtTime(0.0001, at);
+    g.gain.exponentialRampToValueAtTime(p, at + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, at + length);
+    o.connect(g).connect(ctx.destination);
+    o.start(at);
+    o.stop(at + length + 0.05);
   });
 }
 
-// Voces naturales primero (Paulina en Mac/iPhone, Google en Android/Chrome); se evitan las de juguete de macOS.
-const NOVELTY = /Eddy|Flo|Grandma|Grandpa|Reed|Rocko|Sandy|Shelley/;
-function spanishVoice(): SpeechSynthesisVoice | null {
-  const voices = (window.speechSynthesis?.getVoices() ?? []).filter((v) => !NOVELTY.test(v.name));
-  return (
-    voices.find((v) => /Paulina/.test(v.name)) ??
-    voices.find((v) => v.lang === 'es-MX') ??
-    voices.find((v) => v.lang === 'es-US') ??
-    voices.find((v) => v.lang.startsWith('es')) ??
-    null
+/** Pedido nuevo: dos frases ascendentes (~2.5 s), alegre y sin estridencia. */
+export function chime() {
+  if (!audio || audio.state !== 'running') return;
+  const t0 = audio.currentTime + 0.05;
+  // sol–si–re … si–re–sol (agudo, sostenido)
+  [[784, 0], [988, 0.18], [1175, 0.36], [988, 0.9], [1175, 1.08], [1568, 1.26]].forEach(([f, d], i, all) =>
+    note(audio!, f, t0 + d, i === all.length - 1 ? 1.4 : 0.9),
   );
 }
 
-/** Melodía y, al terminar, una voz tranquila que dice qué pasó. */
-export function announce(text: string) {
-  if (!soundOn()) return;
-  chime();
-  const synth = window.speechSynthesis;
-  if (!synth) return;
-  window.setTimeout(() => {
-    const u = new SpeechSynthesisUtterance(text);
-    const v = spanishVoice();
-    if (v) u.voice = v;
-    u.lang = v?.lang ?? 'es-MX';
-    u.rate = 0.95;
-    u.pitch = 1.05;
-    u.volume = 0.9;
-    synth.cancel();
-    synth.speak(u);
-  }, 1100);
+/** Pedido cancelado: dos notas descendentes, más graves, para distinguirlo sin mirar. */
+export function cancelChime() {
+  if (!audio || audio.state !== 'running') return;
+  const t0 = audio.currentTime + 0.05;
+  note(audio, 659, t0, 0.9, 0.2);
+  note(audio, 523, t0 + 0.3, 1.3, 0.2);
 }
-
-export const newOrdersText = (n: number) => (n === 1 ? 'Tienes un pedido nuevo.' : `Tienes ${n} pedidos nuevos.`);
 
 type WakeLock = { release: () => Promise<void>; addEventListener: (e: string, f: () => void) => void };
 
@@ -220,9 +196,7 @@ export function DeskControls() {
     await audio.resume();
     setSound(true);
     save('fo.admin.sound', true);
-    // Algunos navegadores cargan las voces después: se piden ya para la primera vez.
-    window.speechSynthesis?.getVoices();
-    announce('Listo. Así te avisaré de cada pedido nuevo.');
+    chime();
   }
 
   async function toggleAwake() {
