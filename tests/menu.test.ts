@@ -32,20 +32,41 @@ describe('menú en línea', () => {
 });
 
 describe('mínimos', () => {
-  it('sin compra mínima: se puede pedir 1 sola pieza', async () => {
-    expect((await create([{ productId: 'clasica', sizeId: 'chico', toppingIds: [], qty: 1 }])).status).toBe(201);
+  it('mínimo de 2 Frésias por pedido en total, sin mínimo por producto', async () => {
+    const one = await create([{ productId: 'clasica', sizeId: 'chico', toppingIds: [], qty: 1 }]);
+    expect(one.status).toBe(422);
+    expect(one.body.error).toMatch(/mínimo es de 2 Frésias. Te falta 1/);
+    // 1 Clásica + 1 Chocolate: 2 productos distintos de 1 pieza cada uno
+    const two = await create([
+      { productId: 'clasica', sizeId: 'chico', toppingIds: [], qty: 1 },
+      { productId: 'chocolate-sin-crema', sizeId: 'chico', toppingIds: [], qty: 1 },
+    ]);
+    expect(two.status).toBe(201);
+    expect(two.body.order.items.map((l: any) => l.qty)).toEqual([1, 1]);
   });
 
-  it('no hay mínimo de Frésias por pedido: panes solos sí se aceptan', async () => {
-    expect((await create([{ productId: 'pan-tradicional', sizeId: 'pieza', toppingIds: [], qty: 3 }])).status).toBe(201);
+  it('el pan y el waffle no cuentan como Frésias', async () => {
+    const r = await create([{ productId: 'pan-tradicional', sizeId: 'pieza', toppingIds: [], qty: 3 }]);
+    expect(r.status).toBe(422);
+  });
+
+  it('el Fresigrama no tiene mínimo: un regalo de 1 Frésia sí se acepta', async () => {
+    const r = await t.api('POST', '/api/orders', orderBody({
+      paymentMethod: 'contra_entrega',
+      items: [{ productId: 'clasica', sizeId: 'mediano', toppingIds: [], qty: 1 }],
+      gift: { to: 'Ana · Piso 7', note: '', anonymous: true },
+    }));
+    expect(r.status).toBe(201);
+    const q = await t.api('POST', '/api/quote', { fulfillment: 'pickup', address: null, items: [{ productId: 'clasica', sizeId: 'chico', toppingIds: [], qty: 1 }] });
+    expect(q.body.errors[0]).toMatch(/mínimo es de 2 Frésias/);
   });
 
   it('el panel puede cambiar el mínimo por producto o activar un mínimo de Frésias', async () => {
     await t.api('POST', '/api/admin/login', { password: 'secreto-de-prueba' });
     await t.api('PUT', '/api/admin/rules', { extraToppingPrice: 1800, minFresias: 0, minQtyPerItem: 1 });
     expect((await create([{ productId: 'clasica', sizeId: 'chico', toppingIds: [], qty: 1 }])).status).toBe(201);
-    await t.api('PUT', '/api/admin/rules', { extraToppingPrice: 1800, minFresias: 3, minQtyPerItem: 3 });
-    const r = await create([{ productId: 'pan-tradicional', sizeId: 'pieza', toppingIds: [], qty: 3 }]);
+    await t.api('PUT', '/api/admin/rules', { extraToppingPrice: 1800, minFresias: 3, minQtyPerItem: 1 });
+    const r = await create([{ productId: 'clasica', sizeId: 'chico', toppingIds: [], qty: 2 }]);
     expect(r.status).toBe(422);
     expect(r.body.error).toMatch(/mínimo es de 3 Frésias/);
   });

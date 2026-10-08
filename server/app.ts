@@ -107,7 +107,7 @@ export async function createApp(config: Config, opts: { demoWebhookDelayMs?: num
       const { lines } = await groupLinesForOrder(ctx, input.group.code, input.group.token);
       return res.json(await quoteOrder(db, { ...input, items: lines }, { group: true }));
     }
-    res.json(await quoteOrder(db, input));
+    res.json(await quoteOrder(db, input, { gift: !!input.gift }));
   });
 
   // ── Pedido de equipo ─────────────────────────────────────────────

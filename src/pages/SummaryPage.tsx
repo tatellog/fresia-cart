@@ -68,7 +68,7 @@ export default function SummaryPage() {
 
   const load = () => {
     setLoadError(null);
-    api<Quote>('/api/quote', { body: { fulfillment: form.fulfillment, address, items, group: group ? { code: group.code, token: group.token } : null } }).then(
+    api<Quote>('/api/quote', { body: { fulfillment: form.fulfillment, address, items, gift: isGift, group: group ? { code: group.code, token: group.token } : null } }).then(
       setQuote,
       (e: Error) => setLoadError(e.message),
     );
@@ -76,7 +76,7 @@ export default function SummaryPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     load();
-  }, [items]);
+  }, [items, isGift]);
 
   if (cart.lines.length === 0 && !group) return <Navigate to="/carrito" replace />;
   if (formInvalid) return <Navigate to="/entrega" replace />;

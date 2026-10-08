@@ -45,6 +45,8 @@ export const quoteSchema = z.object({
   // En pedidos de equipo los productos vienen del grupo (se ignoran estos).
   items: z.array(lineSchema).max(120),
   group: groupRefSchema.nullable().optional(),
+  /** Fresigrama: sin pedido mínimo. */
+  gift: z.boolean().optional(),
 });
 
 export const invoiceSchema = z.object({

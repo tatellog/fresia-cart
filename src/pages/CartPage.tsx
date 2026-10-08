@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useCart } from '../lib/cart';
 import { useMenu } from '../lib/menu';
@@ -6,11 +7,15 @@ import { DemoBanner, Spinner, Stepper, StickyAction, TopBar } from '../component
 import { minQtyFor, minimumMessage, priceCart } from '../../shared/pricing';
 import { DEFAULT_RULES_CLIENT } from '../lib/rules';
 import { LineDetails } from './parts';
+import { GIFT_KEY, emptyGift } from '../components/GiftFields';
+import { load as loadStored, save } from '../lib/storage';
+import { groupCheckout } from '../lib/groupState';
 
 export default function CartPage() {
   const cart = useCart();
   const { data } = useMenu();
   const navigate = useNavigate();
+  const [gift, setGift] = useState(() => loadStored(GIFT_KEY, emptyGift).on);
 
   if (cart.lines.length === 0) {
     return (
@@ -30,7 +35,14 @@ export default function CartPage() {
 
   const hasProblems = cart.problems.size > 0;
   const rules = data?.rules ?? DEFAULT_RULES_CLIENT;
-  const minMsg = data ? minimumMessage(cart.fresias, rules) : null;
+  // Fresigrama, pedido de equipo o pedido con combo: sin mínimo.
+  const hasCombo = cart.lines.some((l) => data?.products.find((p) => p.id === l.productId)?.combo);
+  const exempt = gift || !!groupCheckout() || hasCombo;
+  const minMsg = data && !exempt ? minimumMessage(cart.fresias, rules) : null;
+  const makeGift = () => {
+    save(GIFT_KEY, { ...loadStored(GIFT_KEY, emptyGift), on: true });
+    setGift(true);
+  };
 
   return (
     <>
@@ -93,16 +105,19 @@ export default function CartPage() {
           )}
         </div>
 
-        {data && rules.minFresias > 1 && (
-          <div className={`notice ${minMsg ? 'warn' : 'ok'}`} role="status">
-            {minMsg ? (
-              <>
-                <strong>{minMsg}</strong> Llevas {cart.fresias} de {rules.minFresias}. El pan de muerto y el waffle no cuentan.
-              </>
-            ) : (
-              <>Llevas {cart.fresias} Frésias: tu pedido cumple el mínimo.</>
-            )}
+        {data && rules.minFresias > 1 && minMsg && (
+          <div className="notice warn stack" role="status" style={{ gap: 8 }}>
+            <p>
+              <strong>{minMsg}</strong> Llevas {cart.fresias} de {rules.minFresias}. El pan de muerto y el waffle no cuentan.
+            </p>
+            <p className="small">
+              ¿Es un regalo?{' '}
+              <button type="button" className="linklike" onClick={makeGift}>Mándalo como Fresigrama</button>: los regalos no tienen mínimo.
+            </p>
           </div>
+        )}
+        {data && rules.minFresias > 1 && gift && cart.fresias < rules.minFresias && (
+          <p className="notice small" role="status">🎁 Es un Fresigrama: no tiene pedido mínimo. Al final escribes para quién es.</p>
         )}
 
         <Link to="/" className="btn secondary block">Seguir comprando</Link>
