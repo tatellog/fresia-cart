@@ -51,6 +51,8 @@ describe('mínimos', () => {
   });
 
   it('el Fresigrama no tiene mínimo: un regalo de 1 Frésia sí se acepta', async () => {
+    await t.api('POST', '/api/admin/login', { password: 'secreto-de-prueba' });
+    await t.api('PUT', '/api/admin/features', { fresigrama: true });
     const r = await t.api('POST', '/api/orders', orderBody({
       paymentMethod: 'contra_entrega',
       items: [{ productId: 'clasica', sizeId: 'mediano', toppingIds: [], qty: 1 }],

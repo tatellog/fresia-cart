@@ -7,6 +7,11 @@ let t: Awaited<ReturnType<typeof start>>;
 afterEach(async () => { await t?.close(); t = undefined as any; });
 
 const gift = { to: 'Ana · Piso 7, área de diseño', note: 'Gracias por cubrirme en la junta.', anonymous: true };
+/** Fresigrama está apagado por defecto: las pruebas lo encienden desde el panel. */
+const enable = async () => {
+  await t.api('POST', '/api/admin/login', { password: 'secreto-de-prueba' });
+  expect((await t.api('PUT', '/api/admin/features', { fresigrama: true })).status).toBe(200);
+};
 const adminOrder = async (number: string) => {
   await t.api('POST', '/api/admin/login', { password: 'secreto-de-prueba' });
   const id = (await t.api('GET', '/api/admin/orders?filter=todos')).body.orders.find((o: any) => o.number === number).id;
@@ -14,8 +19,17 @@ const adminOrder = async (number: string) => {
 };
 
 describe('Fresigrama (pedido de regalo)', () => {
+  it('apagado por defecto: la tienda no lo ofrece y no acepta regalos', async () => {
+    t = await start();
+    expect((await t.api('GET', '/api/menu')).body.features).toEqual({ fresigrama: false });
+    const r = await t.api('POST', '/api/orders', orderBody({ paymentMethod: 'contra_entrega', gift }));
+    expect(r.status).toBe(422);
+    expect(r.body.code).toBe('gift_off');
+  });
+
   it('se guarda con para quién, tarjeta y anónimo; el cliente lo ve en su pedido', async () => {
     t = await start();
+    await enable();
     const r = await t.api('POST', '/api/orders', orderBody({ paymentMethod: 'contra_entrega', gift }));
     expect(r.status).toBe(201);
     expect(r.body.order.gift).toEqual(gift);
@@ -25,6 +39,7 @@ describe('Fresigrama (pedido de regalo)', () => {
 
   it('aviso a la tienda: anónimo y cobrar primero a quien lo envía', async () => {
     t = await start();
+    await enable();
     const r = await t.api('POST', '/api/orders', orderBody({ paymentMethod: 'contra_entrega', gift }));
     const o = await adminOrder(r.body.number);
     const msg = buildWhatsApp('pedido_contra_entrega', o, 'http://x/admin', '5215500000000').text;
@@ -36,6 +51,7 @@ describe('Fresigrama (pedido de regalo)', () => {
 
   it('solo a domicilio, nunca en pedido de equipo, y exige para quién', async () => {
     t = await start();
+    await enable();
     const pickup = await t.api('POST', '/api/orders', orderBody({ fulfillment: 'pickup', address: null, paymentMethod: 'contra_entrega', gift }));
     expect(pickup.status).toBe(422);
     expect(pickup.body.code).toBe('gift');

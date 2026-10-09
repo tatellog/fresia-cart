@@ -15,7 +15,7 @@ export default function CartPage() {
   const cart = useCart();
   const { data } = useMenu();
   const navigate = useNavigate();
-  const [gift, setGift] = useState(() => loadStored(GIFT_KEY, emptyGift).on);
+  const [giftStored, setGift] = useState(() => loadStored(GIFT_KEY, emptyGift).on);
 
   if (cart.lines.length === 0) {
     return (
@@ -35,6 +35,8 @@ export default function CartPage() {
 
   const hasProblems = cart.problems.size > 0;
   const rules = data?.rules ?? DEFAULT_RULES_CLIENT;
+  const giftOn = !!data?.features?.fresigrama;
+  const gift = giftOn && giftStored;
   // Fresigrama, pedido de equipo o pedido con combo: sin mínimo.
   const hasCombo = cart.lines.some((l) => data?.products.find((p) => p.id === l.productId)?.combo);
   const exempt = gift || !!groupCheckout() || hasCombo;
@@ -110,10 +112,12 @@ export default function CartPage() {
             <p>
               <strong>{minMsg}</strong> Llevas {cart.fresias} de {rules.minFresias}. El pan de muerto y el waffle no cuentan.
             </p>
-            <p className="small">
-              ¿Es un regalo?{' '}
-              <button type="button" className="linklike" onClick={makeGift}>Mándalo como Fresigrama</button>: los regalos no tienen mínimo.
-            </p>
+            {giftOn && (
+              <p className="small">
+                ¿Es un regalo?{' '}
+                <button type="button" className="linklike" onClick={makeGift}>Mándalo como Fresigrama</button>: los regalos no tienen mínimo.
+              </p>
+            )}
           </div>
         )}
         {data && rules.minFresias > 1 && gift && cart.fresias < rules.minFresias && (

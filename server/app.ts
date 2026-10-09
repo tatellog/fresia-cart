@@ -61,8 +61,8 @@ export async function createApp(config: Config, opts: { demoWebhookDelayMs?: num
   app.get('/api/health', (_req, res) => res.json({ ok: true, payments: provider.name }));
 
   app.get('/api/menu', async (_req, res) => {
-    const [delivery, products, toppings, business, rules, schedule] = await Promise.all([
-      store.getDelivery(db), store.listProducts(db), store.listToppings(db), store.getBusiness(db), store.getRules(db), store.getSchedule(db),
+    const [delivery, products, toppings, business, rules, schedule, features] = await Promise.all([
+      store.getDelivery(db), store.listProducts(db), store.listToppings(db), store.getBusiness(db), store.getRules(db), store.getSchedule(db), store.getFeatures(db),
     ]);
     const { zones, ...rest } = delivery;
     const body: MenuResponse = {
@@ -73,6 +73,7 @@ export async function createApp(config: Config, opts: { demoWebhookDelayMs?: num
       business,
       delivery: { ...rest, onlinePayment: rest.onlinePayment && onlinePaymentReady(ctx), zoneNames: zones.filter((z) => z.active).map((z) => z.name) },
       paymentsMode: provider.name,
+      features,
     };
     res.json(body);
   });
@@ -81,7 +82,7 @@ export async function createApp(config: Config, opts: { demoWebhookDelayMs?: num
   app.get('/api/cron/daily', async (req, res) => {
     const got = String(req.headers.authorization ?? '').replace(/^Bearer\s+/i, '');
     if (!secretMatches(got, config.cronSecret)) throw new HttpError(401, 'No autorizado.');
-    const purged = await purgeOldDeliveryPhotos(db, ctx.now());
+    const purged = await purgeOldDeliveryPhotos(db);
     console.log(`[cron] latido ok · ${purged} foto(s) de entrega borradas`);
     res.json({ ok: true, purgedPhotos: purged });
   });
@@ -107,7 +108,8 @@ export async function createApp(config: Config, opts: { demoWebhookDelayMs?: num
       const { lines } = await groupLinesForOrder(ctx, input.group.code, input.group.token);
       return res.json(await quoteOrder(db, { ...input, items: lines }, { group: true }));
     }
-    res.json(await quoteOrder(db, input, { gift: !!input.gift }));
+    const gift = !!input.gift && (await store.getFeatures(db)).fresigrama;
+    res.json(await quoteOrder(db, input, { gift }));
   });
 
   // ── Pedido de equipo ─────────────────────────────────────────────
@@ -462,6 +464,13 @@ export async function createApp(config: Config, opts: { demoWebhookDelayMs?: num
     const svg = await QRCode.toString(`${config.publicUrl}/q/${slug}`, { type: 'svg', margin: 1, color: { dark: '#3E2A25', light: '#FFFFFF' } });
     res.setHeader('Content-Type', 'image/svg+xml');
     res.send(svg);
+  });
+
+  admin.get('/features', async (_req, res) => res.json(await store.getFeatures(db)));
+  admin.put('/features', async (req, res) => {
+    const f = S.featuresSchema.parse(req.body);
+    await store.setFeatures(db, f);
+    res.json(f);
   });
 
   admin.get('/delivery', async (_req, res) => res.json(await store.getDelivery(db)));

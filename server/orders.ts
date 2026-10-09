@@ -3,7 +3,7 @@ import { iso, isoOrNull } from './db';
 import type { DB } from './db';
 import { HttpError, onlinePaymentReady } from './context';
 import type { Ctx } from './context';
-import { getDelivery, getRules, getSchedule, listProducts, listToppings, nextOrderNumber } from './store';
+import { getDelivery, getFeatures, getRules, getSchedule, listProducts, listToppings, nextOrderNumber } from './store';
 import { groupLinesForOrder } from './groups';
 import { CUSTOMER_CANCELABLE } from '../shared/status';
 import { PHOTO_RETENTION_DAYS } from '../shared/types';
@@ -156,6 +156,7 @@ export async function createOrder(ctx: Ctx, idempotencyKey: string, input: Order
 
   // Fresigrama: solo a domicilio y no en pedidos de equipo.
   const gift = input.gift ? { to: input.gift.to.trim(), note: input.gift.note.trim(), anonymous: input.gift.anonymous } : null;
+  if (gift && !(await getFeatures(db)).fresigrama) throw new HttpError(422, 'Los regalos aún no están disponibles.', { code: 'gift_off' });
   if (gift && input.fulfillment !== 'delivery') throw new HttpError(422, 'Los regalos solo se envían a domicilio.', { code: 'gift' });
   if (gift && input.group) throw new HttpError(422, 'El pedido de equipo no puede ser un regalo.', { code: 'gift' });
 
@@ -483,10 +484,11 @@ function photoStillStored(at: Date | string | null): boolean {
 }
 
 /** Borra las fotos de entrega de más de 30 días. Devuelve cuántas borró. */
-export async function purgeOldDeliveryPhotos(db: DB, now: Date): Promise<number> {
+export async function purgeOldDeliveryPhotos(db: DB): Promise<number> {
+  // Con el reloj de la base: el mismo con el que se guardó created_at.
   const rows = await db.query<{ order_id: string }>(
-    'delete from office.delivery_photos where created_at < $1 returning order_id',
-    [new Date(now.getTime() - RETENTION_MS)],
+    `delete from office.delivery_photos where created_at < now() - make_interval(days => $1) returning order_id`,
+    [PHOTO_RETENTION_DAYS],
   );
   return rows.length;
 }
