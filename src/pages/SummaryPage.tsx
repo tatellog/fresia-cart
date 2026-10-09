@@ -56,7 +56,7 @@ export default function SummaryPage() {
   const setWantInvoice = (v: boolean) => { setWantInvoiceState(v); save('fo.invoice.on.v1', v); };
   const setInvoice = (v: InvoiceData) => { setInvoiceState(v); save('fo.invoice.v1', v); };
   // Fresigrama: regalo con tarjeta (solo a domicilio, no en pedido de equipo).
-  const giftAllowed = form.fulfillment === 'delivery' && !group;
+  const giftAllowed = !!data?.features?.fresigrama && form.fulfillment === 'delivery' && !group;
   const [gift, setGiftState] = useState<GiftInfo & { on: boolean }>(() => loadStored(GIFT_KEY, emptyGift));
   const setGift = (g: GiftInfo & { on: boolean }) => { setGiftState(g); save(GIFT_KEY, g); };
   const isGift = giftAllowed && gift.on;

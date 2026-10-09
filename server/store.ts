@@ -1,8 +1,8 @@
 import type { DB } from './db';
-import type { BusinessInfo, DeliveryConfig, LegalDoc, LegalSlug, MenuRules, Product, Topping } from '../shared/types';
+import type { BusinessInfo, DeliveryConfig, Features, LegalDoc, LegalSlug, MenuRules, Product, Topping } from '../shared/types';
 import { DEFAULT_SCHEDULE, scheduleText } from '../shared/schedule';
 import type { Schedule } from '../shared/schedule';
-import { DEFAULT_RULES, DEMO_BUSINESS, DEMO_DELIVERY, DEMO_PRODUCTS, DEMO_TOPPINGS, LEGAL_DRAFTS } from './seed';
+import { DEFAULT_FEATURES, DEFAULT_RULES, DEMO_BUSINESS, DEMO_DELIVERY, DEMO_PRODUCTS, DEMO_TOPPINGS, LEGAL_DRAFTS } from './seed';
 
 // ── Ajustes (clave → JSON) ──────────────────────────────────────────────
 
@@ -27,6 +27,8 @@ export async function setSchedule(db: DB, s: Schedule) {
   await setSetting(db, 'business', { ...b, hours: scheduleText(s) });
 }
 export const setBusiness = (db: DB, v: BusinessInfo) => setSetting(db, 'business', v);
+export const getFeatures = async (db: DB): Promise<Features> => ({ ...DEFAULT_FEATURES, ...(await getSetting<Partial<Features>>(db, 'features', {})) });
+export const setFeatures = (db: DB, v: Features) => setSetting(db, 'features', v);
 export const getRules = async (db: DB) => ({ ...DEFAULT_RULES, ...(await getSetting<Partial<MenuRules>>(db, 'rules', {})) });
 export const setRules = (db: DB, v: MenuRules) => setSetting(db, 'rules', v);
 export const getDelivery = async (db: DB): Promise<DeliveryConfig> => ({ ...DEMO_DELIVERY, ...(await getSetting<Partial<DeliveryConfig>>(db, 'delivery', {})) });

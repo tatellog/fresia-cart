@@ -41,7 +41,7 @@ export default function MenuPage() {
             </p>
           )}
           <Link to="/equipo/nuevo" className="btn secondary small">👥 Pedido de equipo</Link>
-          {data?.delivery.deliveryEnabled && !activeGroup() && <GiftCta />}
+          {data?.features?.fresigrama && data.delivery.deliveryEnabled && !activeGroup() && <GiftCta />}
           {data && !isOpenAt(new Date(), data.schedule) && (
             <p className="notice closed-banner small">
               Ahora estamos cerrados{nextOpening(new Date(), data.schedule) ? `; abrimos ${nextOpening(new Date(), data.schedule)}` : ''}{nextOpening(new Date(), data.schedule)?.endsWith('.') ? '' : '.'} Puedes programar tu pedido.

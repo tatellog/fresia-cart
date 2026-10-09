@@ -58,6 +58,8 @@ export const invoiceSchema = z.object({
   email: z.string().trim().email('Correo inválido.').max(120),
 });
 
+export const featuresSchema = z.object({ fresigrama: z.boolean() });
+
 export const giftSchema = z.object({
   to: text(80).min(2, 'Escribe para quién es el regalo.'),
   note: text(160).default(''),

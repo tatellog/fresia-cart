@@ -263,6 +263,12 @@ export type AdminOrder = PublicOrder & {
   events: { at: string; type: string; detail: string; actor: string }[];
 };
 
+/** Funciones que se encienden desde el panel (feature flags). */
+export type Features = {
+  /** Fresigrama: pedidos de regalo con tarjeta impresa. */
+  fresigrama: boolean;
+};
+
 export type MenuResponse = {
   products: Product[];
   toppings: Topping[];
@@ -271,6 +277,7 @@ export type MenuResponse = {
   business: BusinessInfo;
   delivery: Omit<DeliveryConfig, 'zones'> & { zoneNames: string[] };
   paymentsMode: 'demo' | 'mercadopago';
+  features: Features;
 };
 
 export type Quote = {

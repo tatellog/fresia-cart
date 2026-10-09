@@ -3,7 +3,7 @@ import { api } from '../lib/api';
 import { formatDate } from '../lib/format';
 import { LoadError, Spinner } from '../components/ui';
 import { MoneyInput, SaveBar, Toggle, splitList } from './fields';
-import type { BusinessInfo, CourierMode, DeliveryConfig, LegalDoc, Zone } from '../../shared/types';
+import type { BusinessInfo, CourierMode, DeliveryConfig, Features, LegalDoc, Zone } from '../../shared/types';
 import { deliveryEta, etaText } from '../../shared/coverage';
 import type { Schedule } from '../../shared/schedule';
 import { scheduleText } from '../../shared/schedule';
@@ -367,6 +367,7 @@ export function SystemSettings() {
         )}
       </section>
       <QrSources />
+      <FeatureFlags />
 
       <section className="card stack">
         <h2>Configuración</h2>
@@ -513,6 +514,37 @@ function TimesFields({ d, set }: { d: DeliveryConfig; set: (p: Partial<DeliveryC
       ) : (
         <p className="notice small">Sin tiempo de preparación: los clientes no ven ningún tiempo estimado.</p>
       )}
+    </section>
+  );
+}
+
+/** Funciones que se encienden cuando el negocio está listo para ellas. */
+function FeatureFlags() {
+  const [f, setF] = useState<Features | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  useEffect(() => void api<Features>('/api/admin/features').then(setF, () => setF(null)), []);
+  if (!f) return null;
+  const toggle = async (fresigrama: boolean) => {
+    setBusy(true);
+    setMsg(null);
+    try {
+      setF(await api<Features>('/api/admin/features', { method: 'PUT', body: { ...f, fresigrama } }));
+      setMsg(fresigrama ? 'Fresigrama encendido: ya aparece en la tienda.' : 'Fresigrama apagado: ya no aparece en la tienda.');
+    } catch (e) {
+      setMsg((e as Error).message);
+    }
+    setBusy(false);
+  };
+  return (
+    <section className="card stack">
+      <h2>Funciones</h2>
+      <Toggle checked={f.fresigrama} onChange={toggle} label="💌 Fresigrama (regalos con tarjeta impresa)" />
+      <p className="muted small">
+        Enciéndelo cuando tengas el material para imprimir las tarjetas (10 × 7 cm). Apagado, la tienda no ofrece regalos; los pedidos de regalo anteriores se siguen viendo en el panel.
+      </p>
+      {busy && <Spinner label="Guardando…" />}
+      {msg && <p className="small" role="status">{msg}</p>}
     </section>
   );
 }

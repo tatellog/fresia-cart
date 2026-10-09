@@ -1,4 +1,4 @@
-import type { BusinessInfo, DeliveryConfig, LegalDoc, LegalSlug, MenuRules, Product, Topping } from '../shared/types';
+import type { Features, BusinessInfo, DeliveryConfig, LegalDoc, LegalSlug, MenuRules, Product, Topping } from '../shared/types';
 
 // Menú en línea para oficinas (precios definidos por Frésia, oct 2026). Las reglas
 // de toppings son las de Frésia OS. La Frèsia Brûlée NO se incluye: solo se vende
@@ -87,6 +87,9 @@ export const DEMO_TOPPINGS: Topping[] = [
 
 // Mínimo del pedido: 2 Frésias en total (combos cuentan sus Frésias; pan y waffle no). Sin mínimo por producto.
 // No aplica a pedidos de equipo ni a Fresigramas.
+/** Fresigrama apagado hasta tener el material de la tarjeta (oct 2026). */
+export const DEFAULT_FEATURES: Features = { fresigrama: false };
+
 export const DEFAULT_RULES: MenuRules = { extraToppingPrice: MXN(18), minFresias: 2, minQtyPerItem: 1 };
 
 export const DEMO_BUSINESS: BusinessInfo = {
