@@ -203,8 +203,11 @@ export async function createApp(config: Config, opts: { demoWebhookDelayMs?: num
   });
 
   // Enlace permanente del QR del volante: siempre apunta al menú vigente.
-  app.get(['/q', '/q/:source'], async (req, res) => {
-    const source = String(req.params.source ?? 'volante').replace(/[^a-z0-9-]/gi, '').slice(0, 30) || 'volante';
+  // Stickers: /s?utm_source=sticker — el parámetro solo dice de dónde vino el cliente.
+  app.get(['/q', '/q/:source', '/s'], async (req, res) => {
+    const fallback = req.path === '/s' ? 'sticker' : 'volante';
+    const raw = req.params.source ?? (req.path === '/s' ? req.query.utm_source : undefined) ?? fallback;
+    const source = String(raw).toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 30) || fallback;
     await db.query('insert into office.qr_scans (day, source, count) values (current_date, $1, 1) on conflict (day, source) do update set count = office.qr_scans.count + 1', [source]);
     // El slug viaja en la URL para atribuir el pedido al edificio (la tienda lo guarda en el teléfono).
     res.redirect(302, source === 'volante' ? '/' : `/?src=${encodeURIComponent(source)}`);
