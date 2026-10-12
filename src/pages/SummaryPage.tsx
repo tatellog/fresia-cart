@@ -33,11 +33,6 @@ export default function SummaryPage() {
   const [method, setMethodState] = useState<PaymentMethod>(form.paymentMethod ?? 'online');
   const [cash, setCashState] = useState<number | 'exacto' | null>(form.cashTendered ?? null);
   const [cashOther, setCashOther] = useState('');
-  const [card, setCardState] = useState(form.payWithCard ?? false);
-  const setCard = (v: boolean) => {
-    setCardState(v);
-    setStoredForm((f) => ({ ...f, payWithCard: v }));
-  };
   const setCash = (c: number | 'exacto' | null) => {
     setCashState(c);
     setStoredForm((f) => ({ ...f, cashTendered: c }));
@@ -91,9 +86,7 @@ export default function SummaryPage() {
   const cod = data?.delivery.cashOnDelivery ?? false;
   const effective: PaymentMethod = !cod ? 'online' : !online ? 'contra_entrega' : method;
   const payLater = effective === 'contra_entrega';
-  const cardOk = !!data?.delivery.cardOnDelivery && form.fulfillment === 'delivery';
-  const withCard = payLater && cardOk && card;
-  const cashDelivery = payLater && form.fulfillment === 'delivery' && !manual && !withCard;
+  const cashDelivery = payLater && form.fulfillment === 'delivery' && !manual;
   const total = quote?.total ?? null;
   const cashValue = cash === 'exacto' ? total : cash;
   const cashInvalid = cashDelivery && (cashValue == null || (total != null && cashValue < total));
@@ -127,7 +120,6 @@ export default function SummaryPage() {
       fulfillment: form.fulfillment,
       paymentMethod: effective,
       cashTendered: cashDelivery ? cashValue : null,
-      payWithCard: withCard,
       address,
       notes: form.notes.trim(),
       items,
@@ -272,25 +264,14 @@ export default function SummaryPage() {
                     <input type="radio" name="pay" checked={effective === 'contra_entrega'} onChange={() => setMethod('contra_entrega')} />
                     <span className="mark" aria-hidden="true" />
                     <span className="grow">
-                      <strong>{form.fulfillment === 'pickup' ? 'Pagar al recoger' : cardOk ? 'Pagar al recibir' : 'Efectivo al recibir'}</strong>
+                      <strong>{form.fulfillment === 'pickup' ? 'Pagar al recoger' : 'Efectivo al recibir'}</strong>
                       <span className="muted small" style={{ display: 'block' }}>
-                        {form.fulfillment === 'pickup' ? 'Efectivo o tarjeta en Frésia.' : cardOk ? 'Efectivo o tarjeta: el repartidor lleva terminal.' : 'Pagas en efectivo al repartidor; no lleva terminal.'}
+                        {form.fulfillment === 'pickup' ? 'Efectivo o tarjeta en Frésia.' : 'Pagas en efectivo al repartidor; no lleva terminal.'}
                         {data?.delivery.cashOnDeliveryNote && ` ${data.delivery.cashOnDeliveryNote}`}
                       </span>
                     </span>
                   </label>
                 </div>
-              </fieldset>
-            )}
-
-            {payLater && cardOk && !manual && (
-              <fieldset>
-                <legend className="label" style={{ marginBottom: 10 }}>¿Cómo pagas al recibir?</legend>
-                <div className="tabs" role="group" aria-label="Cómo pagas al recibir">
-                  <button type="button" aria-pressed={!card} onClick={() => setCard(false)}>💵 Efectivo</button>
-                  <button type="button" aria-pressed={card} onClick={() => setCard(true)}>💳 Tarjeta</button>
-                </div>
-                {card && <p className="small muted" style={{ marginTop: 8 }}>El repartidor lleva terminal: crédito o débito.</p>}
               </fieldset>
             )}
 
@@ -348,7 +329,7 @@ export default function SummaryPage() {
               <div className="notice stack" style={{ gap: 6 }}>
                 <p>
                   <strong>
-                    {form.fulfillment === 'pickup' ? `Pagas ${quote.total != null ? money(quote.total) : ''} al recoger.` : `Pagas ${quote.total != null ? money(quote.total) : ''} ${withCard ? 'con tarjeta' : 'en efectivo'} al recibir.`}
+                    {form.fulfillment === 'pickup' ? `Pagas ${quote.total != null ? money(quote.total) : ''} al recoger.` : `Pagas ${quote.total != null ? money(quote.total) : ''} en efectivo al recibir.`}
                   </strong>{' '}
                   {isGift ? 'El repartidor te cobra a ti primero y después entrega el regalo.' : 'Tu pedido entra a la cocina en cuanto lo confirmes.'}
                 </p>

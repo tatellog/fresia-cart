@@ -75,8 +75,6 @@ export const orderSchema = quoteSchema.extend({
   scheduledFor: z.string().datetime().nullable().optional(),
   /** Efectivo: billete con el que paga, en centavos (null = exacto). */
   cashTendered: z.number().int().min(0).max(5_000_000).nullable().default(null),
-  /** Paga al recibir con tarjeta (terminal del repartidor). */
-  payWithCard: z.boolean().default(false),
   customer: z.object({ name: text(80).min(2, 'Escribe tu nombre.'), phone: phoneSchema }),
   notes: text(300).default(''),
 })
@@ -139,7 +137,6 @@ export const deliverySchema = z.object({
   pickupEnabled: z.boolean(),
   onlinePayment: z.boolean(),
   cashOnDelivery: z.boolean(),
-  cardOnDelivery: z.boolean().default(false),
   cashOnDeliveryNote: text(120),
   outOfZone: z.enum(['reject', 'manual']),
   example: z.boolean(),
