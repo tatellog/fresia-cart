@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { Suspense, lazy, useEffect, useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { useCart } from '../lib/cart';
 import { useMenu } from '../lib/menu';
@@ -11,6 +11,8 @@ import { groupCheckout } from '../lib/groupState';
 import { isPostalCode, normalizeText, prepText, quoteEtaText } from '../../shared/coverage';
 import { POSTAL_NOT_FOUND, usePostalCode } from '../lib/postal';
 import type { DeliveryQuote } from '../../shared/types';
+
+const LiveMap = lazy(() => import('../components/LiveMap'));
 
 type Errors = Partial<Record<'name' | 'phone' | 'street' | 'number' | 'colonia' | 'postalCode' | 'office', string>>;
 
@@ -234,6 +236,22 @@ export default function DeliveryPage() {
             <section className="card flat stack" aria-labelledby="pickup-title">
               <h2 id="pickup-title">Recoger en Frésia</h2>
               <p>{data?.business.address || 'Dirección pendiente de confirmar'}</p>
+              {data?.delivery.origin && (
+                <Suspense fallback={<div className="live-map compact"><Spinner label="Cargando mapa…" /></div>}>
+                  <LiveMap compact store={data.delivery.origin} courier={null} destination={null} trail={[]} label="Mapa con la ubicación de Frésia" />
+                </Suspense>
+              )}
+              {(data?.business.mapsUrl || data?.delivery.origin) && (
+                <a
+                  className="btn secondary small"
+                  style={{ alignSelf: 'flex-start' }}
+                  href={data.business.mapsUrl || `https://www.google.com/maps/search/?api=1&query=${data.delivery.origin!.lat},${data.delivery.origin!.lng}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  📍 Cómo llegar
+                </a>
+              )}
               <p className="muted small">
                 {data && prepText(data.delivery) ? `Tiempo de preparación: ${prepText(data.delivery)}. ` : ''}Te avisaremos cuando esté listo.
               </p>

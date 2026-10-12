@@ -829,6 +829,9 @@ legend {
   background: #f2f1ee;
   z-index: 0;
 }
+.live-map.compact {
+  height: 200px;
+}
 .map-store {
   display: grid;
   place-items: center;
