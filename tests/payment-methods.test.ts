@@ -56,48 +56,24 @@ describe('pagar al recibir', () => {
   });
 });
 
-describe('aviso por WhatsApp al negocio', () => {
-  it('pedido pagado al recibir: llega con productos, entrega, cliente y enlace al panel', async () => {
+describe('aviso al panel (push)', () => {
+  const push = (number: string) => t.ctx.notifier.pushOutbox.find((m) => m.title.includes(number));
+
+  it('pedido pagado al recibir: dice cuánto cobrar', async () => {
     const r = await t.api('POST', '/api/orders', orderBody({ paymentMethod: 'contra_entrega' }));
     await tick(50);
-    const msg = t.ctx.notifier.whatsappOutbox.find((m) => m.text.includes(r.body.number))!;
-    expect(msg.to).toBe('525582330124');
-    expect(msg.text).toContain('💵 COBRAR EN EFECTIVO $756\n   Monto con el que paga: no indicado'); // $726 + $30 de envío
-    expect(msg.text).toContain('*1) 3 × Frésia Clásica · Mediano 16 oz* — $414\n   Para: Ana\n   Toppings: nuez picada, coco rallado, granola artesanal');
-    expect(msg.text).toContain('*2) 3 × Waffle Frésia* — $312\n   Toppings: chocolate Turín');
-    expect(msg.text).toContain('🛵 *Entrega a domicilio*\n   Calle de ejemplo 123, Piso 4, oficina 402\n   Del Valle Norte, CP 03103\n   Ref: Recepción\n   📍 https://maps.google.com/?q=');
-    expect(msg.text).toContain('👤 Ana Prueba · 55 1234 5678');
-    expect(msg.text).toContain('/admin/pedidos/');
-    // Plantilla de Meta: 6 variables de una sola línea + id para el botón.
-    expect(msg.params).toHaveLength(6);
-    expect(msg.params.every((p) => !p.includes('\n'))).toBe(true);
-    expect(msg.buttonParam).toMatch(/^[0-9a-f-]{36}$/);
+    expect(push(r.body.number)!.body).toContain('💵 COBRAR EN EFECTIVO $756 · Monto con el que paga: no indicado'); // $726 + $30 de envío
+    expect(push(r.body.number)!.url).toMatch(/^\/admin\/pedidos\//);
   });
 
   it('pedido pagado en línea: avisa cuando el pago se confirma, no antes', async () => {
     const c = await t.api('POST', '/api/orders', orderBody());
     await tick(50);
-    expect(t.ctx.notifier.whatsappOutbox.some((m) => m.text.includes(c.body.number))).toBe(false);
+    expect(push(c.body.number)).toBeUndefined();
     const co = await t.api('POST', `/api/orders/${c.body.number}/checkout`, { t: c.body.token });
     await t.api('POST', `/api/demo/preferences/${co.body.checkoutUrl.split('/').pop()}/pay`, { outcome: 'approved' });
     await tick(80);
-    const msg = t.ctx.notifier.whatsappOutbox.find((m) => m.text.includes(c.body.number))!;
-    expect(msg.text).toContain('✅ PAGADO en línea: $');
-  });
-
-  it('los combos muestran qué lleva cada pieza', async () => {
-    const pick = (slotId: string, productId: string, sizeId: string, n: number, toppingIds: string[] = []) => Array.from({ length: n }, () => ({ slotId, productId, sizeId, toppingIds }));
-    const r = await t.api('POST', '/api/orders', orderBody({
-      paymentMethod: 'contra_entrega', fulfillment: 'pickup', address: null,
-      items: [{ productId: 'dulce-tradicion', sizeId: 'combo', toppingIds: [], choices: [...pick('panes', 'pan-relleno', 'pieza', 3, ['cajeta']), ...pick('panes', 'pan-relleno', 'pieza', 2)], qty: 1, forWhom: 'Equipo' }],
-    }));
-    await tick(50);
-    const msg = t.ctx.notifier.whatsappOutbox.find((m) => m.text.includes(r.body.number))!;
-    expect(msg.text).toContain('💵 COBRAR AL RECOGER $500\n   Efectivo o terminal en el local');
-    expect(msg.text).toContain('🏪 *Recoge en Frésia*');
-    expect(msg.text).toContain('*1) Combo Dulce Tradición* — $500\n   Para: Equipo\n   • 3 Pan relleno Frésia: cajeta\n   • 2 Pan relleno Frésia');
-    expect(msg.text).not.toContain('Pieza');
-    expect(msg.text).not.toContain('📍'); // recoge en tienda: sin ubicación
+    expect(push(c.body.number)!.body).toContain('✅ PAGADO en línea: $');
   });
 });
 
@@ -107,14 +83,14 @@ describe('efectivo al recibir: ¿cobrar o ya está pagado?', () => {
     expect(r.status).toBe(201);
     expect(r.body.order.cashTendered).toBe(80000);
     await tick(50);
-    const msg = t.ctx.notifier.whatsappOutbox.find((m) => m.text.includes(r.body.number))!;
-    expect(msg.text).toContain('💵 COBRAR EN EFECTIVO $756\n   Paga con $800 → llevar $44 de cambio');
+    const msg = t.ctx.notifier.pushOutbox.find((m) => m.title.includes(r.body.number))!;
+    expect(msg.body).toContain('💵 COBRAR EN EFECTIVO $756 · Paga con $800 → llevar $44 de cambio');
   });
 
   it('monto exacto', async () => {
     const r = await t.api('POST', '/api/orders', orderBody({ paymentMethod: 'contra_entrega', cashTendered: 75600 }));
     await tick(50);
-    expect(t.ctx.notifier.whatsappOutbox.find((m) => m.text.includes(r.body.number))!.text).toContain('Paga con el monto exacto');
+    expect(t.ctx.notifier.pushOutbox.find((m) => m.title.includes(r.body.number))!.body).toContain('Paga con el monto exacto');
   });
 
   it('no acepta un billete menor al total', async () => {

@@ -19,7 +19,6 @@ import {
 import * as store from './store';
 import * as S from './schemas';
 import { clearSession, isAdmin, passwordMatches, secretMatches, rateLimit, requireAdmin, setSession } from './auth';
-import { whatsappConfigured } from './whatsapp';
 import { addGroupItem, createGroup, groupLinesForOrder, groupView, removeGroupItem } from './groups';
 import { background, sleep } from './background';
 import { clubCardFor, stampClub } from './club';
@@ -511,7 +510,6 @@ export async function createApp(config: Config, opts: { demoWebhookDelayMs?: num
       onlinePaymentReady: onlinePaymentReady(ctx),
       webhookSecret: Boolean(config.mpWebhookSecret),
       notifyWebhook: Boolean(config.notifyWebhookUrl),
-      whatsapp: whatsappConfigured(config) ? config.whatsappProvider : '',
       publicUrl: config.publicUrl,
       httpsPublicUrl: config.publicUrl.startsWith('https://'),
       database: config.databaseUrl ? 'postgres' : 'pglite',

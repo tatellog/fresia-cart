@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { orderBody, start } from './helpers';
-import { buildPush, buildWhatsApp } from '../server/notify';
+import { buildPush } from '../server/notify';
 import { hourPhrase } from '../shared/schedule';
 
 let t: Awaited<ReturnType<typeof start>>;
@@ -37,15 +37,12 @@ describe('Fresigrama (pedido de regalo)', () => {
     expect(o.body.order.gift).toEqual(gift);
   });
 
-  it('aviso a la tienda: anónimo y cobrar primero a quien lo envía', async () => {
+  it('aviso a la tienda: el regalo se ve en el panel y en la notificación', async () => {
     t = await start();
     await enable();
     const r = await t.api('POST', '/api/orders', orderBody({ paymentMethod: 'contra_entrega', gift }));
     const o = await adminOrder(r.body.number);
-    const msg = buildWhatsApp('pedido_contra_entrega', o, 'http://x/admin', '5215500000000').text;
-    expect(msg).toContain('🎁 *FRESIGRAMA* para Ana · Piso 7, área de diseño · *ANÓNIMO: no digas quién lo manda*');
-    expect(msg).toContain('Tarjeta: «Gracias por cubrirme en la junta.»');
-    expect(msg).toContain('Cobra a Ana Prueba (quien lo envía) antes de entregar');
+    expect(o.gift).toEqual(gift);
     expect(buildPush('pedido_contra_entrega', o).body.startsWith('🎁 ')).toBe(true);
   });
 

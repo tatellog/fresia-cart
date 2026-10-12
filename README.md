@@ -32,7 +32,7 @@ El repartidor ve en el panel el punto GPS del cliente para compararlo con la dir
 ### Datos del negocio
 
 - **Horario:** lunes a jueves 12:00–20:30 · viernes y sábado 12:00–20:00 · domingo cerrado.
-- **WhatsApp para confirmar pedidos:** +52 55 8233 0124 (temporal; se cambia en *Panel → Negocio*).
+- **WhatsApp para confirmar pedidos:** +52 56 4305 7652 (se cambia en *Panel → Negocio*).
 
 ### Pago
 
@@ -41,41 +41,10 @@ El cliente elige en el resumen:
   (Apple Pay y Google Pay no aparecen documentados para Checkout Pro en México; no se anuncian.)
 - **Pagar al recibir / al recoger:** el pedido entra directo a la cocina; en el panel se marca «cobrado» al entregar.
 
-### Aviso a tu WhatsApp
+### Avisos de pedidos
 
-Cada pedido pagado en línea (al confirmarse el pago), cada pedido «pagar al recibir» y cada pedido que necesita
-cotización de envío se envía al WhatsApp del negocio (o a `WHATSAPP_NOTIFY_TO`) con productos, toppings, para quién,
-entrega, cliente y enlace al panel. El servidor lo envía aunque el cliente cierre la página.
-
-Configura **una** opción en `.env`:
-- **Meta WhatsApp Cloud API (oficial):** `WHATSAPP_PROVIDER=meta`, `META_WHATSAPP_TOKEN`, `META_WHATSAPP_PHONE_NUMBER_ID`,
-  `META_WHATSAPP_TEMPLATE=pedido_fresia`. Si el número que recibe le escribió al número del negocio en las últimas 24 h, llega el
-  mensaje completo tipo comanda; si no, llega la plantilla (Meta no permite saltos de línea en sus variables, así que los productos
-  van en un renglón y el botón abre el detalle).
-
-**Plantilla `pedido_fresia`** (Meta → Plantillas de mensajes → Crear): categoría **Utilidad**, idioma **Español (MEX)**.
-
-Cuerpo:
-```
-🍓 *Nuevo pedido {{1}}*
-
-💵 {{2}}
-🛵 {{3}}
-👤 {{4}}
-
-🧾 *Productos:* {{5}}
-
-📝 {{6}}
-
-Toca «Ver pedido» para el detalle completo.
-```
-Botón: **Visitar sitio web** · texto «Ver pedido» · URL **dinámica** `https://fresia-office.vercel.app/admin/pedidos/{{1}}`.
-Si se crea sin botón, pon `META_WHATSAPP_TEMPLATE_BUTTON=0`.
-
-- **CallMeBot (rápida, gratuita):** `WHATSAPP_PROVIDER=callmebot`, `CALLMEBOT_APIKEY`. Se activa desde tu WhatsApp siguiendo
-  https://www.callmebot.com/blog/free-api-whatsapp-messages/. Es un servicio de terceros: el texto del aviso pasa por sus servidores.
-
-Sin configurar, el pedido igual llega al panel y su historial dice «WhatsApp no configurado».
+Todo se atiende en el panel (`/admin`): alarma con sonido, notificación push al celular o laptop y aviso visible.
+El servidor avisa aunque el cliente cierre la página. No se envía nada por WhatsApp.
 
 ### Reglas del menú
 
@@ -147,7 +116,7 @@ Panel: `/admin` (contraseña = `ADMIN_PASSWORD`).
   Las demás ramas no se despliegan (`ignoreCommand` en `vercel.json`) porque no tienen las credenciales de producción.
   Despliegue manual de emergencia: `vercel deploy --prod`.
 - Variables (Vercel → Settings → Environment Variables): `DATABASE_URL` (rol limitado), `ADMIN_PASSWORD`, `SESSION_SECRET`,
-  `WHATSAPP_PROVIDER` y `META_WHATSAPP_*`. La contraseña del panel de producción está en tu `.env` local como `ADMIN_PASSWORD_PRODUCCION`.
+  `VAPID_*`, `CLUB_*` y `CRON_SECRET`. La contraseña del panel de producción está en tu `.env` local como `ADMIN_PASSWORD_PRODUCCION`.
 - El servidor se empaqueta en `build/server.mjs` (`npm run build:server`) y corre como función (`api/index.mjs`); los estáticos van por la CDN.
 
 ## Supabase

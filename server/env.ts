@@ -21,17 +21,6 @@ export type Config = {
   mpAccessToken: string;
   mpWebhookSecret: string;
   notifyWebhookUrl: string;
-  /** Aviso de pedidos a tu WhatsApp: '', 'meta' o 'callmebot'. */
-  whatsappProvider: '' | 'meta' | 'callmebot';
-  /** Número que recibe los avisos; si está vacío se usa el WhatsApp del negocio (panel). */
-  whatsappNotifyTo: string;
-  callmebotApiKey: string;
-  metaWhatsappToken: string;
-  metaWhatsappPhoneNumberId: string;
-  metaWhatsappTemplate: string;
-  metaWhatsappTemplateLang: string;
-  /** La plantilla tiene botón de URL dinámica (…/admin/pedidos/{{1}}). */
-  metaWhatsappTemplateButton: boolean;
   /** Web Push (notificaciones del panel). Genera con: npx web-push generate-vapid-keys */
   vapidPublicKey: string;
   vapidPrivateKey: string;
@@ -60,14 +49,6 @@ export function loadConfig(overrides: Partial<Config> = {}): Config {
     mpAccessToken: process.env.MP_ACCESS_TOKEN || '',
     mpWebhookSecret: process.env.MP_WEBHOOK_SECRET || '',
     notifyWebhookUrl: process.env.NOTIFY_WEBHOOK_URL || '',
-    whatsappProvider: (['meta', 'callmebot'].includes(process.env.WHATSAPP_PROVIDER ?? '') ? process.env.WHATSAPP_PROVIDER : '') as Config['whatsappProvider'],
-    whatsappNotifyTo: process.env.WHATSAPP_NOTIFY_TO || '',
-    callmebotApiKey: process.env.CALLMEBOT_APIKEY || '',
-    metaWhatsappToken: process.env.META_WHATSAPP_TOKEN || '',
-    metaWhatsappPhoneNumberId: process.env.META_WHATSAPP_PHONE_NUMBER_ID || '',
-    metaWhatsappTemplate: process.env.META_WHATSAPP_TEMPLATE || '',
-    metaWhatsappTemplateLang: process.env.META_WHATSAPP_TEMPLATE_LANG || 'es_MX',
-    metaWhatsappTemplateButton: process.env.META_WHATSAPP_TEMPLATE_BUTTON !== '0',
     vapidPublicKey: process.env.VAPID_PUBLIC_KEY || '',
     vapidPrivateKey: process.env.VAPID_PRIVATE_KEY || '',
     clubUrl: (process.env.CLUB_URL || '').replace(/\/$/, ''),
