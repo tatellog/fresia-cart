@@ -22,7 +22,6 @@ export type OrderInput = {
   fulfillment: Fulfillment;
   paymentMethod: PaymentMethod;
   cashTendered: number | null;
-  payWithCard?: boolean;
   address: Address | null;
   notes: string;
   items: CartLineInput[];
@@ -57,7 +56,6 @@ export type OrderRow = {
   payment_method: PaymentMethod;
   payment_status: PaymentStatus;
   cash_tendered: number | null;
-  pay_with_card: boolean;
   delivery_photo_at: Date | string | null;
   source: string | null;
   invoice: InvoiceData | null;
@@ -188,9 +186,7 @@ export async function createOrder(ctx: Ctx, idempotencyKey: string, input: Order
   const cod = input.paymentMethod === 'contra_entrega';
   if (cod ? !cfg.cashOnDelivery : !cfg.onlinePayment || !onlinePaymentReady(ctx)) throw new HttpError(422, 'Ese método de pago no está disponible.');
 
-  const payWithCard = cod && input.fulfillment === 'delivery' && !!input.payWithCard;
-  if (payWithCard && !cfg.cardOnDelivery) throw new HttpError(422, 'Hoy no podemos cobrar con tarjeta al recibir. Elige efectivo o paga en línea.');
-  const cashTendered = cod && input.fulfillment === 'delivery' && !payWithCard ? input.cashTendered : null;
+  const cashTendered = cod && input.fulfillment === 'delivery' ? input.cashTendered : null;
   if (cashTendered != null && quote.total != null && cashTendered < quote.total) {
     throw new HttpError(422, 'El monto con el que pagas debe ser mayor o igual al total.');
   }
@@ -204,9 +200,9 @@ export async function createOrder(ctx: Ctx, idempotencyKey: string, input: Order
     const row = await q.one<OrderRow>(
       `insert into office.orders (id, number, access_token, idempotency_key, request_hash, customer_name, customer_phone,
          fulfillment, address, notes, items, subtotal, shipping_fee, total, delivery_quote, payment_method, payment_status, order_status, demo, cash_tendered,
-         source, invoice, invoice_status, scheduled_for, group_name, gift, pay_with_card)
+         source, invoice, invoice_status, scheduled_for, group_name, gift)
        values ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11::jsonb, $12, $13, $14, $15::jsonb, $18, $19, $16, $17, $20,
-         $21, $22::jsonb, $23, $24, $25, $26::jsonb, $27)
+         $21, $22::jsonb, $23, $24, $25, $26::jsonb)
        on conflict (idempotency_key) do nothing
        returning *`,
       [
@@ -215,7 +211,6 @@ export async function createOrder(ctx: Ctx, idempotencyKey: string, input: Order
         quote.subtotal, quote.shippingFee, quote.total, JSON.stringify(quote.delivery), orderStatus,
         ctx.provider.name === 'demo', input.paymentMethod, cod ? 'por_cobrar' : 'sin_pagar', cashTendered,
         source, invoice ? JSON.stringify(invoice) : null, invoice ? 'solicitada' : 'no_aplica', input.scheduledFor ?? null, group?.name ?? null, gift ? JSON.stringify(gift) : null,
-        payWithCard,
       ],
     );
     if (row && group) {
@@ -282,7 +277,6 @@ export function toPublic(row: OrderRow): PublicOrder {
     paymentMethod: row.payment_method,
     paymentStatus: row.payment_status,
     cashTendered: row.cash_tendered ?? null,
-    payWithCard: !!row.pay_with_card,
     deliveryPhotoAt: photoStillStored(row.delivery_photo_at) ? isoOrNull(row.delivery_photo_at) : null,
     scheduledFor: isoOrNull(row.scheduled_for),
     invoice: row.invoice ?? null,

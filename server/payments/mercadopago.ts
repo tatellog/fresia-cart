@@ -32,7 +32,8 @@ export class MercadoPagoProvider implements PaymentProvider {
       external_reference: input.orderId,
       metadata: { order_number: input.orderNumber },
       back_urls: { success: input.returnUrl, failure: input.returnUrl, pending: input.returnUrl },
-      auto_return: 'approved',
+      // Mercado Pago rechaza auto_return si la URL de regreso no es https (p. ej. en local).
+      ...(input.returnUrl.startsWith('https://') ? { auto_return: 'approved' } : {}),
       ...(input.notificationUrl ? { notification_url: input.notificationUrl } : {}),
       expires: true,
       expiration_date_to: input.expiresAt.toISOString(),

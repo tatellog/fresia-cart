@@ -114,12 +114,10 @@ export function paymentLines(o: AdminOrder): string[] {
   const extra =
     o.fulfillment === 'pickup'
       ? 'Efectivo o terminal en el local'
-      : o.payWithCard
-        ? 'Lleva la terminal'
-        : o.cashTendered == null
-          ? 'Monto con el que paga: no indicado'
-          : c.change
-            ? `Paga con ${money(o.cashTendered)} → llevar ${money(c.change)} de cambio`
-            : 'Paga con el monto exacto';
-  return [`${o.payWithCard ? '💳' : '💵'} ${c.label}`, `   ${extra}`];
+      : o.cashTendered == null
+        ? 'Monto con el que paga: no indicado'
+        : c.change
+          ? `Paga con ${money(o.cashTendered)} → llevar ${money(c.change)} de cambio`
+          : 'Paga con el monto exacto';
+  return [`💵 ${c.label}`, `   ${extra}`];
 }
