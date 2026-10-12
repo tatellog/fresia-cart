@@ -29,8 +29,8 @@ const lineOf = (pts: [number, number][]) => ({
 
 /** Mapa del seguimiento: Frésia, el repartidor (se desliza entre actualizaciones), su recorrido y el destino. */
 export default function LiveMap({
-  store, courier, destination, trail, mode = 'walk',
-}: { store: LatLng | null; courier: LatLng | null; destination: LatLng | null; trail: [number, number][]; mode?: 'walk' | 'bike' | 'moto' }) {
+  store, courier, destination, trail, mode = 'walk', compact = false, label = 'Mapa con la ubicación del repartidor',
+}: { store: LatLng | null; courier: LatLng | null; destination: LatLng | null; trail: [number, number][]; mode?: 'walk' | 'bike' | 'moto'; compact?: boolean; label?: string }) {
   const box = useRef<HTMLDivElement>(null);
   const map = useRef<MlMap | null>(null);
   const ready = useRef(false);
@@ -129,7 +129,7 @@ export default function LiveMap({
     if (!fitted.current && pts.length) {
       const b = new maplibregl.LngLatBounds();
       pts.forEach((p) => b.extend([p.lng, p.lat]));
-      m.fitBounds(b, { padding: 56, maxZoom: 17.5, duration: 0 });
+      m.fitBounds(b, { padding: 56, maxZoom: compact ? 15.5 : 17.5, duration: 0 });
       fitted.current = true;
     } else if (c && !m.getBounds().contains([c.lng, c.lat])) {
       m.easeTo({ center: [c.lng, c.lat], duration: 800 });
@@ -140,5 +140,5 @@ export default function LiveMap({
     update();
   }, [store, courier, destination, trail, mode]);
 
-  return <div ref={box} className="live-map" role="img" aria-label="Mapa con la ubicación del repartidor" />;
+  return <div ref={box} className={compact ? 'live-map compact' : 'live-map'} role="img" aria-label={label} />;
 }

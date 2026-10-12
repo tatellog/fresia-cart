@@ -84,6 +84,9 @@ export function DeliverySettings() {
         <Toggle checked={d.onlinePayment} onChange={(onlinePayment) => set({ onlinePayment })} label="Pagar en línea (Mercado Pago)" />
         <OnlineNote />
         <Toggle checked={d.cashOnDelivery} onChange={(cashOnDelivery) => set({ cashOnDelivery })} label="Pagar al recibir / al recoger" />
+        {d.cashOnDelivery && (
+          <Toggle checked={d.cardOnDelivery} onChange={(cardOnDelivery) => set({ cardOnDelivery })} label="💳 Tarjeta al recibir (el repartidor lleva la terminal)" />
+        )}
         <div className="field">
           <label htmlFor="codnote">Detalle para «pagar al recibir» <span className="muted small">(opcional)</span></label>
           <input id="codnote" className="input sm" value={d.cashOnDeliveryNote} maxLength={120} placeholder="Ej. Efectivo o tarjeta al recibir" onChange={(e) => set({ cashOnDeliveryNote: e.target.value })} />
@@ -327,7 +330,7 @@ function LegalEditor({ doc, onChange }: { doc: LegalDoc; onChange: (d: LegalDoc)
 
 // ── QR y estado del sistema ──────────────────────────────────────────
 
-type SystemRes = { payments: string; onlinePaymentReady: boolean; webhookSecret: boolean; notifyWebhook: boolean; whatsapp: string; publicUrl: string; httpsPublicUrl: boolean; lastWebhooks: { at: string; verified: number; result: string }[] };
+type SystemRes = { payments: string; onlinePaymentReady: boolean; webhookSecret: boolean; notifyWebhook: boolean; publicUrl: string; httpsPublicUrl: boolean; lastWebhooks: { at: string; verified: number; result: string }[] };
 type QrRes = { url: string; svg: string; scans: { day: string; source: string; count: number }[] };
 
 export function SystemSettings() {
@@ -378,8 +381,6 @@ export function SystemSettings() {
           <dd>{check(sys.webhookSecret, 'Configurada', 'Falta MP_WEBHOOK_SECRET')}</dd>
           <dt>URL pública</dt>
           <dd>{check(sys.httpsPublicUrl, sys.publicUrl, `${sys.publicUrl} (sin https: Mercado Pago no podrá notificar)`)}</dd>
-          <dt>Aviso por WhatsApp</dt>
-          <dd>{check(!!sys.whatsapp, `Activo (${sys.whatsapp})`, 'Falta configurar WHATSAPP_PROVIDER')}</dd>
           <dt>Avisos externos</dt>
           <dd>{check(sys.notifyWebhook, 'NOTIFY_WEBHOOK_URL configurado', 'Solo en este panel')}</dd>
         </dl>

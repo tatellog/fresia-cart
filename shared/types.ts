@@ -137,6 +137,8 @@ export type DeliveryConfig = {
   /** Métodos de pago disponibles para el cliente. */
   onlinePayment: boolean;
   cashOnDelivery: boolean;
+  /** A domicilio: el repartidor lleva terminal y el cliente puede pagar con tarjeta al recibir. */
+  cardOnDelivery: boolean;
   /** Texto que ve el cliente, p. ej. "Efectivo o tarjeta al recibir". */
   cashOnDeliveryNote: string;
   example: boolean;
@@ -237,6 +239,8 @@ export type PublicOrder = {
   paymentStatus: PaymentStatus;
   /** Efectivo al recibir: billete con el que paga (centavos); null = exacto o no indicó. */
   cashTendered: number | null;
+  /** Paga al recibir con tarjeta (terminal). */
+  payWithCard: boolean;
   /** Cuándo se subió la foto de entrega (comprobante); null si no hay. */
   deliveryPhotoAt: string | null;
   /** Hora para la que se programó (null = lo antes posible). */

@@ -12,6 +12,8 @@ export type CheckoutForm = {
   paymentMethod: PaymentMethod;
   /** Efectivo: billete con el que paga (centavos); 'exacto' = el total. */
   cashTendered: number | 'exacto' | null;
+  /** Pagar al recibir con tarjeta (terminal del repartidor). */
+  payWithCard: boolean;
 };
 
 const KEY = 'fo.checkout.v1';
@@ -23,6 +25,7 @@ export const emptyCheckout: CheckoutForm = {
   notes: '',
   paymentMethod: 'online',
   cashTendered: null,
+  payWithCard: false,
 };
 
 export function useCheckoutForm() {

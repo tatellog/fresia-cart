@@ -280,7 +280,7 @@ function headline(o: PublicOrder, verifying: boolean): { title: string; body: st
     return { title: 'Pedido guardado', body: 'Confirmaremos el costo de envío y te avisaremos. Podrás pagar desde esta página; aún no te cobramos nada.' };
   }
   if (o.paymentMethod === 'contra_entrega') {
-    const when = o.fulfillment === 'pickup' ? 'al recoger (efectivo o tarjeta)' : 'en efectivo al recibir';
+    const when = o.fulfillment === 'pickup' ? 'al recoger (efectivo o tarjeta)' : o.payWithCard ? 'con tarjeta al recibir' : 'en efectivo al recibir';
     const change = o.cashTendered != null && o.total != null && o.cashTendered > o.total ? ` Te llevamos ${money(o.cashTendered - o.total)} de cambio.` : '';
     return {
       title: o.orderStatus === 'entregado' ? '¡Entregado!' : o.orderStatus === 'recibido' ? 'Pedido recibido' : nextTitle(o.orderStatus),

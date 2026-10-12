@@ -33,7 +33,7 @@ export const ADMIN_FLOW: OrderStatus[] = ['recibido', 'confirmado', 'en_preparac
 
 /**
  * Qué hacer con el cobro, en palabras del negocio. Lo usan el panel y los avisos.
- * Entregas a domicilio: solo efectivo (la terminal se queda en el local).
+ * Entregas a domicilio: efectivo, o tarjeta si el cliente lo eligió (el repartidor lleva la terminal).
  */
 export type CollectInfo = { tone: 'paid' | 'collect' | 'pending' | 'none'; label: string; change: number | null };
 
@@ -43,6 +43,7 @@ export function collectInfo(o: {
   fulfillment: 'delivery' | 'pickup';
   total: number | null;
   cashTendered: number | null;
+  payWithCard?: boolean;
   orderStatus: OrderStatus;
 }, money: (c: number) => string): CollectInfo {
   const total = o.total != null ? money(o.total) : 'total por confirmar';
@@ -53,7 +54,9 @@ export function collectInfo(o: {
     const change = o.cashTendered != null && o.total != null && o.cashTendered > o.total ? o.cashTendered - o.total : null;
     return o.fulfillment === 'pickup'
       ? { tone: 'collect', label: `COBRAR AL RECOGER ${total}`, change }
-      : { tone: 'collect', label: `COBRAR EN EFECTIVO ${total}`, change };
+      : o.payWithCard
+        ? { tone: 'collect', label: `COBRAR CON TARJETA ${total}`, change: null }
+        : { tone: 'collect', label: `COBRAR EN EFECTIVO ${total}`, change };
   }
   return { tone: 'pending', label: 'Pago en línea pendiente · no entregar', change: null };
 }

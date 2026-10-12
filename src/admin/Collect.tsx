@@ -7,7 +7,7 @@ export function CollectPill({ order }: { order: PublicOrder }) {
   const c = collectInfo(order, money);
   return (
     <span className={`collect collect-${c.tone}`}>
-      {c.tone === 'paid' ? '✅' : c.tone === 'collect' ? '💵' : c.tone === 'pending' ? '⏳' : '—'} {c.label}
+      {c.tone === 'paid' ? '✅' : c.tone === 'collect' ? (order.payWithCard ? '💳' : '💵') : c.tone === 'pending' ? '⏳' : '—'} {c.label}
     </span>
   );
 }
@@ -18,11 +18,13 @@ export function CollectBox({ order }: { order: PublicOrder }) {
     c.tone === 'collect'
       ? order.fulfillment === 'pickup'
         ? 'Efectivo o terminal en el local.'
-        : order.cashTendered == null
-          ? 'Solo efectivo. El cliente no indicó con cuánto paga: lleva cambio.'
-          : c.change
-            ? `Paga con ${money(order.cashTendered)} → lleva ${money(c.change)} de cambio.`
-            : 'Paga con el monto exacto.'
+        : order.payWithCard
+          ? 'Con tarjeta: lleva la terminal de Mercado Pago.'
+          : order.cashTendered == null
+            ? 'En efectivo. El cliente no indicó con cuánto paga: lleva cambio.'
+            : c.change
+              ? `Paga con ${money(order.cashTendered)} → lleva ${money(c.change)} de cambio.`
+              : 'Paga con el monto exacto.'
       : c.tone === 'paid'
         ? 'No cobres nada al entregar.'
         : c.tone === 'pending'
@@ -31,7 +33,7 @@ export function CollectBox({ order }: { order: PublicOrder }) {
   return (
     <div className={`collect-box collect-${c.tone}`} role="status">
       <strong>
-        {c.tone === 'paid' ? '✅' : c.tone === 'collect' ? '💵' : c.tone === 'pending' ? '⏳' : '—'} {c.label}
+        {c.tone === 'paid' ? '✅' : c.tone === 'collect' ? (order.payWithCard ? '💳' : '💵') : c.tone === 'pending' ? '⏳' : '—'} {c.label}
       </strong>
       {detail && <span>{detail}</span>}
     </div>
