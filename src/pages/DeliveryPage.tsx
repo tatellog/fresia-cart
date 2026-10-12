@@ -159,7 +159,7 @@ export default function DeliveryPage() {
             <section className="card stack" aria-labelledby="loc-title">
               <h2 id="loc-title">¿Estás cerca?</h2>
               <p className="muted">
-                Entregamos a oficinas a menos de {data.delivery.radiusM} m de Frésia. Comparte tu ubicación <strong>desde el lugar de entrega</strong> para confirmarlo.
+                Entregamos a oficinas {data.delivery.area ? 'dentro de nuestra zona, cerca de Frésia' : `a menos de ${data.delivery.radiusM} m de Frésia`}. Comparte tu ubicación <strong>desde el lugar de entrega</strong> para confirmarlo.
               </p>
               <button type="button" className={`btn ${location ? 'secondary' : 'primary'} block`} onClick={locate} disabled={locating === 'busy'}>
                 {locating === 'busy' ? <Spinner label="Buscando tu ubicación…" /> : location ? 'Actualizar mi ubicación' : 'Usar mi ubicación'}
@@ -171,7 +171,7 @@ export default function DeliveryPage() {
                 <p className="small error-text" role="alert">No pudimos obtener tu ubicación. Puedes seguir y confirmaremos el envío por WhatsApp.</p>
               )}
               <CoverageNotice coverage={coverage} freeFrom={data?.delivery.freeShippingFrom ?? null} />
-              <p className="muted small">Solo usamos tu ubicación para calcular la distancia; la verá Frésia junto con tu pedido.</p>
+              <p className="muted small">Solo usamos tu ubicación para confirmar que llegamos; la verá Frésia junto con tu pedido.</p>
             </section>
           )}
 

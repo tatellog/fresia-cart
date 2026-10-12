@@ -113,6 +113,7 @@ export const DEMO_DELIVERY: DeliveryConfig = {
   radiusM: 300,
   // Tarifa de arranque decidida por Frésia (oct 2026): $15, gratis desde $400. Revisar tras 2–4 semanas.
   radiusFee: 1500,
+  area: null,
   freeShippingFrom: 40000,
   // Tiempos: sin capturar hasta que Frésia los mida (no se muestra ningún tiempo inventado).
   prepMin: null,
