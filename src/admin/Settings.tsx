@@ -84,6 +84,9 @@ export function DeliverySettings() {
         <Toggle checked={d.onlinePayment} onChange={(onlinePayment) => set({ onlinePayment })} label="Pagar en línea (Mercado Pago)" />
         <OnlineNote />
         <Toggle checked={d.cashOnDelivery} onChange={(cashOnDelivery) => set({ cashOnDelivery })} label="Pagar al recibir / al recoger" />
+        {d.cashOnDelivery && (
+          <Toggle checked={d.cardOnDelivery} onChange={(cardOnDelivery) => set({ cardOnDelivery })} label="💳 Tarjeta al recibir (el repartidor lleva la terminal)" />
+        )}
         <div className="field">
           <label htmlFor="codnote">Detalle para «pagar al recibir» <span className="muted small">(opcional)</span></label>
           <input id="codnote" className="input sm" value={d.cashOnDeliveryNote} maxLength={120} placeholder="Ej. Efectivo o tarjeta al recibir" onChange={(e) => set({ cashOnDeliveryNote: e.target.value })} />

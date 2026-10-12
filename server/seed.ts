@@ -124,6 +124,7 @@ export const DEMO_DELIVERY: DeliveryConfig = {
   outOfZone: 'reject',
   onlinePayment: true,
   cashOnDelivery: true,
+  cardOnDelivery: false,
   // Detalle opcional (p. ej. «Efectivo o tarjeta»); por definir con Frésia.
   cashOnDeliveryNote: '',
   example: false,
@@ -172,7 +173,7 @@ Tiempos estimados: se calculan para tu dirección (preparación, distancia desde
 
 Seguimiento: cuando tu pedido sale, puedes ver al repartidor en el mapa desde la página de tu pedido. Al entregarlo tomamos una foto como comprobante, que solo ve quien tiene el enlace del pedido.
 
-Pago contra entrega: solo en efectivo; indícanos con cuánto pagas para llevar cambio.
+Pago contra entrega: en efectivo (indícanos con cuánto pagas para llevar cambio) o con tarjeta si el repartidor lleva terminal; lo eliges al pedir.
 
 Recepción en oficinas: ${PENDING} (p. ej. quién recibe en recepción, tiempo de espera del repartidor).`,
   },

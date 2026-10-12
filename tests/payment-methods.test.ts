@@ -137,3 +137,39 @@ describe('producción sin Mercado Pago', () => {
     expect(r.body.error).toMatch(/Mercado Pago/);
   });
 });
+
+describe('tarjeta al recibir (terminal del repartidor)', () => {
+  const enableCard = async (on = true) => {
+    await login();
+    const d = (await t.api('GET', '/api/admin/delivery')).body;
+    expect((await t.api('PUT', '/api/admin/delivery', { ...d, cardOnDelivery: on })).status).toBe(200);
+  };
+
+  it('apagada por defecto: no acepta pedidos con tarjeta al recibir', async () => {
+    expect((await t.api('GET', '/api/menu')).body.delivery.cardOnDelivery).toBe(false);
+    const r = await t.api('POST', '/api/orders', orderBody({ paymentMethod: 'contra_entrega', payWithCard: true }));
+    expect(r.status).toBe(422);
+  });
+
+  it('encendida: el panel y el aviso dicen cobrar con tarjeta y llevar la terminal', async () => {
+    await enableCard();
+    expect((await t.api('GET', '/api/menu')).body.delivery.cardOnDelivery).toBe(true);
+    const r = await t.api('POST', '/api/orders', orderBody({ paymentMethod: 'contra_entrega', payWithCard: true, cashTendered: 80000 }));
+    expect(r.status).toBe(201);
+    expect(r.body.order).toMatchObject({ payWithCard: true, cashTendered: null, paymentStatus: 'por_cobrar', orderStatus: 'recibido' });
+    await tick(50);
+    expect(t.ctx.notifier.pushOutbox.find((m) => m.title.includes(r.body.number))!.body).toContain('💳 COBRAR CON TARJETA $756 · Lleva la terminal');
+    const { collectInfo } = await import('../shared/status');
+    const { money } = await import('../shared/money');
+    const o = await adminOrder(r.body.number);
+    expect(collectInfo(o, money)).toMatchObject({ tone: 'collect', label: 'COBRAR CON TARJETA $756', change: null });
+    const c = (await t.api('POST', `/api/admin/orders/${o.id}/collected`, {})).body.order;
+    expect(collectInfo(c, money)).toMatchObject({ tone: 'paid', label: 'COBRADO' });
+  });
+
+  it('al recoger no aplica: se paga en el local', async () => {
+    await enableCard();
+    const r = await t.api('POST', '/api/orders', orderBody({ paymentMethod: 'contra_entrega', fulfillment: 'pickup', address: null, payWithCard: true }));
+    expect(r.body.order.payWithCard).toBe(false);
+  });
+});
