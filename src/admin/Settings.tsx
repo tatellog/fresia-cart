@@ -174,11 +174,61 @@ function RadiusFields({ d, set }: { d: DeliveryConfig; set: (p: Partial<Delivery
           />
         </div>
       </div>
+      <AreaField d={d} set={set} />
       <p className="muted small">
-        Se acepta automáticamente solo si el GPS confirma que está dentro del radio aun con su margen de error (máx. 80 m).
+        Se acepta automáticamente solo si el GPS confirma que está dentro {d.area ? 'de la zona' : 'del radio'} aun con su margen de error (máx. 80 m).
         Si el cliente no comparte su ubicación, está en el límite o el GPS es impreciso, el pedido se guarda y se confirma por WhatsApp.
       </p>
     </>
+  );
+}
+
+/** Lee el primer polígono de un GeoJSON (Feature, FeatureCollection o geometría suelta). */
+function polygonFromGeoJson(json: any): { lat: number; lng: number }[] | null {
+  const geoms: any[] = json?.type === 'FeatureCollection' ? json.features.map((f: any) => f?.geometry) : [json?.type === 'Feature' ? json.geometry : json];
+  for (const g of geoms) {
+    const ring = g?.type === 'Polygon' ? g.coordinates?.[0] : g?.type === 'MultiPolygon' ? g.coordinates?.[0]?.[0] : null;
+    if (!Array.isArray(ring)) continue;
+    const pts: { lat: number; lng: number }[] = ring.map(([lng, lat]: number[]) => ({ lat, lng })).filter((p: any) => Number.isFinite(p.lat) && Number.isFinite(p.lng));
+    // GeoJSON repite el primer punto al final; no hace falta.
+    const [first, last] = [pts[0], pts[pts.length - 1]];
+    if (pts.length > 1 && first.lat === last.lat && first.lng === last.lng) pts.pop();
+    if (pts.length >= 3) return pts;
+  }
+  return null;
+}
+
+function AreaField({ d, set }: { d: DeliveryConfig; set: (p: Partial<DeliveryConfig>) => void }) {
+  const [err, setErr] = useState<string | null>(null);
+  return (
+    <div className="field">
+      <label htmlFor="area">Zona de entrega dibujada <span className="muted small">(opcional, GeoJSON)</span></label>
+      {d.area ? (
+        <div className="row" style={{ flexWrap: 'wrap' }}>
+          <span className="ok-text">✓ Zona cargada ({d.area.length} puntos). Reemplaza al radio.</span>
+          <button type="button" className="btn ghost small" onClick={() => set({ area: null })}>Quitar zona (usar radio)</button>
+        </div>
+      ) : (
+        <input
+          id="area"
+          type="file"
+          accept=".geojson,.json,application/geo+json,application/json"
+          onChange={async (e) => {
+            const file = e.target.files?.[0];
+            if (!file) return;
+            try {
+              const area = polygonFromGeoJson(JSON.parse(await file.text()));
+              if (!area) return setErr('El archivo no trae ningún polígono.');
+              setErr(null);
+              set({ area });
+            } catch {
+              setErr('No pudimos leer el archivo. Debe ser GeoJSON.');
+            }
+          }}
+        />
+      )}
+      {err ? <span className="error-text">{err}</span> : <span className="hint">Si cargas una zona, solo se entrega dentro de ella (el radio deja de usarse). La tarifa de envío es la misma.</span>}
+    </div>
   );
 }
 

@@ -121,6 +121,8 @@ export type DeliveryConfig = {
   origin: LatLng | null;
   radiusM: number;
   radiusFee: number;
+  /** Zona de entrega dibujada (polígono). Si existe, reemplaza al radio; la tarifa sigue siendo radiusFee. */
+  area: LatLng[] | null;
   /** Envío gratis cuando el subtotal llega a este monto (centavos). null = nunca. */
   freeShippingFrom: number | null;
   /** Minutos de preparación (desde–hasta). null = sin capturar: no se muestra ningún tiempo. */

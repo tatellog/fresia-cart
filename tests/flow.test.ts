@@ -116,6 +116,28 @@ describe('cobertura: 300 m alrededor de Frésia', () => {
     expect((await t.api('POST', '/api/coverage', { postalCode: '03103', colonia: 'x' })).body).toMatchObject({ status: 'covered', fee: 3000 });
   });
 
+  it('zona dibujada (polígono): reemplaza al radio, con el mismo margen del GPS', async () => {
+    await t.api('POST', '/api/admin/login', { password: 'secreto-de-prueba' });
+    const d = (await t.api('GET', '/api/admin/delivery')).body;
+    // Zona de Frésia sin cruzar Viaducto (límite norte ≈ 19.398–19.3995).
+    const area = [
+      [-99.1779, 19.39045], [-99.16455, 19.39045], [-99.16455, 19.39955], [-99.167, 19.39932],
+      [-99.17, 19.399], [-99.173, 19.3987], [-99.1755, 19.39842], [-99.1779, 19.3982],
+    ].map(([lng, lat]) => ({ lat, lng }));
+    expect((await t.api('PUT', '/api/admin/delivery', { ...d, area })).status).toBe(200);
+    const at = (lat: number, lng: number, accuracyM = 10) => check({ lat, lng, accuracyM });
+    // A ~600 m pero dentro de la zona: se acepta aunque el radio sea 300 m.
+    expect((await at(19.394, -99.1660)).body).toMatchObject({ status: 'covered', fee: 3000 });
+    // Al norte de Viaducto: no.
+    expect((await at(19.4015, -99.1712)).body.status).toBe('not_covered');
+    // Pegado al borde con GPS impreciso: lo confirma una persona.
+    expect((await at(19.3986, -99.1712, 40)).body.status).toBe('manual');
+    expect((await check(null)).body).toMatchObject({ status: 'manual', needsLocation: true });
+    // Quitar la zona vuelve al radio.
+    await t.api('PUT', '/api/admin/delivery', { ...d, area: null });
+    expect((await at(19.394, -99.1660)).body.status).toBe('not_covered');
+  });
+
   it('cotización manual: detiene el pago hasta que el negocio fija el envío', async () => {
     const r = await t.api('POST', '/api/orders', orderBody({ address: { ...address, location: null } }));
     expect(r.body.order.orderStatus).toBe('cotizando_envio');
