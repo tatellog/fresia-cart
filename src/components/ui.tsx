@@ -46,6 +46,32 @@ export function TopBar({ back, step }: { back?: string | (() => void); step?: st
   );
 }
 
+/** Pasos del checkout: Entrega y Datos en una pantalla, Pago (con revisión del total) en la siguiente. */
+export function CheckoutSteps({ current }: { current: 'entrega' | 'pago' }) {
+  const steps = [
+    { label: 'Entrega', to: '/entrega' },
+    { label: 'Datos', to: '/entrega' },
+    { label: 'Pago', to: null },
+  ];
+  const at = current === 'entrega' ? 0 : 2;
+  return (
+    <nav aria-label="Pasos para pedir">
+      <ol className="checkout-steps">
+        {steps.map((s, i) => {
+          const done = i < at;
+          const active = current === 'entrega' ? i <= 1 : i === 2;
+          return (
+            <li key={s.label} className={active ? 'active' : done ? 'done' : ''} aria-current={active && i === at ? 'step' : undefined}>
+              <span className="dot" aria-hidden="true">{done ? '✓' : i + 1}</span>
+              {done && s.to ? <Link to={s.to}>{s.label}</Link> : s.label}
+            </li>
+          );
+        })}
+      </ol>
+    </nav>
+  );
+}
+
 /** Aviso cuando este teléfono está agregando a un pedido de equipo. */
 export function GroupModeBanner() {
   const [g, setG] = useState(activeGroup);

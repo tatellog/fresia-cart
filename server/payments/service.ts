@@ -4,6 +4,7 @@ import type { Ctx } from '../context';
 import type { DB } from '../db';
 import { addEvent, canPay, getOrderById } from '../orders';
 import type { OrderRow } from '../orders';
+import { recordPurchase } from '../analytics';
 import { IN_FLIGHT } from './provider';
 import type { ProviderPayment } from './provider';
 import type { OrderStatus, PaymentStatus, RefundStatus } from '../../shared/types';
@@ -181,5 +182,6 @@ async function recompute(db: DB, orderId: string, source: string) {
     if (orderStatus !== order.order_status) await addEvent(db, orderId, 'estado', orderStatus, 'sistema');
     if (newReview) await addEvent(db, orderId, 'revision', review!, 'sistema');
   }
+  if (becamePaid) await recordPurchase(db, orderId);
   return { becamePaid, newReview };
 }

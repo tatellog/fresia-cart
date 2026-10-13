@@ -11,6 +11,7 @@ import ComboBuilder from './ComboBuilder';
 import { activeGroup, memberKey } from '../lib/groupState';
 import { api } from '../lib/api';
 import { GroupModeBanner } from '../components/ui';
+import { track, trackGroupJoin } from '../lib/analytics';
 
 export default function ProductPage() {
   const { id } = useParams();
@@ -53,6 +54,11 @@ export default function ProductPage() {
     window.scrollTo(0, 0);
   }, [id]);
 
+  useEffect(() => {
+    if (product && !editing) track('ver_producto', { productId: product.id });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [product?.id]);
+
   if (error) return <main className="page"><TopBar back="/" /><LoadError message={error} retry={reload} /></main>;
   if (!data) return <main className="page"><TopBar back="/" /><Spinner label="Cargando…" /></main>;
   if (!product || !product.available) {
@@ -85,6 +91,8 @@ export default function ProductPage() {
       setAddError(null);
       try {
         await api(`/api/groups/${group.code}/items`, { body: { memberName: group.memberName, memberKey: memberKey(), line } });
+        trackGroupJoin(group.code);
+        track('agregar_carrito', { mode: 'equipo', productId: product!.id });
         navigate(`/equipo/${group.code}`);
       } catch (e) {
         setAddError((e as Error).message);
@@ -97,6 +105,7 @@ export default function ProductPage() {
       navigate('/carrito');
     } else {
       cart.add(line);
+      track('agregar_carrito', { productId: product!.id });
       navigate('/', { state: { added: product!.name } });
     }
   }

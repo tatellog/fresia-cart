@@ -6,8 +6,9 @@ import { useCheckoutForm } from '../lib/checkout';
 import type { CheckoutForm } from '../lib/checkout';
 import { api } from '../lib/api';
 import { money } from '../lib/format';
-import { DemoBanner, Field, SelectField, Spinner, StickyAction, TopBar } from '../components/ui';
+import { CheckoutSteps, DemoBanner, Field, SelectField, Spinner, StickyAction, TopBar } from '../components/ui';
 import { groupCheckout } from '../lib/groupState';
+import { track } from '../lib/analytics';
 import { isPostalCode, normalizeText, prepText, quoteEtaText } from '../../shared/coverage';
 import { POSTAL_NOT_FOUND, usePostalCode } from '../lib/postal';
 import type { DeliveryQuote } from '../../shared/types';
@@ -46,6 +47,11 @@ export default function DeliveryPage() {
   const location = form.address.location ?? null;
   const [locating, setLocating] = useState<'idle' | 'busy' | 'denied' | 'unavailable'>('idle');
   const postal = usePostalCode(cp);
+
+  useEffect(() => {
+    if (cart.lines.length > 0 || groupCheckout()) track('iniciar_checkout', { mode: groupCheckout() ? 'equipo' : 'individual' });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Al reconocer el código postal: si tiene una sola colonia se llena sola; si la escrita no es de ese CP, se borra.
   useEffect(() => {
@@ -128,7 +134,8 @@ export default function DeliveryPage() {
     <>
       <DemoBanner />
       <main className="page">
-        <TopBar back="/carrito" step="Entrega" />
+        <TopBar back="/carrito" />
+        <CheckoutSteps current="entrega" />
         <form
           className="stack-lg"
           noValidate
@@ -170,26 +177,10 @@ export default function DeliveryPage() {
               {locating === 'unavailable' && (
                 <p className="small error-text" role="alert">No pudimos obtener tu ubicación. Puedes seguir y confirmaremos el envío por WhatsApp.</p>
               )}
-              <CoverageNotice coverage={coverage} freeFrom={data?.delivery.freeShippingFrom ?? null} />
+              <CoverageNotice coverage={coverage} freeFrom={data?.delivery.freeShippingFrom ?? null} onPickup={data?.delivery.pickupEnabled ? () => set({ fulfillment: 'pickup' }) : undefined} />
               <p className="muted small">Solo usamos tu ubicación para confirmar que llegamos; la verá Frésia junto con tu pedido.</p>
             </section>
           )}
-
-          <section className="stack" aria-labelledby="contact-title">
-            <h2 id="contact-title">Tus datos</h2>
-            <Field label="Nombre" autoComplete="name" value={form.name} onChange={(e) => set({ name: e.target.value })} error={errors.name} maxLength={80} />
-            <Field
-              label="Teléfono"
-              type="tel"
-              inputMode="tel"
-              autoComplete="tel-national"
-              value={form.phone}
-              onChange={(e) => set({ phone: e.target.value })}
-              error={errors.phone}
-              hint="Solo para avisarte sobre tu pedido."
-              maxLength={20}
-            />
-          </section>
 
           {form.fulfillment === 'delivery' ? (
             <section className="stack" aria-labelledby="addr-title">
@@ -228,7 +219,7 @@ export default function DeliveryPage() {
                   hint={postal.state === 'found' ? 'Según tu código postal.' : postal.state === 'idle' && !isPostalCode(cp) ? 'Se llena sola con tu código postal.' : undefined}
                 />
               )}
-              {!radiusMode && <CoverageNotice coverage={coverage} freeFrom={data?.delivery.freeShippingFrom ?? null} />}
+              {!radiusMode && <CoverageNotice coverage={coverage} freeFrom={data?.delivery.freeShippingFrom ?? null} onPickup={data?.delivery.pickupEnabled ? () => set({ fulfillment: 'pickup' }) : undefined} />}
               <Field label="Oficina o piso" placeholder="Ej. Piso 4, oficina 402" value={form.address.office} onChange={(e) => setAddr('office', e.target.value)} error={errors.office} maxLength={80} />
               <Field label="Referencias" optional placeholder="Ej. Dejar en recepción" value={form.address.references} onChange={(e) => setAddr('references', e.target.value)} maxLength={200} />
             </section>
@@ -258,6 +249,22 @@ export default function DeliveryPage() {
             </section>
           )}
 
+          <section className="stack" aria-labelledby="contact-title">
+            <h2 id="contact-title">Tus datos</h2>
+            <Field label="Nombre" autoComplete="name" value={form.name} onChange={(e) => set({ name: e.target.value })} error={errors.name} maxLength={80} />
+            <Field
+              label="Teléfono"
+              type="tel"
+              inputMode="tel"
+              autoComplete="tel-national"
+              value={form.phone}
+              onChange={(e) => set({ phone: e.target.value })}
+              error={errors.phone}
+              hint="Solo para avisarte sobre tu pedido."
+              maxLength={20}
+            />
+          </section>
+
           <div className="field">
             <label htmlFor="notes">
               Notas del pedido <span className="muted small">(opcional)</span>
@@ -268,14 +275,14 @@ export default function DeliveryPage() {
       </main>
       <StickyAction>
         <button type="button" className="btn primary block" onClick={next} disabled={notCovered}>
-          {notCovered ? 'Dirección fuera de cobertura' : 'Revisar pedido'}
+          {notCovered ? 'Dirección fuera de cobertura' : 'Continuar al pago'}
         </button>
       </StickyAction>
     </>
   );
 }
 
-function CoverageNotice({ coverage, freeFrom }: { coverage: { state: string; quote?: DeliveryQuote }; freeFrom: number | null }) {
+function CoverageNotice({ coverage, freeFrom, onPickup }: { coverage: { state: string; quote?: DeliveryQuote }; freeFrom: number | null; onPickup?: () => void }) {
   if (coverage.state === 'idle') return <p className="hint muted small">Verificamos la cobertura y el costo de envío antes de pagar.</p>;
   if (coverage.state === 'loading') return <div className="notice"><Spinner label="Verificando cobertura…" /></div>;
   if (coverage.state === 'error') return <div className="notice error" role="alert">No pudimos verificar la cobertura. Revisa tu conexión.</div>;
@@ -299,7 +306,15 @@ function CoverageNotice({ coverage, freeFrom }: { coverage: { state: string; quo
   }
   return (
     <div className="notice error" role="alert">
-      <strong>Por ahora no llegamos ahí{q.status === 'not_covered' && q.distanceM ? ` (estás a unos ${q.distanceM} m)` : ''}.</strong> Puedes elegir recoger en Frésia.
+      <strong>Por ahora no llegamos ahí{q.status === 'not_covered' && q.distanceM ? ` (estás a unos ${q.distanceM} m)` : ''}.</strong>{' '}
+      {onPickup ? (
+        <>
+          Puedes pasar por él a Frésia.
+          <button type="button" className="btn secondary small" style={{ display: 'flex', marginTop: 8 }} onClick={() => { onPickup(); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>
+            Mejor lo recojo en Frésia
+          </button>
+        </>
+      ) : 'Por ahora tampoco tenemos recolección.'}
     </div>
   );
 }
