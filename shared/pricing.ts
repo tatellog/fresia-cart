@@ -3,6 +3,8 @@ import type { CartLineInput, ComboChoiceInput, MenuRules, PricedChoice, PricedLi
 export const MAX_QTY = 50;
 export const MAX_FOR_WHOM = 40;
 export const COMBO_SIZE_ID = 'combo';
+/** Veces que se puede repetir un mismo topping en una pieza (p. ej. doble nuez). */
+export const MAX_SAME_TOPPING = 3;
 
 export type PricingError = { index: number; message: string };
 
@@ -16,10 +18,14 @@ class LineError extends Error {}
  *   se cobra a `rules.extraToppingPrice`.
  */
 export function priceToppings(product: Product, toppingIds: string[], byTopping: Map<string, Topping>, rules: MenuRules): PricedTopping[] {
-  const ids = [...new Set(toppingIds)];
+  // Un topping puede repetirse (doble nuez): cada vez cuenta como uno más.
+  const ids = toppingIds;
   if (product.maxToppings != null && ids.length > product.maxToppings) {
     throw new LineError(`${product.name} admite hasta ${product.maxToppings} toppings.`);
   }
+  const counts = new Map<string, number>();
+  for (const id of ids) counts.set(id, (counts.get(id) ?? 0) + 1);
+  if ([...counts.values()].some((n) => n > MAX_SAME_TOPPING)) throw new LineError(`Puedes pedir hasta ${MAX_SAME_TOPPING} veces el mismo topping.`);
   let includedLeft = product.includedToppings;
   return ids.map((id) => {
     const t = byTopping.get(id);
@@ -69,7 +75,7 @@ export function priceCart(
   rules: MenuRules,
   /** Pedido de equipo: cada quien pide de a uno; el mínimo se revisa en el total. */
   opts: { ignoreMinQty?: boolean } = {},
-): { lines: PricedLine[]; subtotal: number; fresias: number; errors: PricingError[] } {
+): { lines: PricedLine[]; subtotal: number; fresias: number; items: number; errors: PricingError[] } {
   const byProduct = new Map(products.map((p) => [p.id, p]));
   const byTopping = new Map(toppings.map((t) => [t.id, t]));
   const priced: PricedLine[] = [];
@@ -113,6 +119,8 @@ export function priceCart(
     lines: priced,
     subtotal: priced.reduce((s, l) => s + l.lineTotal, 0),
     fresias: priced.reduce((s, l) => s + l.fresias, 0),
+    // Productos de cualquier tipo (Frésia, pan, waffle…): lo que cuenta para el pedido mínimo.
+    items: priced.reduce((s, l) => s + l.qty, 0),
     errors,
   };
 }
@@ -122,8 +130,26 @@ export function minQtyFor(product: Pick<Product, 'combo'>, rules: MenuRules): nu
   return product.combo ? 1 : Math.max(1, rules.minQtyPerItem ?? 1);
 }
 
-export function minimumMessage(fresias: number, rules: MenuRules): string | null {
-  if (fresias >= rules.minFresias) return null;
-  const left = rules.minFresias - fresias;
-  return `El pedido mínimo es de ${rules.minFresias} Frésias. ${left === 1 ? 'Te falta 1' : `Te faltan ${left}`}.`;
+/** Pedido mínimo en productos de cualquier tipo (la regla se guarda como `minFresias`). */
+export function minimumMessage(items: number, rules: MenuRules): string | null {
+  if (items >= rules.minFresias) return null;
+  const left = rules.minFresias - items;
+  return `El pedido mínimo es de ${rules.minFresias} productos. ${left === 1 ? 'Te falta 1' : `Te faltan ${left}`}.`;
+}
+
+/** Toppings agrupados para mostrarlos: «Nuez picada ×2 (incluidos)». */
+export function toppingSummary(ts: { id: string; name: string; price: number; included: boolean }[]): string[] {
+  const groups = new Map<string, { name: string; n: number; included: number; extra: number }>();
+  for (const t of ts) {
+    const g = groups.get(t.id) ?? { name: t.name, n: 0, included: 0, extra: 0 };
+    g.n++;
+    if (t.included) g.included++;
+    else g.extra += t.price;
+    groups.set(t.id, g);
+  }
+  return [...groups.values()].map((g) => {
+    const name = g.n > 1 ? `${g.name} ×${g.n}` : g.name;
+    if (g.extra === 0) return `${name} (${g.n > 1 ? 'incluidos' : 'incluido'})`;
+    return `${name} +$${(g.extra / 100).toLocaleString('es-MX')}${g.included ? ` (${g.included} incluido${g.included > 1 ? 's' : ''})` : ''}`;
+  });
 }

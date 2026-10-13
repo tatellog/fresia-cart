@@ -124,7 +124,7 @@ const slug = (t: string) => t.toLowerCase().normalize('NFD').replace(/[\u0300-\u
 /** Condiciones de un vistazo: a dónde llegamos, cuánto cuesta el envío y el mínimo. */
 function HomeFacts({ data }: { data: MenuResponse }) {
   const d = data.delivery;
-  const min = data.rules.minQtyPerItem > 1 ? `Mín. ${data.rules.minQtyPerItem} piezas por producto` : data.rules.minFresias > 1 ? `Pedido mínimo: ${data.rules.minFresias} Frésias` : null;
+  const min = data.rules.minQtyPerItem > 1 ? `Mín. ${data.rules.minQtyPerItem} piezas por producto` : data.rules.minFresias > 1 ? `Pedido mínimo: ${data.rules.minFresias} productos` : null;
   return (
     <ul className="facts" aria-label="Condiciones de entrega">
       <li>

@@ -18,7 +18,7 @@ type CartState = {
   count: number;
   /** Subtotal estimado con el menú actual. El servidor recalcula antes de cobrar. */
   subtotal: number;
-  /** Frésias que cuentan para el pedido mínimo. */
+  /** Frésias del carrito (informativo; el pedido mínimo cuenta productos: `count`). */
   fresias: number;
   problems: Map<string, string>;
 };

@@ -20,7 +20,7 @@ export type Product = {
   /** Toppings premium que en este producto cuentan como normales (p. ej. Turín en el Waffle). */
   freePremiumIds: string[];
   maxToppings: number | null;
-  /** Cuántas Frésias aporta cada pieza al pedido mínimo (vasos 1; pan, waffle, bebidas 0). */
+  /** Frésias por pieza (informativo; el pedido mínimo cuenta productos de cualquier tipo). */
   fresiaUnits: number;
   /** Solo para combos: qué incluye. */
   combo: ComboSlot[] | null;
@@ -52,7 +52,7 @@ export type Topping = {
 export type MenuRules = {
   /** Precio de cada topping normal después de los incluidos (centavos). */
   extraToppingPrice: number;
-  /** Mínimo de Frésias por pedido en línea. */
+  /** Mínimo de productos (de cualquier tipo) por pedido en línea. El nombre se conserva por compatibilidad. */
   minFresias: number;
   /** Piezas mínimas por producto suelto (los combos se piden desde 1). */
   minQtyPerItem: number;

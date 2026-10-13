@@ -108,7 +108,7 @@ function RulesForm({ initial }: { initial: MenuRules }) {
       <h2>Reglas</h2>
       <div className="row" style={{ flexWrap: 'wrap', gap: 16 }}>
         <div className="field" style={{ width: 200 }}>
-          <label>Mínimo de Frésias por pedido (0 = sin mínimo)</label>
+          <label>Mínimo de productos por pedido (0 = sin mínimo)</label>
           <input className="input sm" inputMode="numeric" value={s.value.minFresias} onChange={(e) => s.setValue({ ...s.value, minFresias: parseInt(e.target.value, 10) || 0 })} />
         </div>
         <div className="field" style={{ width: 200 }}>
@@ -120,7 +120,7 @@ function RulesForm({ initial }: { initial: MenuRules }) {
           <MoneyInput label="Topping adicional" value={s.value.extraToppingPrice} onChange={(extraToppingPrice) => s.setValue({ ...s.value, extraToppingPrice })} />
         </div>
       </div>
-      <p className="muted small">Cuenta para el mínimo lo que indica «Frésias por pieza» de cada producto (vasos 1; pan y waffle 0). Un combo suma las Frésias que incluye. Los productos sueltos se piden desde el «mínimo por producto»; los combos desde 1.</p>
+      <p className="muted small">El mínimo cuenta productos de cualquier tipo (una Frésia y un pan = 2). Un pedido con combo no tiene mínimo. Los productos sueltos se piden desde el «mínimo por producto»; los combos desde 1.</p>
       <SaveBar busy={s.busy} saved={s.everSaved} error={s.error} dirty={s.dirty} onSave={s.save} />
     </section>
   );
@@ -194,10 +194,6 @@ function ProductEditor({ initial, products, toppings, images, onDeleted }: { ini
             </fieldset>
 
             <div className="row" style={{ flexWrap: 'wrap', gap: 16 }}>
-              <div className="field" style={{ width: 170 }}>
-                <label>Frésias por pieza</label>
-                <input className="input sm" inputMode="numeric" value={p.fresiaUnits} onChange={(e) => set({ fresiaUnits: num(e.target.value) })} />
-              </div>
               <div className="field" style={{ width: 170 }}>
                 <label>Toppings incluidos</label>
                 <input className="input sm" inputMode="numeric" value={p.includedToppings} onChange={(e) => set({ includedToppings: num(e.target.value) })} />

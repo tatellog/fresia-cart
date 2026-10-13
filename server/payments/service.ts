@@ -5,6 +5,7 @@ import type { DB } from '../db';
 import { addEvent, canPay, getOrderById } from '../orders';
 import type { OrderRow } from '../orders';
 import { recordPurchase } from '../analytics';
+import { toppingSummary } from '../../shared/pricing';
 import { background } from '../background';
 import { syncClub } from '../club';
 import { IN_FLIGHT } from './provider';
@@ -65,7 +66,7 @@ export async function startCheckout(ctx: Ctx, orderId: string): Promise<Checkout
     const expiresAt = new Date(Date.now() + ATTEMPT_TTL_MS);
     const items = order.items.map((l, i) => ({
       id: `${l.productId}-${i}`,
-      title: `${l.name} ${l.sizeLabel}${l.toppings.length ? ' + ' + l.toppings.map((t) => t.name).join(', ') : ''}`.slice(0, 250),
+      title: `${l.name} ${l.sizeLabel}${l.toppings.length ? ' + ' + toppingSummary(l.toppings).map((t) => t.replace(/ \(.*\)$| \+\$.*$/, '')).join(', ') : ''}`.slice(0, 250),
       quantity: l.qty,
       unitPrice: l.unitPrice,
     }));

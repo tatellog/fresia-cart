@@ -83,9 +83,9 @@ export async function quoteOrder(db: DB, input: Pick<OrderInput, 'fulfillment' |
   const priced = priceCart(input.items, products, toppings, rules, { ignoreMinQty: opts.group });
   const errors = priced.errors.map((e) => e.message);
   if (input.items.length === 0) errors.push('Tu carrito está vacío.');
-  // El mínimo de Frésias no aplica a pedidos de equipo, regalos ni pedidos con combo.
+  // El pedido mínimo (productos de cualquier tipo) no aplica a pedidos de equipo, regalos ni pedidos con combo.
   else if (!priced.errors.length && !opts.group && !opts.gift && !hasCombo(input.items, products)) {
-    const min = minimumMessage(priced.fresias, rules);
+    const min = minimumMessage(priced.items, rules);
     if (min) errors.push(min);
   }
 

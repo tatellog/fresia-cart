@@ -85,7 +85,7 @@ export const DEMO_TOPPINGS: Topping[] = [
   top('mermelada-zarzamora', 'Mermelada de zarzamora', 25, true),
 ];
 
-// Mínimo del pedido: 2 Frésias en total (combos cuentan sus Frésias; pan y waffle no). Sin mínimo por producto.
+// Mínimo del pedido: 2 productos de cualquier tipo (con combo no hay mínimo). Sin mínimo por producto.
 // No aplica a pedidos de equipo ni a Fresigramas.
 /** Fresigrama apagado hasta tener el material de la tarjeta (oct 2026). */
 export const DEFAULT_FEATURES: Features = { fresigrama: false };
