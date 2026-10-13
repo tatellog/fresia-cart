@@ -180,10 +180,12 @@ export default function SummaryPage() {
               </div>
             )}
 
+            {group && <GroupBreakdown lines={quote.lines} name={group.name} />}
+
             <section className="card stack" aria-labelledby="items-title">
               <div className="row between">
                 <h2 id="items-title">Productos</h2>
-                <Link to="/carrito" className="linkbtn">Editar</Link>
+                <Link to={group ? `/equipo/${group.code}` : '/carrito'} className="linkbtn">Editar</Link>
               </div>
               <OrderLines lines={quote.lines} products={products} />
             </section>
@@ -380,4 +382,29 @@ function bills(total: number): number[] {
     if (v > total) out.add(v);
   }
   return [...out].sort((a, b) => a - b).slice(0, 3);
+}
+
+/** Pedido de equipo: quién lleva qué y cuánto, y que paga quien organiza. */
+function GroupBreakdown({ lines, name }: { lines: { forWhom?: string; qty: number; lineTotal: number }[]; name: string }) {
+  const people = new Map<string, { pieces: number; total: number }>();
+  for (const l of lines) {
+    const who = l.forWhom?.trim() || 'Sin nombre';
+    const p = people.get(who) ?? { pieces: 0, total: 0 };
+    people.set(who, { pieces: p.pieces + l.qty, total: p.total + l.lineTotal });
+  }
+  return (
+    <section className="card stack" aria-labelledby="team-title">
+      <h2 id="team-title">👥 {name}</h2>
+      <p className="small"><strong>Tú pagas el pedido de todo el equipo</strong> en un solo pago, con el envío incluido.</p>
+      <ul className="people">
+        {[...people].map(([who, p]) => (
+          <li key={who} className="done">
+            <span>{who}</span>
+            <span className="small">{p.pieces} pieza{p.pieces === 1 ? '' : 's'} · {money(p.total)}</span>
+          </li>
+        ))}
+      </ul>
+      <p className="muted small">Al confirmar, el pedido del equipo queda cerrado y nadie más puede agregar ni quitar productos.</p>
+    </section>
+  );
 }

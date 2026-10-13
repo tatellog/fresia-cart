@@ -8,8 +8,9 @@ import { DEFAULT_RULES_CLIENT } from '../lib/rules';
 import { DemoBanner, Stepper, StickyAction, TopBar } from '../components/ui';
 import { ToppingPicker } from '../components/ToppingPicker';
 import { COMBO_SIZE_ID, MAX_FOR_WHOM, priceCart } from '../../shared/pricing';
-import { activeGroup, memberKey } from '../lib/groupState';
-import { api } from '../lib/api';
+import { activeGroup, memberKey, setActiveGroup } from '../lib/groupState';
+import { ApiError, api } from '../lib/api';
+import { uuid } from '../lib/uuid';
 import { GroupModeBanner } from '../components/ui';
 import type { ComboChoiceInput, Product } from '../../shared/types';
 import { track, trackGroupJoin } from '../lib/analytics';
@@ -44,6 +45,7 @@ export default function ComboBuilder({ product, editing }: { product: Product; e
   const [showErrors, setShowErrors] = useState(false);
   const group = activeGroup();
   const [adding, setAdding] = useState(false);
+  const [itemId] = useState(uuid);
   const [addError, setAddError] = useState<string | null>(null);
 
   const complete = picks.every((p) => p.productId && p.sizeId);
@@ -68,7 +70,7 @@ export default function ComboBuilder({ product, editing }: { product: Product; e
     if (group && !editing) {
       setAdding(true);
       setAddError(null);
-      api(`/api/groups/${group.code}/items`, { body: { memberName: group.memberName, memberKey: memberKey(), line } }).then(
+      api(`/api/groups/${group.code}/items`, { body: { memberName: group.memberName, memberKey: memberKey(), line, itemId } }).then(
         () => {
           trackGroupJoin(group.code);
           track('agregar_carrito', { mode: 'equipo', productId: product.id });
@@ -76,6 +78,7 @@ export default function ComboBuilder({ product, editing }: { product: Product; e
         },
         (e: Error) => {
           setAddError(e.message);
+          if (e instanceof ApiError && e.body.code === 'group_closed') setActiveGroup(null);
           setAdding(false);
         },
       );

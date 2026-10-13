@@ -173,6 +173,77 @@ describe('pedido de equipo', () => {
     expect((await t.api('POST', '/api/orders', pickup({ items: [], group: { code: g.code, token: g.adminToken } }))).status).toBe(201);
   });
 
+  it('progreso: quién entró, quién ya eligió y cuánto lleva cada quien', async () => {
+    const g = await group();
+    await t.api('POST', `/api/groups/${g.code}/join`, { memberName: 'Luis', memberKey: 'key-luis-123456' });
+    await g.add('Ana', 'key-ana-123456', item('clasica', 'chico'));
+    await g.add('Ana', 'key-ana-123456', item('uvas', 'chico'));
+    // Otra «Ana» con otro teléfono no se mezcla con la primera.
+    await g.add('Ana', 'key-ana2-123456', item('clasica', 'chico'));
+    const v = (await t.api('GET', `/api/groups/${g.code}?k=key-luis-123456`)).body;
+    expect(v.state).toBe('abierto');
+    expect(v.participants).toEqual([
+      { name: 'Luis', pieces: 0, subtotal: 0, mine: true },
+      { name: 'Ana', pieces: 2, subtotal: expect.any(Number), mine: false },
+      { name: 'Ana (2)', pieces: 1, subtotal: expect.any(Number), mine: false },
+    ]);
+    expect(v.participants[1].subtotal + v.participants[2].subtotal).toBe(v.subtotal);
+  });
+
+  it('el mismo producto reintentado (doble toque, red) no se duplica', async () => {
+    const g = await group();
+    const body = { memberName: 'Luis', memberKey: 'key-luis-123456', line: item('clasica', 'chico'), itemId: '7b1f8a52-3c4d-4e5f-8a9b-0c1d2e3f4a5b' };
+    const [a, b] = await Promise.all([t.api('POST', `/api/groups/${g.code}/items`, body), t.api('POST', `/api/groups/${g.code}/items`, body)]);
+    expect([a.status, b.status]).toEqual([201, 201]);
+    expect((await t.api('GET', `/api/groups/${g.code}`)).body.items).toHaveLength(1);
+  });
+
+  it('el organizador cierra: nadie más entra ni agrega; puede reabrir antes de pagar', async () => {
+    const g = await group();
+    await g.add('Luis', 'key-luis-123456', item('clasica', 'chico'));
+    const [luis] = (await t.api('GET', `/api/groups/${g.code}`)).body.items;
+    expect((await t.api('POST', `/api/groups/${g.code}/close`, { adminToken: 'token-que-no-es-0000' })).status).toBe(403);
+    expect((await t.api('POST', `/api/groups/${g.code}/close`, { adminToken: g.adminToken })).status).toBe(200);
+    expect((await t.api('GET', `/api/groups/${g.code}`)).body).toMatchObject({ state: 'cerrado', closed: true });
+    const late = await g.add('Sofía', 'key-sofi-123456', item('clasica', 'chico'));
+    expect(late.status).toBe(409);
+    expect(late.body.code).toBe('group_closed');
+    expect((await t.api('POST', `/api/groups/${g.code}/join`, { memberName: 'Sofía', memberKey: 'key-sofi-123456' })).status).toBe(409);
+    // Cerrado: el participante ya no cambia lo suyo; el organizador sí puede ajustar antes de pagar.
+    expect((await t.api('POST', `/api/groups/${g.code}/items/${luis.id}/delete`, { memberKey: 'key-luis-123456' })).status).toBe(409);
+    expect((await t.api('POST', `/api/groups/${g.code}/reopen`, { adminToken: g.adminToken })).status).toBe(200);
+    expect((await g.add('Sofía', 'key-sofi-123456', item('clasica', 'chico'))).status).toBe(201);
+  });
+
+  it('estados: cerrado → pendiente de pago → confirmado → completado', async () => {
+    const g = await group();
+    await g.add('Luis', 'key-luis-123456', item('clasica', 'chico'));
+    await t.api('POST', `/api/groups/${g.code}/close`, { adminToken: g.adminToken });
+    const ref = { code: g.code, token: g.adminToken };
+    // Se puede pagar ya cerrado; en línea queda pendiente de pago.
+    const r = await t.api('POST', '/api/orders', orderBody({ fulfillment: 'pickup', address: null, items: [], group: ref }));
+    expect(r.status).toBe(201);
+    const state = async () => (await t.api('GET', `/api/groups/${g.code}`)).body;
+    expect(await state()).toMatchObject({ state: 'pendiente_pago', orderNumber: r.body.number });
+    const co = await t.api('POST', `/api/orders/${r.body.number}/checkout`, { t: r.body.token });
+    await t.api('POST', `/api/demo/preferences/${co.body.checkoutUrl.split('/').pop()}/pay`, { outcome: 'approved' });
+    await new Promise((res) => setTimeout(res, 50));
+    expect(await state()).toMatchObject({ state: 'confirmado', orderTotal: r.body.order.total });
+    await login();
+    const id = (await t.api('GET', '/api/admin/orders?filter=todos')).body.orders[0].id;
+    for (const s of ['confirmado', 'en_preparacion', 'listo', 'entregado']) await t.api('POST', `/api/admin/orders/${id}/status`, { status: s });
+    expect((await state()).state).toBe('completado');
+  });
+
+  it('el enlace muestra una vista previa con el nombre y la hora de cierre, sin datos del organizador', async () => {
+    const g = (await t.api('POST', '/api/groups', { name: 'Ventas <Norte>', organizerName: 'Ana Pérez', closesInMinutes: 60 })).body;
+    const html = await (await fetch(`${t.base}/equipo/${g.code}`)).text();
+    expect(html).toContain('og:title" content="Pedido de equipo «Ventas &lt;Norte&gt;» · Frésia"');
+    expect(html).toContain('Cierra hoy a las 3:00 p.m.');
+    expect(html).not.toContain('Ana Pérez');
+    expect(html).toContain('<div id="root">');
+  });
+
   it('respeta la hora límite', async () => {
     const g = (await t.api('POST', '/api/groups', { name: 'Junta', organizerName: 'Ana', closesInMinutes: 10 })).body;
     const add = () => t.api('POST', `/api/groups/${g.code}/items`, { memberName: 'Luis', memberKey: 'key-luis-123456', line: item('clasica', 'chico') });

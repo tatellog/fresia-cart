@@ -74,6 +74,16 @@ export function slotLabel(iso: string, now = new Date()): string {
   return `${day} · ${timeLabel(t.min)}`;
 }
 
+/** Hora límite en hora de CDMX: «hoy a las 3:30 p.m.», «mañana a las …» o «el miércoles 14 oct a las …». */
+export function deadlineText(at: Date, now = new Date()): string {
+  const t = cdmx(at);
+  const today = cdmx(now);
+  const tomorrow = cdmx(new Date(now.getTime() + 86400000));
+  const same = (a: typeof t, b: typeof t) => a.y === b.y && a.mo === b.mo && a.d === b.d;
+  const day = same(t, today) ? 'hoy' : same(t, tomorrow) ? 'mañana' : `el ${DAY[t.dow]} ${t.d} ${MONTH[t.mo]}`;
+  return `${day} a las ${timeLabel(t.min)}`;
+}
+
 export type SlotDay = { key: string; label: string; slots: { iso: string; label: string }[] };
 
 /** Horarios disponibles para programar, agrupados por día. */

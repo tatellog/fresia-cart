@@ -200,6 +200,12 @@ p {
   max-width: 18ch;
 }
 
+/* Participantes del pedido de equipo */
+.people { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.people li { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; padding: 6px 0; border-bottom: 1px solid var(--line); color: var(--choc-2); }
+.people li:last-child { border-bottom: 0; }
+.people li.done { color: var(--choc); }
+
 /* Pasos del checkout */
 .checkout-steps { list-style: none; margin: 0 0 8px; padding: 0; display: flex; gap: 6px; justify-content: center; font-size: 0.9rem; color: var(--choc-2); }
 .checkout-steps li { display: flex; align-items: center; gap: 6px; }

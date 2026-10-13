@@ -8,7 +8,7 @@
   "functions": {
     "api/index.mjs": {
       "maxDuration": 30,
-      "includeFiles": "{build/**,server/certs/**,public/images/**,supabase/migrations/**}"
+      "includeFiles": "{build/**,dist/index.html,server/certs/**,public/images/**,supabase/migrations/**}"
     }
   },
   "rewrites": [
@@ -26,6 +26,10 @@
     },
     {
       "source": "/s",
+      "destination": "/api"
+    },
+    {
+      "source": "/equipo/:code",
       "destination": "/api"
     },
     {
