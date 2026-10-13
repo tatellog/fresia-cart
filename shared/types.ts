@@ -256,6 +256,12 @@ export type PublicOrder = {
 
 export type AdminOrder = PublicOrder & {
   id: string;
+  /** Alguien del local ya abrió el pedido (distinto de «empezar a preparar»). */
+  seenAt: string | null;
+  /** Efectivo: lo que dio el cliente y el cambio que se le entregó. */
+  cashReceived: number | null;
+  changeGiven: number | null;
+  urgency: import('./urgency').Urgency;
   /** QR / edificio que trajo al cliente. */
   source: string | null;
   updatedAt: string;
@@ -280,6 +286,8 @@ export type MenuResponse = {
   delivery: Omit<DeliveryConfig, 'zones'> & { zoneNames: string[] };
   paymentsMode: 'demo' | 'mercadopago';
   features: Features;
+  /** Lo más pedido por producto (90 días; solo con suficientes pedidos). */
+  popular?: Record<string, { sizeId: string | null; toppingIds: string[] }>;
 };
 
 export type Quote = {

@@ -206,8 +206,8 @@ export default function SummaryPage() {
                   <strong>{form.fulfillment === 'delivery' ? `${form.address.street} ${form.address.number}${form.address.office ? `, ${form.address.office}` : ''}` : 'Recoges en Frésia'}</strong>
                   <p className="muted small" style={{ margin: 0 }}>
                     {form.fulfillment === 'delivery' ? `${form.address.colonia} · ` : ''}{form.name} · {form.phone}
-                    {quote.delivery.status === 'covered' && quoteEtaText(quote.delivery) ? ` · llega en ${quoteEtaText(quote.delivery)}` : ''}
-                    {quote.delivery.status === 'pickup' && data && prepText(data.delivery) ? ` · listo en ${prepText(data.delivery)}` : ''}
+                    {quote.delivery.status === 'covered' && quoteEtaText(quote.delivery) ? ` · aprox. ${quoteEtaText(quote.delivery)}` : ''}
+                    {quote.delivery.status === 'pickup' && data && prepText(data.delivery) ? ` · aprox. ${prepText(data.delivery)}` : ''}
                   </p>
                   {form.notes && <p className="muted small" style={{ margin: 0 }}>Nota: {form.notes}</p>}
                 </div>
@@ -223,9 +223,9 @@ export default function SummaryPage() {
                 onChange={setScheduledFor}
                 asapLabel={
                   form.fulfillment === 'pickup'
-                    ? prepText(data.delivery) ? `Listo en ${prepText(data.delivery)}` : 'Lo antes posible'
+                    ? prepText(data.delivery) ? `Estimado: listo en ${prepText(data.delivery)}` : 'Lo antes posible'
                     : quote.delivery.status === 'covered'
-                      ? quoteEtaText(quote.delivery) ? `Llega en ${quoteEtaText(quote.delivery)}` : 'Lo antes posible'
+                      ? quoteEtaText(quote.delivery) ? `Estimado: ${quoteEtaText(quote.delivery)} aprox.` : 'Lo antes posible'
                       : 'En cuanto confirmemos el envío'
                 }
               />

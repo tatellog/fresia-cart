@@ -9,6 +9,7 @@ import { LineDetails } from '../pages/parts';
 import { CollectBox } from './Collect';
 import { StatusFlow } from './StatusFlow';
 import { CourierShare } from './CourierShare';
+import { CollectCash, CourierPanel, KitchenTicket } from './Ops';
 import { DeliveryProof } from './DeliveryProof';
 import { GiftNotice } from './GiftCard';
 import { slotLabel } from '../../shared/schedule';
@@ -26,9 +27,11 @@ export default function OrderDetail() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const [shareNow, setShareNow] = useState(params.get('compartir') === '1');
-  // Paso de foto de entrega abierto (pedidos a domicilio); guarda si además hay que cobrar.
-  const [delivering, setDelivering] = useState<{ collect: boolean } | null>(null);
+  // Paso de foto de entrega abierto (pedidos a domicilio). El cobro es un paso aparte.
+  const [delivering, setDelivering] = useState(false);
   const askedDeliver = useRef(params.get('entregar') === '1');
+  const [collecting, setCollecting] = useState(params.get('cobrar') === '1');
+  const seenSent = useRef(false);
 
   const load = useCallback(() => {
     api<{ order: AdminOrder }>(`/api/admin/orders/${id}`).then((r) => setOrder(r.order), (e: Error) => setError(e.message));
@@ -38,6 +41,13 @@ export default function OrderDetail() {
     const t = setInterval(load, 15000);
     return () => clearInterval(t);
   }, [load]);
+
+  // Abrir el pedido = «visto» (distinto de empezar a prepararlo).
+  useEffect(() => {
+    if (!order || order.seenAt || seenSent.current) return;
+    seenSent.current = true;
+    void api(`/api/admin/orders/${order.id}/seen`, { body: {} }).catch(() => undefined);
+  }, [order]);
 
   async function act(path: string, body: unknown): Promise<boolean> {
     setBusy(true);
@@ -56,26 +66,27 @@ export default function OrderDetail() {
     return ok;
   }
 
-  async function setStatus(status: OrderStatus, collect: boolean, photoConfirmed = false) {
-    // A domicilio: antes de entregar hay que tomar la foto.
+  async function setStatus(status: OrderStatus, photoConfirmed = false) {
+    // A domicilio: antes de confirmar la entrega hay que tomar la foto.
     if (status === 'entregado' && order!.fulfillment === 'delivery' && !photoConfirmed) {
-      setDelivering({ collect });
+      setDelivering(true);
       return;
     }
     if (status === 'en_camino') setShareNow(true);
     if (!(await act(`orders/${order!.id}/status`, { status }))) return;
-    if (collect && !(await act(`orders/${order!.id}/collected`, {}))) return;
-    // Pedido terminado: de vuelta a la lista.
-    if (status === 'entregado') navigate('/admin', { state: { completed: { number: order!.number, collected: collect ? order!.total : null } } });
+    setDelivering(false);
+    // Entregado y ya pagado: de vuelta a la lista. Si falta cobrar, se queda aquí con el cobro abierto.
+    if (status === 'entregado') {
+      if (order!.paymentMethod === 'contra_entrega' && order!.paymentStatus !== 'aprobado') setCollecting(true);
+      else navigate('/admin', { state: { completed: { number: order!.number, collected: null } } });
+    }
   }
 
-  // Desde la lista («Entregado») o un enlace ?entregar=1: abre directo el paso de la foto.
+  // Desde la lista («Confirmar entrega») o un enlace ?entregar=1: abre directo el paso de la foto.
   useEffect(() => {
     if (!order || !askedDeliver.current) return;
     askedDeliver.current = false;
-    if (order.orderStatus === 'en_camino' || order.orderStatus === 'listo') {
-      setDelivering({ collect: order.paymentMethod === 'contra_entrega' && order.paymentStatus !== 'aprobado' });
-    }
+    if (order.orderStatus === 'en_camino' || order.orderStatus === 'listo') setDelivering(true);
   }, [order]);
 
   if (error) return <LoadError message={error} retry={load} />;
@@ -102,7 +113,8 @@ export default function OrderDetail() {
           🗓 <strong>Programado para {slotLabel(order.scheduledFor)}</strong> · prepáralo para esa hora.
         </div>
       )}
-      {order.groupName && <div className="notice">👥 Pedido de equipo «{order.groupName}» · cada producto dice para quién es.</div>}
+      {order.groupName && <div className="notice">👥 Pedido de equipo «{order.groupName}» · la comanda va separada por persona.</div>}
+      {['recibido', 'confirmado', 'en_preparacion', 'listo'].includes(order.orderStatus) && <KitchenTicket order={order} />}
       <GiftNotice order={order} />
       {order.orderStatus !== 'entregado' && <CollectBox order={order} />}
       {order.demo && order.paymentMethod === 'online' && <div className="notice warn">Pago en línea simulado: no hubo cobro real.</div>}
@@ -118,7 +130,14 @@ export default function OrderDetail() {
         <h2>{order.orderStatus === 'cancelado' ? 'Pedido cancelado' : 'Avance'}</h2>
         {order.orderStatus === 'entregado' && <CompletedBox order={order} />}
         {order.orderStatus !== 'cancelado' && order.orderStatus !== 'cotizando_envio' && (
-          <StatusFlow order={order} busy={busy} onSet={setStatus} />
+          <StatusFlow
+            order={order}
+            busy={busy}
+            onSet={(st) => setStatus(st)}
+            onCollect={() => setCollecting(true)}
+            // A domicilio, salir y entregar se hacen desde el panel de entrega (abajo).
+            hideNext={order.fulfillment === 'delivery' && ['en_preparacion', 'listo', 'en_camino'].includes(order.orderStatus)}
+          />
         )}
         {order.orderStatus === 'cancelado' && (
           <p className="muted">{paid ? `Se había cobrado ${order.total != null ? money(order.total) : ''}. Revisa el reembolso abajo.` : 'No se cobró.'}</p>
@@ -140,8 +159,8 @@ export default function OrderDetail() {
             <summary>Más opciones</summary>
             <div className="status-actions" style={{ marginTop: 12 }}>
               {cod && !paid && order.orderStatus !== 'cotizando_envio' && (
-                <button className="btn secondary small" disabled={busy} onClick={() => act(`orders/${order.id}/collected`, {})}>
-                  Marcar solo como cobrado {order.total != null && money(order.total)}
+                <button className="btn secondary small" disabled={busy} onClick={() => setCollecting(true)}>
+                  💵 Registrar cobro {order.total != null && money(order.total)}
                 </button>
               )}
               {!confirmCancel ? (
@@ -166,14 +185,18 @@ export default function OrderDetail() {
         )}
       </section>
 
+      {cod && !paid && collecting && order.orderStatus !== 'cancelado' && order.orderStatus !== 'cotizando_envio' && (
+        <CollectCash order={order} onDone={(o) => { setOrder(o); setCollecting(false); if (o.orderStatus === 'entregado') navigate('/admin', { state: { completed: { number: o.number, collected: o.total } } }); }} />
+      )}
+
+      {order.fulfillment === 'delivery' && ['en_preparacion', 'listo', 'en_camino'].includes(order.orderStatus) && (
+        <CourierPanel order={order} busy={busy} onStart={() => setStatus('en_camino')} onConfirm={() => setStatus('entregado')}>
+          {order.orderStatus === 'en_camino' && <CourierShare orderId={order.id} autoStart={shareNow} />}
+        </CourierPanel>
+      )}
+
       {delivering && order.orderStatus !== 'entregado' && (
-        <DeliveryProof
-          order={order}
-          collect={delivering.collect}
-          busy={busy}
-          onCancel={() => setDelivering(null)}
-          onConfirm={() => setStatus('entregado', delivering.collect, true)}
-        />
+        <DeliveryProof order={order} busy={busy} onCancel={() => setDelivering(false)} onConfirm={() => setStatus('entregado', true)} />
       )}
 
       {order.deliveryPhotoAt && order.orderStatus === 'entregado' && (
@@ -183,7 +206,6 @@ export default function OrderDetail() {
         </section>
       )}
 
-      {order.orderStatus === 'en_camino' && order.fulfillment === 'delivery' && <CourierShare orderId={order.id} autoStart={shareNow} />}
 
       {order.orderStatus === 'cotizando_envio' && <ShippingQuoteForm order={order} busy={busy} onSubmit={(fee, etaText) => act(`orders/${order.id}/shipping`, { fee, etaText })} />}
 
@@ -330,11 +352,12 @@ function CompletedBox({ order }: { order: AdminOrder }) {
   const paid = order.paymentStatus === 'aprobado';
   return (
     <div className="completed-box" role="status">
-      <strong>✅ Pedido completado</strong>
+      <strong>{paid ? '✅ Pedido completado' : '✅ Entregado · falta el cobro'}</strong>
       <span>
         {order.fulfillment === 'delivery' ? 'Entregado' : 'Recogido'}
         {time && ` a las ${time}`}
         {order.total != null && (paid ? ` · ${order.paymentMethod === 'online' ? 'Pagado en línea' : 'Cobrado'} ${money(order.total)}` : ` · ⚠️ Falta registrar el cobro de ${money(order.total)}`)}
+        {paid && order.cashReceived != null && ` · recibió ${money(order.cashReceived)}${order.changeGiven ? `, cambio ${money(order.changeGiven)}` : ' (exacto)'}`}
       </span>
     </div>
   );

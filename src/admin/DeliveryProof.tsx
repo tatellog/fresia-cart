@@ -1,16 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { compressPhoto } from '../lib/photo';
-import { money } from '../lib/format';
 import { ApiError } from '../lib/api';
 import type { AdminOrder } from '../../shared/types';
 
 /**
  * Paso final de un pedido a domicilio: foto de entrega (obligatoria) y confirmar.
- * La foto se sube primero; luego se marca entregado (y cobrado si era en efectivo).
+ * La foto se sube primero; luego se marca entregado. El cobro se registra aparte.
  */
-export function DeliveryProof({ order, collect, busy, onConfirm, onCancel }: {
+export function DeliveryProof({ order, busy, onConfirm, onCancel }: {
   order: AdminOrder;
-  collect: boolean;
   busy: boolean;
   onConfirm: () => Promise<void>;
   onCancel: () => void;
@@ -66,7 +64,7 @@ export function DeliveryProof({ order, collect, busy, onConfirm, onCancel }: {
 
       <button type="button" className="btn primary block big-action" disabled={!hasPhoto || busy} onClick={onConfirm}>
         <span className="big-action-hint">{hasPhoto ? 'Último paso' : 'Primero toma la foto'}</span>
-        <span>✅ Confirmar entrega{collect && order.total != null ? ` y cobro ${money(order.total)}` : ''}</span>
+        <span>✅ Confirmar entrega</span>
       </button>
       <div className="row" style={{ flexWrap: 'wrap' }}>
         {preview && (

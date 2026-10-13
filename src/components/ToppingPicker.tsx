@@ -9,8 +9,8 @@ import { money } from '../lib/format';
  * Un mismo topping se puede repetir (doble nuez) con − / +.
  */
 export function ToppingPicker({
-  product, toppings, rules, chosen, onChange, idPrefix = 't',
-}: { product: Product; toppings: Topping[]; rules: MenuRules; chosen: string[]; onChange: (ids: string[]) => void; idPrefix?: string }) {
+  product, toppings, rules, chosen, onChange, idPrefix = 't', popular = [],
+}: { product: Product; toppings: Topping[]; rules: MenuRules; chosen: string[]; onChange: (ids: string[]) => void; idPrefix?: string; popular?: string[] }) {
   const list = toppings.filter((t) => product.toppingIds.includes(t.id));
   if (list.length === 0) return null;
   const isPremium = (t: Topping) => t.premium && !product.freePremiumIds.includes(t.id);
@@ -21,8 +21,12 @@ export function ToppingPicker({
   const atMax = max != null && chosen.length >= max;
   const countOf = (id: string) => chosen.filter((x) => x === id).length;
 
-  const regular = list.filter((t) => !isPremium(t));
-  const premium = list.filter(isPremium);
+  // Primero lo más pedido (datos reales); después los clásicos; los premium plegados.
+  const isPopular = (t: Topping) => popular.includes(t.id) && t.available;
+  const top = popular.map((id) => list.find((t) => t.id === id)).filter((t): t is Topping => !!t && t.available);
+  const regular = list.filter((t) => !isPremium(t) && !isPopular(t));
+  const premium = list.filter((t) => isPremium(t) && !isPopular(t));
+  const premiumChosen = premium.some((t) => chosen.includes(t.id));
 
   const add = (id: string) => !atMax && countOf(id) < MAX_SAME_TOPPING && onChange([...chosen, id]);
   const removeOne = (id: string) => {
@@ -95,8 +99,16 @@ export function ToppingPicker({
       <p className="muted small" style={{ margin: '-6px 0 0' }}>
         {product.includedToppings > 0 ? `Adicionales ${money(rules.extraToppingPrice)} c/u. ` : ''}¿Doble porción? Elige el topping y toca +.
       </p>
-      {group(premium.length ? 'Clásicos' : '', regular)}
-      {group('Premium · no gastan tus incluidos', premium)}
+      {group(top.length ? '⭐ Los más pedidos' : '', top)}
+      {group(top.length || premium.length ? 'Clásicos' : '', regular)}
+      {premium.length > 0 && (
+        <details className="premium-group" open={premiumChosen}>
+          <summary>
+            Premium · {premium.length} opciones <span className="muted small">(no gastan tus incluidos)</span>
+          </summary>
+          {group('', premium)}
+        </details>
+      )}
     </fieldset>
   );
 }

@@ -8,6 +8,7 @@ import type { AdminOrder } from '../../shared/types';
 import { DeskControls, PushSetup, cancelChime, chime } from './Alerts';
 import { CollectPill } from './Collect';
 import { nextAction } from './StatusFlow';
+import { PushWarning, ReceptionBadge, UrgencyChip } from './Ops';
 import { slotLabel } from '../../shared/schedule';
 
 type Filter = 'activos' | 'programados' | 'sin_pagar' | 'revision' | 'todos';
@@ -23,7 +24,7 @@ export default function Orders() {
   const [filter, setFilter] = useState<Filter>('activos');
   const [orders, setOrders] = useState<AdminOrder[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [summary, setSummary] = useState<{ nuevos: number; cotizar: number; revision: number; canceladosCliente?: { id: string; number: string; at: string }[] }>({ nuevos: 0, cotizar: 0, revision: 0 });
+  const [summary, setSummary] = useState<{ nuevos: number; sinVer?: number; cotizar: number; revision: number; canceladosCliente?: { id: string; number: string; at: string }[] }>({ nuevos: 0, cotizar: 0, revision: 0 });
   // Cancelaciones del cliente ya anunciadas (sobrevive a cambiar de pantalla).
   const [canceled, setCanceled] = useState<{ id: string; number: string }[]>([]);
   const location = useLocation();
@@ -66,7 +67,7 @@ export default function Orders() {
         setCanceled((cur) => [...newly, ...cur]);
         cancelChime();
       }
-      document.title = s.nuevos ? `(${s.nuevos}) Nuevos · Frésia` : 'Panel · Frésia Office';
+      document.title = s.sinVer ? `(${s.sinVer}) Sin ver · Frésia` : 'Panel · Frésia Office';
     } catch (e) {
       setError((e as Error).message);
     }
@@ -126,9 +127,10 @@ export default function Orders() {
       <div className="row between" style={{ flexWrap: 'wrap' }}>
         <h1>Pedidos</h1>
         <p className="muted small" aria-live="polite">
-          {summary.nuevos} nuevos · {summary.cotizar} por cotizar · {summary.revision} en revisión · se actualiza cada 15 s
+          {summary.sinVer ?? 0} sin ver · {summary.cotizar} por cotizar · {summary.revision} en revisión · ordenados por urgencia · cada 15 s
         </p>
       </div>
+      <PushWarning />
       <DeskControls />
       <div className="tabs" role="group" aria-label="Filtrar pedidos">
         {FILTERS.map((f) => (
@@ -158,14 +160,15 @@ function OrderRow({ o, onChanged }: { o: AdminOrder; onChanged: () => void }) {
   const next = nextAction(o);
   async function advance() {
     if (!next) return;
-    // A domicilio, «Entregado» necesita la foto: abre el pedido en ese paso.
+    // El cobro se registra en el pedido (cuánto dio y el cambio); nunca junto con la entrega.
+    if (next.kind === 'collect') return navigate(`/admin/pedidos/${o.id}?cobrar=1`);
+    // A domicilio, «Confirmar entrega» necesita la foto: abre el pedido en ese paso.
     if (next.status === 'entregado' && o.fulfillment === 'delivery') return navigate(`/admin/pedidos/${o.id}?entregar=1`);
     setBusy(true);
     setErr(null);
     try {
       await api(`/api/admin/orders/${o.id}/status`, { body: { status: next.status } });
-      if (next.collect) await api(`/api/admin/orders/${o.id}/collected`, { body: {} });
-      // Al salir a entregar, abre el pedido y empieza a compartir la ubicación desde este celular.
+      // Al iniciar la entrega, abre el pedido y empieza a compartir la ubicación desde este celular.
       if (next.status === 'en_camino') return navigate(`/admin/pedidos/${o.id}?compartir=1`);
       onChanged();
     } catch (e) {
@@ -174,11 +177,12 @@ function OrderRow({ o, onChanged }: { o: AdminOrder; onChanged: () => void }) {
     setBusy(false);
   }
   return (
-    <div className={`order-card ${o.orderStatus === 'recibido' ? 'new' : ''}`}>
+    <div className={`order-card ${o.orderStatus === 'recibido' && !o.seenAt ? 'new' : ''} ${o.urgency?.level === 'late' ? 'late' : ''}`}>
       <Link to={`/admin/pedidos/${o.id}`} className="order-row">
         <div className="row" style={{ flexWrap: 'wrap', gap: 8 }}>
           <strong>{o.number}</strong>
           <span className={`badge ${o.orderStatus === 'recibido' ? 'red' : ''}`}>{ORDER_LABEL[o.orderStatus]}</span>
+          <ReceptionBadge order={o} />
           {o.needsReview && <span className="badge example">Revisar</span>}
           {o.refundStatus === 'pendiente' && <span className="badge example">Reembolso pendiente</span>}
           {o.demo && o.paymentMethod === 'online' && <span className="badge">Demo</span>}
@@ -188,7 +192,10 @@ function OrderRow({ o, onChanged }: { o: AdminOrder; onChanged: () => void }) {
           {o.invoice && <span className="badge">🧾 Factura{o.invoiceStatus === 'emitida' ? ' ✓' : ''}</span>}
         </div>
         <span className="price">{o.total != null ? money(o.total) : 'Envío por cotizar'}</span>
-        <span style={{ gridColumn: '1 / -1' }}><CollectPill order={o} /></span>
+        <span style={{ gridColumn: '1 / -1' }} className="row" >
+          <UrgencyChip order={o} />
+          <CollectPill order={o} />
+        </span>
         <span className="muted small">
           {o.customerName} · {o.fulfillment === 'delivery' ? 'A domicilio' : 'Recoge'} · {o.items.reduce((s, l) => s + l.qty, 0)} productos
         </span>

@@ -94,3 +94,39 @@ export function normalizeProduct(p: Partial<Product> & Pick<Product, 'id' | 'nam
     fresiaUnits: 0, combo: null, available: false, sort: 0, example: true, ...p,
   } as Product;
 }
+
+// ── Lo más pedido (para destacar opciones populares con datos reales) ──
+
+export type Popular = Record<string, { sizeId: string | null; toppingIds: string[] }>;
+/** Pedidos mínimos de un producto en 90 días para decir que algo es «lo más pedido». */
+export const POPULAR_MIN_ORDERS = 5;
+let popularCache: { at: number; value: Popular } | null = null;
+
+export async function getPopular(db: DB, now = Date.now()): Promise<Popular> {
+  if (popularCache && now - popularCache.at < 10 * 60_000) return popularCache.value;
+  const where = "o.created_at > now() - interval '90 days' and o.order_status <> 'cancelado'";
+  const [sizes, tops] = await Promise.all([
+    db.query<{ product: string; size: string; n: number; orders: number }>(
+      `select l->>'productId' as product, l->>'sizeId' as size, sum((l->>'qty')::int)::int as n, count(distinct o.id)::int as orders
+       from office.orders o, jsonb_array_elements(o.items) l where ${where} group by 1, 2`,
+    ),
+    db.query<{ product: string; topping: string; n: number }>(
+      `select l->>'productId' as product, t->>'id' as topping, count(distinct o.id)::int as n
+       from office.orders o, jsonb_array_elements(o.items) l, jsonb_array_elements(coalesce(l->'toppings', '[]'::jsonb)) t
+       where ${where} group by 1, 2`,
+    ),
+  ]);
+  const ordersBy = new Map<string, number>();
+  sizes.forEach((r) => ordersBy.set(r.product, (ordersBy.get(r.product) ?? 0) + r.orders));
+  const value: Popular = {};
+  for (const [product, orders] of ordersBy) {
+    if (orders < POPULAR_MIN_ORDERS) continue;
+    const mine = sizes.filter((r) => r.product === product).sort((a, b) => b.n - a.n);
+    // Un topping es «de los más pedidos» si aparece en al menos 2 pedidos distintos.
+    const top = tops.filter((r) => r.product === product && r.n >= 2).sort((a, b) => b.n - a.n).slice(0, 3);
+    value[product] = { sizeId: mine[0]?.size ?? null, toppingIds: top.map((t) => t.topping) };
+  }
+  popularCache = { at: now, value };
+  return value;
+}
+export const resetPopularCache = () => (popularCache = null);
