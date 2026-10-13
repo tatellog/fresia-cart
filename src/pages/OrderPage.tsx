@@ -113,6 +113,7 @@ export default function OrderPage() {
   const business = menu?.business;
   const wa = (text: string) => (business ? whatsappLink(business, text) : null);
   const status = headline(order, !!verifying);
+  const pieces = order.items.reduce((n, l) => n + l.qty, 0);
 
   return (
     <>
@@ -120,25 +121,29 @@ export default function OrderPage() {
       <main className="page stack-lg">
         <TopBar back="/" />
 
-        <section className="stack" style={{ gap: 8 }} aria-live="polite">
-          <p className="muted small">Pedido</p>
-          <p className="big-number">{order.number}</p>
-          <div className="row" style={{ flexWrap: 'wrap', gap: 8 }}>
-            <span className={`badge ${order.paymentStatus === 'aprobado' ? 'ok' : ['rechazado', 'cancelado'].includes(order.paymentStatus) ? 'example' : order.paymentStatus === 'por_cobrar' ? '' : 'warn'}`}>
-              {PAYMENT_LABEL[order.paymentStatus]}
+        <section className="card order-hero" aria-live="polite">
+          <div className="row between" style={{ flexWrap: 'wrap', gap: 8 }}>
+            <span className="eyebrow">Pedido {order.number}</span>
+            <span className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+              {order.demo && order.paymentMethod === 'online' && <span className="badge">Simulado</span>}
+              <span className={`badge ${order.paymentStatus === 'aprobado' ? 'ok' : ['rechazado', 'cancelado'].includes(order.paymentStatus) ? 'example' : order.paymentStatus === 'por_cobrar' ? '' : 'warn'}`}>
+                {PAYMENT_LABEL[order.paymentStatus]}
+              </span>
             </span>
-            {order.demo && order.paymentMethod === 'online' && <span className="badge">Pago simulado · sin cobro real</span>}
           </div>
-        </section>
-
-        <section className="card stack">
-          <div className="row" style={{ alignItems: 'flex-start' }}>
-            {status.spinner && <span className="spinner" aria-hidden="true" style={{ marginTop: 4 }} />}
-            <div className="stack" style={{ gap: 6 }}>
-              <h1 style={{ fontSize: '1.35rem' }}>{status.title}</h1>
-              <p className="muted">{status.body}</p>
-            </div>
+          <div className="row" style={{ alignItems: 'flex-start', gap: 10 }}>
+            {status.spinner && <span className="spinner" aria-hidden="true" style={{ marginTop: 6 }} />}
+            <h1>{status.title}</h1>
           </div>
+          <p className="muted" style={{ margin: 0 }}>{status.body}</p>
+          {(order.scheduledFor || order.deliveryQuote.status === 'quoted') && order.orderStatus !== 'cancelado' && order.orderStatus !== 'entregado' && (
+            <p className="when-chip">
+              {order.scheduledFor ? <>🗓 {order.fulfillment === 'delivery' ? 'Llega' : 'Listo'} <strong>{slotLabel(order.scheduledFor)}</strong></> : <>⏱ Tiempo estimado: <strong>{order.deliveryQuote.status === 'quoted' ? order.deliveryQuote.etaText : ''}</strong></>}
+            </p>
+          )}
+          {(order.paymentStatus === 'aprobado' || (order.paymentMethod === 'contra_entrega' && order.orderStatus !== 'cotizando_envio' && order.orderStatus !== 'cancelado')) && (
+            <Progress order={order} />
+          )}
 
           {order.canPay && !verifying && (
             <button type="button" className="btn primary block" onClick={pay} disabled={paying}>
@@ -170,76 +175,78 @@ export default function OrderPage() {
           </section>
         )}
 
-        {(order.paymentStatus === 'aprobado' || (order.paymentMethod === 'contra_entrega' && order.orderStatus !== 'cotizando_envio' && order.orderStatus !== 'cancelado')) && (
-          <Progress order={order} />
-        )}
-
-        {order.orderStatus !== 'cancelado' && order.orderStatus !== 'cotizando_envio' && (
-          <ClubCardView number={order.number} token={token} delivered={order.orderStatus === 'entregado'} />
-        )}
-
-        <section className="card stack" aria-labelledby="sum-title">
-          <h2 id="sum-title">Resumen</h2>
-          <OrderLines lines={order.items} products={menu?.products ?? []} />
-          <Totals subtotal={order.subtotal} shippingFee={order.shippingFee} total={order.total} fulfillment={order.fulfillment} />
-        </section>
-
-        {(order.scheduledFor || order.groupName || order.invoice || order.gift) && (
-          <section className="card flat stack" style={{ gap: 6 }}>
-            {order.gift && (
-              <p>
-                🎁 <strong>Fresigrama para {order.gift.to}</strong>
-                {order.gift.anonymous ? ' · anónimo' : ''}
-                {order.gift.note && <><br /><span className="muted">«{order.gift.note}»</span></>}
-              </p>
-            )}
-            {order.scheduledFor && <p>🗓 <strong>Programado:</strong> {slotLabel(order.scheduledFor)}</p>}
-            {order.groupName && <p>👥 Pedido de equipo «{order.groupName}»</p>}
-            {order.invoice && (
-              <p>
-                🧾 Factura {order.invoiceStatus === 'emitida' ? 'emitida' : 'solicitada'} · RFC {order.invoice.rfc} · se envía a {order.invoice.email}
-              </p>
-            )}
-          </section>
-        )}
-
-        <section className="card flat stack" aria-labelledby="dl-title">
-          <h2 id="dl-title">{order.fulfillment === 'delivery' ? 'Entrega' : 'Recoger en Frésia'}</h2>
-          <p>{order.customerName}</p>
-          {order.address ? (
-            <p className="muted">
-              {order.address.street} {order.address.number}, {order.address.office}
-              <br />
-              {order.address.colonia}, CP {order.address.postalCode}
-            </p>
-          ) : (
-            <p className="muted">{business?.address}</p>
-          )}
-          {order.deliveryQuote.status === 'quoted' && <p className="small">Tiempo estimado: {order.deliveryQuote.etaText}</p>}
-          <p className="muted small">Hecho el {formatDate(order.createdAt)}</p>
-        </section>
-
-        {order.orderStatus !== 'cotizando_envio' && (
-          <div className="stack" style={{ gap: 8 }}>
-            <WhatsAppButton href={wa(`Hola Frésia, quiero consultar mi pedido ${order.number}.`)} label="Consultar mi pedido por WhatsApp" />
-            <p className="muted small" style={{ textAlign: 'center' }}>
-              Opcional. {order.paymentStatus === 'aprobado' || order.paymentMethod === 'contra_entrega' ? 'Tu pedido ya nos llegó; no necesitas escribirnos.' : ''}
-            </p>
-          </div>
-        )}
-
-        {CUSTOMER_CANCELABLE.includes(order.orderStatus) && (
-          <CancelOrder number={order.number} token={token} paid={order.paymentStatus === 'aprobado'} onDone={setOrder} />
-        )}
-
-        <p className="muted small">Guarda esta página para consultar el estado. Solo quien tenga este enlace puede verla.</p>
         {(order.orderStatus === 'entregado' || order.orderStatus === 'cancelado') &&
           (order.groupName ? (
             <Link to={`/equipo/nuevo?nombre=${encodeURIComponent(order.groupName)}`} className="btn primary block">👥 Nuevo pedido de equipo «{order.groupName}»</Link>
           ) : (
             <button type="button" className="btn primary block" onClick={repeat} disabled={!menu}>🔁 Repetir este pedido</button>
           ))}
-        <Link to="/" className="btn secondary block">Volver al menú</Link>
+
+        <section className="card review" aria-label="Tu pedido">
+          <details className="review-items">
+            <summary>
+              <span className="thumbs" aria-hidden="true">
+                {order.items.slice(0, 4).map((l, i) => {
+                  const img = menu?.products.find((p) => p.id === l.productId)?.image;
+                  return img ? <img key={i} src={img} alt="" width={36} height={36} /> : null;
+                })}
+              </span>
+              <span className="grow">
+                <strong>{pieces} producto{pieces === 1 ? '' : 's'}</strong>
+                <span className="muted small"> · ver detalle</span>
+              </span>
+              <span className="price">{order.total != null ? money(order.total) : 'Por confirmar'}</span>
+            </summary>
+            <OrderLines lines={order.items} products={menu?.products ?? []} />
+            <Totals subtotal={order.subtotal} shippingFee={order.shippingFee} total={order.total} fulfillment={order.fulfillment} />
+            <div style={{ height: 10 }} />
+          </details>
+          <div className="review-row">
+            <span className="icon" aria-hidden="true">{order.fulfillment === 'delivery' ? '🛵' : '🏪'}</span>
+            <div className="grow">
+              <strong>{order.address ? `${order.address.street} ${order.address.number}${order.address.office ? `, ${order.address.office}` : ''}` : 'Recoges en Frésia'}</strong>
+              <p className="muted small" style={{ margin: 0 }}>
+                {order.address ? `${order.address.colonia} · ` : business?.address ? `${business.address} · ` : ''}{order.customerName} · hecho el {formatDate(order.createdAt)}
+              </p>
+            </div>
+          </div>
+          {order.gift && (
+            <div className="review-row">
+              <span className="icon" aria-hidden="true">🎁</span>
+              <div className="grow">
+                <strong>Fresigrama para {order.gift.to}{order.gift.anonymous ? ' · anónimo' : ''}</strong>
+                {order.gift.note && <p className="muted small" style={{ margin: 0 }}>«{order.gift.note}»</p>}
+              </div>
+            </div>
+          )}
+          {order.groupName && (
+            <div className="review-row"><span className="icon" aria-hidden="true">👥</span><div className="grow"><strong>Pedido de equipo «{order.groupName}»</strong></div></div>
+          )}
+          {order.invoice && (
+            <div className="review-row">
+              <span className="icon" aria-hidden="true">🧾</span>
+              <div className="grow">
+                <strong>Factura {order.invoiceStatus === 'emitida' ? 'emitida' : 'solicitada'}</strong>
+                <p className="muted small" style={{ margin: 0 }}>RFC {order.invoice.rfc} · se envía a {order.invoice.email}</p>
+              </div>
+            </div>
+          )}
+        </section>
+
+        {order.orderStatus !== 'cancelado' && order.orderStatus !== 'cotizando_envio' && (
+          <ClubCardView number={order.number} token={token} delivered={order.orderStatus === 'entregado'} />
+        )}
+
+        <section className="order-help" aria-label="Ayuda">
+          {order.orderStatus !== 'cotizando_envio' && wa('') && (
+            <a href={wa(`Hola Frésia, quiero consultar mi pedido ${order.number}.`)!} target="_blank" rel="noopener noreferrer" className="linkbtn">💬 ¿Dudas? Escríbenos por WhatsApp</a>
+          )}
+          {CUSTOMER_CANCELABLE.includes(order.orderStatus) && (
+            <CancelOrder number={order.number} token={token} paid={order.paymentStatus === 'aprobado'} onDone={setOrder} />
+          )}
+          <p className="muted small" style={{ margin: 0 }}>Guarda esta página para ver el estado; solo quien tenga este enlace puede verla.</p>
+          <Link to="/" className="linkbtn">Volver al menú</Link>
+        </section>
         <Footer />
       </main>
     </>
@@ -335,8 +342,8 @@ function Progress({ order }: { order: PublicOrder }) {
   const rank: Record<string, number> = { recibido: 0, confirmado: 0, en_preparacion: 1, listo: 2, en_camino: 2, entregado: 3 };
   const current = rank[order.orderStatus] ?? 0;
   return (
-    <section className="card" aria-label="Avance del pedido">
-      <ol className="timeline">
+    <div aria-label="Avance del pedido">
+      <ol className="track">
         {steps.map((s, i) => {
           const state = i < current || order.orderStatus === 'entregado' ? 'done' : i === current ? 'done current' : 'todo';
           return (
@@ -347,7 +354,7 @@ function Progress({ order }: { order: PublicOrder }) {
           );
         })}
       </ol>
-    </section>
+    </div>
   );
 }
 
@@ -370,9 +377,9 @@ function CancelOrder({ number, token, paid, onDone }: { number: string; token: s
   }
   if (!asking) {
     return (
-      <div className="stack" style={{ gap: 6 }}>
-        <button type="button" className="btn ghost block" onClick={() => setAsking(true)}>Cancelar pedido</button>
-        <p className="muted small" style={{ textAlign: 'center' }}>Puedes cancelar mientras no empecemos a prepararlo.</p>
+      <div className="stack" style={{ gap: 4, alignItems: 'center' }}>
+        <button type="button" className="linkbtn danger" onClick={() => setAsking(true)}>Cancelar pedido</button>
+        <p className="muted small" style={{ margin: 0 }}>Puedes cancelar mientras no empecemos a prepararlo.</p>
         {error && <p className="notice error" role="alert">{error}</p>}
       </div>
     );

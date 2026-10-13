@@ -271,6 +271,23 @@ p {
 .secure-note { display: flex; gap: 8px; margin: 0; font-size: 0.85rem; color: var(--choc-2); }
 .pay-total { display: grid; gap: 10px; }
 
+/* Estado del pedido */
+.order-hero { display: grid; gap: 12px; }
+.order-hero h1 { font-size: 1.45rem; }
+.when-chip { margin: 0; padding: 10px 12px; border-radius: var(--radius-sm); background: var(--cream); font-size: 0.95rem; }
+.track { list-style: none; margin: 6px 0 0; padding: 0; display: grid; grid-template-columns: repeat(4, 1fr); }
+.track li { position: relative; display: grid; justify-items: center; gap: 6px; text-align: center; font-size: 0.75rem; color: var(--choc-2); }
+.track li::before { content: ''; position: absolute; top: 8px; left: -50%; width: 100%; height: 3px; background: var(--line); z-index: 0; }
+.track li:first-child::before { display: none; }
+.track li.done::before { background: var(--red); }
+.track .dot { position: relative; z-index: 1; width: 18px; height: 18px; border-radius: 50%; background: #fff; border: 2px solid var(--line); }
+.track li.done .dot { background: var(--red); border-color: var(--red); }
+.track li.current .dot { box-shadow: 0 0 0 5px var(--rose-soft); }
+.track li.done span:last-child { color: var(--choc); }
+.track li.current span:last-child { font-weight: 700; }
+.order-help { display: grid; gap: 12px; justify-items: center; text-align: center; padding: 8px 0; }
+.linkbtn.danger { color: var(--red-ink); }
+
 /* ── Encabezado de la tienda ───────────── */
 .site-header {
   position: sticky;
