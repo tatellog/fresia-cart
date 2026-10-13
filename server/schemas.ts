@@ -209,11 +209,16 @@ export const createGroupSchema = z.object({
   organizerName: text(40).min(2, 'Escribe tu nombre.'),
   closesInMinutes: z.number().int().min(10).max(24 * 60).nullable().default(null),
 });
-export const groupItemSchema = z.object({
+export const groupMemberSchema = z.object({
   memberName: text(40).min(2, 'Escribe tu nombre.'),
   memberKey: z.string().min(10).max(80),
-  line: lineSchema,
 });
+export const groupItemSchema = groupMemberSchema.extend({
+  line: lineSchema,
+  /** Id generado en el teléfono: reintentar no duplica el producto. */
+  itemId: z.string().uuid().optional(),
+});
+export const groupAdminSchema = z.object({ adminToken: z.string().min(10).max(80) });
 export const qrSourceSchema = z.object({
   label: text(60).min(2, 'Escribe el nombre del edificio.'),
   slug: z.string().regex(/^[a-z0-9-]{2,40}$/, 'Usa minúsculas, números y guiones.'),

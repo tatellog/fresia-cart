@@ -15,7 +15,8 @@ const LIMITS: { label: string; minutes: number | null }[] = [
 /** Crea un pedido de equipo y lleva al enlace para compartir. */
 export default function GroupNewPage() {
   const navigate = useNavigate();
-  const [name, setName] = useState('');
+  // «Nuevo pedido de equipo» desde uno anterior: mismo nombre, enlace nuevo y sin los productos de nadie.
+  const [name, setName] = useState(() => new URLSearchParams(window.location.search).get('nombre')?.slice(0, 60) ?? '');
   const [organizer, setOrganizer] = useState('');
   const [minutes, setMinutes] = useState<number | null>(60);
   const [busy, setBusy] = useState(false);
@@ -26,7 +27,7 @@ export default function GroupNewPage() {
     setError(null);
     try {
       const g = await api<{ code: string; adminToken: string }>('/api/groups', { body: { name: name.trim(), organizerName: organizer.trim(), closesInMinutes: minutes } });
-      rememberGroupAdmin(g.code, g.adminToken);
+      rememberGroupAdmin(g.code, g.adminToken, name.trim());
       track('crear_equipo', { mode: 'equipo' });
       setActiveGroup({ code: g.code, name: name.trim(), memberName: organizer.trim() });
       navigate(`/equipo/${g.code}?nuevo=1`, { replace: true });

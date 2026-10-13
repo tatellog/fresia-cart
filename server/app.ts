@@ -1,6 +1,6 @@
 import express from 'express';
 import type { NextFunction, Request, Response } from 'express';
-import { existsSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import QRCode from 'qrcode';
 import { ZodError } from 'zod';
@@ -18,11 +18,12 @@ import {
 } from './orders';
 import * as store from './store';
 import * as S from './schemas';
+import { deadlineText } from '../shared/schedule';
 import { deviceOf, funnel, purgeOldEvents, recordEvent } from './analytics';
 import { clearSession, isAdmin, passwordMatches, secretMatches, rateLimit, requireAdmin, setSession } from './auth';
-import { addGroupItem, createGroup, groupLinesForOrder, groupView, removeGroupItem } from './groups';
+import { addGroupItem, createGroup, groupLinesForOrder, groupView, joinGroup, removeGroupItem, setGroupOpen } from './groups';
 import { background, sleep } from './background';
-import { clubCardFor, stampClub } from './club';
+import { clubCardFor, syncClub } from './club';
 import { lookupPostalCode, postalCatalogLoaded } from './postal';
 import { listSubscriptions, pushConfigured, removeSubscription, saveSubscription, sendPushToAll } from './push';
 import type { LegalSlug, MenuResponse } from '../shared/types';
@@ -127,6 +128,18 @@ export async function createApp(config: Config, opts: { demoWebhookDelayMs?: num
   });
   app.get('/api/groups/:code', rateLimit(240, 60_000), async (req, res) => {
     res.json(await groupView(ctx, String(req.params.code), { memberKey: String(req.query.k ?? ''), adminToken: String(req.query.a ?? '') }));
+  });
+  app.post('/api/groups/:code/join', rateLimit(60, 60_000), async (req, res) => {
+    await joinGroup(ctx, String(req.params.code), S.groupMemberSchema.parse(req.body));
+    res.json({ ok: true });
+  });
+  app.post('/api/groups/:code/close', rateLimit(30, 60_000), async (req, res) => {
+    await setGroupOpen(ctx, String(req.params.code), S.groupAdminSchema.parse(req.body).adminToken, false);
+    res.json({ ok: true });
+  });
+  app.post('/api/groups/:code/reopen', rateLimit(30, 60_000), async (req, res) => {
+    await setGroupOpen(ctx, String(req.params.code), S.groupAdminSchema.parse(req.body).adminToken, true);
+    res.json({ ok: true });
   });
   app.post('/api/groups/:code/items', rateLimit(60, 60_000), async (req, res) => {
     await addGroupItem(ctx, String(req.params.code), S.groupItemSchema.parse(req.body));
@@ -331,13 +344,15 @@ export async function createApp(config: Config, opts: { demoWebhookDelayMs?: num
     if (!ADMIN_FLOW.includes(status)) throw new HttpError(400, 'Estado no válido.');
     const before = await orderOr404(String(req.params.id));
     const row = await setOrderStatus(ctx, before.id, status, 'panel');
-    if (status === 'entregado' && before.order_status !== 'entregado') background(stampClub(ctx, row));
+    if (status !== before.order_status) background(syncClub(ctx, row.id));
     res.json({ order: await toAdmin(db, row) });
   });
   admin.post('/orders/:id/refund', async (req, res) => {
     const status = S.refundStatus.parse(req.body?.status);
     await orderOr404(String(req.params.id));
-    res.json({ order: await toAdmin(db, await setRefundStatus(ctx, String(req.params.id), status, 'panel')) });
+    const row = await setRefundStatus(ctx, String(req.params.id), status, 'panel');
+    background(syncClub(ctx, row.id));
+    res.json({ order: await toAdmin(db, row) });
   });
   admin.post('/orders/:id/shipping', async (req, res) => {
     const { fee, etaText } = S.shippingQuote.parse(req.body);
@@ -540,6 +555,33 @@ export async function createApp(config: Config, opts: { demoWebhookDelayMs?: num
   // ── Archivos estáticos (producción) ────────────────────────────────
   const dist = resolve('dist');
   if (existsSync(dist)) {
+    // Vista previa del enlace del pedido de equipo (WhatsApp, Slack, iMessage): nombre del equipo y hora de cierre.
+    // Sin el nombre del organizador ni lo que pidió cada quien.
+    app.get('/equipo/:code', async (req, res) => {
+      const html = readFileSync(join(dist, 'index.html'), 'utf8');
+      const g = await db.one<{ name: string; status: string; closes_at: Date | null }>('select name, status, closes_at from office.group_orders where code = $1', [
+        String(req.params.code),
+      ]);
+      res.setHeader('Cache-Control', 'no-cache');
+      if (!g) return res.send(html);
+      const open = g.status === 'abierto' && (!g.closes_at || new Date(g.closes_at).getTime() > ctx.now().getTime());
+      const when = g.closes_at ? deadlineText(new Date(g.closes_at), ctx.now()) : null;
+      const title = `Pedido de equipo «${g.name}» · Frésia`;
+      const description = open
+        ? `Elige tus fresas con crema y llegan todas juntas a la oficina.${when ? ` Cierra ${when}` : ''}`
+        : 'Este pedido de equipo ya cerró.';
+      const esc = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+      const tags = [
+        `<meta property="og:type" content="website" />`,
+        `<meta property="og:site_name" content="Frésia" />`,
+        `<meta property="og:title" content="${esc(title)}" />`,
+        `<meta property="og:description" content="${esc(description)}" />`,
+        `<meta property="og:image" content="${config.publicUrl}/images/combo-pausa.jpg" />`,
+        `<meta name="twitter:card" content="summary_large_image" />`,
+      ].join('\n    ');
+      const withTags = html.includes('<!--og-->') ? html.replace(/<!--og-->[\s\S]*<!--\/og-->/, tags) : html.replace('</head>', `  ${tags}\n  </head>`);
+      res.send(withTags.replace('<title>Frésia Office</title>', `<title>${esc(title)}</title>`));
+    });
     app.use('/assets', express.static(join(dist, 'assets'), { immutable: true, maxAge: '1y' }));
     app.use(express.static(dist, { maxAge: '1h', index: false }));
     app.get('/{*splat}', (_req, res) => res.sendFile(join(dist, 'index.html'), { headers: { 'Cache-Control': 'no-cache' } }));

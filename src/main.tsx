@@ -24,6 +24,7 @@ import OrderPage from './pages/OrderPage';
 const DemoPayPage = lazy(() => import('./pages/DemoPayPage'));
 const GroupNewPage = lazy(() => import('./pages/GroupNewPage'));
 const GroupPage = lazy(() => import('./pages/GroupPage'));
+const MyOrdersPage = lazy(() => import('./pages/MyOrdersPage'));
 const LegalPage = lazy(() => import('./pages/LegalPage'));
 const AdminApp = lazy(() => import('./admin/AdminApp'));
 
@@ -78,6 +79,7 @@ createRoot(document.getElementById('root')!).render(
               <Route path="/pedido/:number" element={<OrderPage />} />
               <Route path="/demo-pago/:id" element={<DemoPayPage />} />
               <Route path="/equipo/nuevo" element={<GroupNewPage />} />
+              <Route path="/mis-pedidos" element={<MyOrdersPage />} />
               <Route path="/equipo/:code" element={<GroupPage />} />
               <Route path="/legal/:slug" element={<LegalPage />} />
               <Route path="/admin/*" element={<AdminApp />} />

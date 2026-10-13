@@ -55,9 +55,9 @@ export function resetIdempotencyKey() {
 }
 
 // ── Pedidos recientes del cliente (solo en este dispositivo) ──
-export type RecentOrder = { number: string; token: string; at: string; cartFingerprint?: string };
+export type RecentOrder = { number: string; token: string; at: string; cartFingerprint?: string; groupName?: string | null };
 const OKEY = 'fo.orders.v1';
 export const recentOrders = () => load<RecentOrder[]>(OKEY, []);
 export function rememberOrder(o: RecentOrder) {
-  save(OKEY, [o, ...recentOrders().filter((x) => x.number !== o.number)].slice(0, 5));
+  save(OKEY, [o, ...recentOrders().filter((x) => x.number !== o.number)].slice(0, 20));
 }

@@ -70,6 +70,7 @@ export type OrderRow = {
   order_status: OrderStatus;
   refund_status: RefundStatus;
   needs_review: string | null;
+  club_stamped: boolean;
   demo: boolean;
   paid_at: Date | string | null;
   last_reconcile_at: Date | string | null;
@@ -221,7 +222,7 @@ export async function createOrder(ctx: Ctx, idempotencyKey: string, input: Order
     );
     if (row && group) {
       const taken = await q.query<{ id: string }>(
-        "update office.group_orders set status = 'pedido', order_id = $2 where id = $1 and status = 'abierto' returning id",
+        "update office.group_orders set status = 'pedido', order_id = $2 where id = $1 and status in ('abierto', 'cerrado') returning id",
         [group.id, id],
       );
       if (!taken.length) throw new HttpError(409, 'Este pedido de equipo ya se envió.');

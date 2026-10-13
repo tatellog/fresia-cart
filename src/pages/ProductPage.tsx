@@ -8,8 +8,9 @@ import { MAX_FOR_WHOM, minQtyFor, priceToppings } from '../../shared/pricing';
 import { ToppingPicker } from '../components/ToppingPicker';
 import { DEFAULT_RULES_CLIENT } from '../lib/rules';
 import ComboBuilder from './ComboBuilder';
-import { activeGroup, memberKey } from '../lib/groupState';
-import { api } from '../lib/api';
+import { activeGroup, memberKey, setActiveGroup } from '../lib/groupState';
+import { ApiError, api } from '../lib/api';
+import { uuid } from '../lib/uuid';
 import { GroupModeBanner } from '../components/ui';
 import { track, trackGroupJoin } from '../lib/analytics';
 
@@ -25,6 +26,8 @@ export default function ProductPage() {
   const product = data?.products.find((p) => p.id === id);
   const group = activeGroup();
   const [adding, setAdding] = useState(false);
+  // Mismo id si se reintenta: el servidor no duplica el producto en el pedido de equipo.
+  const [itemId] = useState(uuid);
   const [addError, setAddError] = useState<string | null>(null);
   // En pedido de equipo cada quien pide desde 1 pieza.
   const minQty = (p: NonNullable<typeof product>) => (group ? 1 : minQtyFor(p, rules));
@@ -90,12 +93,13 @@ export default function ProductPage() {
       setAdding(true);
       setAddError(null);
       try {
-        await api(`/api/groups/${group.code}/items`, { body: { memberName: group.memberName, memberKey: memberKey(), line } });
+        await api(`/api/groups/${group.code}/items`, { body: { memberName: group.memberName, memberKey: memberKey(), line, itemId } });
         trackGroupJoin(group.code);
         track('agregar_carrito', { mode: 'equipo', productId: product!.id });
         navigate(`/equipo/${group.code}`);
       } catch (e) {
         setAddError((e as Error).message);
+        if (e instanceof ApiError && e.body.code === 'group_closed') setActiveGroup(null);
         setAdding(false);
       }
       return;
@@ -180,7 +184,7 @@ export default function ProductPage() {
         </form>
       </main>
       <StickyAction>
-        <button type="button" className="btn primary block" disabled={adding} onClick={() => void submit()} style={{ justifyContent: 'space-between' }}>
+        <button type="button" className="btn primary block" disabled={adding || !size} onClick={() => void submit()} style={{ justifyContent: 'space-between' }}>
           <span>{adding ? 'Agregando…' : size ? (editing ? 'Guardar cambios' : group ? 'Agregar al pedido del equipo' : 'Agregar al carrito') : 'Elige un tamaño'}</span>
           {size && <span className="price">{money(unit * Math.max(qty, minQty(product)))}</span>}
         </button>

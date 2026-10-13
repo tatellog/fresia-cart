@@ -43,6 +43,13 @@ export function ClubCardView({ number, token, delivered }: { number: string; tok
           : `${club.visits} de ${club.goal} sellos. ${delivered ? 'Este pedido ya suma.' : 'Este pedido suma un sello al entregarse.'}`}
       </p>
       <a className="btn block" href={club.cardUrl} target="_blank" rel="noopener">Ver mi tarjeta</a>
+      <details className="small">
+        <summary>Cómo funciona</summary>
+        <p className="muted" style={{ margin: '6px 0 0' }}>
+          Un sello por pedido entregado, para el teléfono de quien hace el pedido (en pedidos de equipo, quien organiza y paga).
+          Al juntar {club.goal} sellos tienes una Frésia gratis. Si un pedido se cancela o se reembolsa, su sello se retira.
+        </p>
+      </details>
     </section>
   );
 }

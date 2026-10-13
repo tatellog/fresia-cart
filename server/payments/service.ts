@@ -5,6 +5,8 @@ import type { DB } from '../db';
 import { addEvent, canPay, getOrderById } from '../orders';
 import type { OrderRow } from '../orders';
 import { recordPurchase } from '../analytics';
+import { background } from '../background';
+import { syncClub } from '../club';
 import { IN_FLIGHT } from './provider';
 import type { ProviderPayment } from './provider';
 import type { OrderStatus, PaymentStatus, RefundStatus } from '../../shared/types';
@@ -136,6 +138,8 @@ export async function syncPayment(ctx: Ctx, p: ProviderPayment, source: string):
   });
 
   const fresh = (await getOrderById(ctx.db, order.id))!;
+  // Reembolso o contracargo en Mercado Pago de un pedido que ya tenía sello: se retira.
+  if (fresh.club_stamped) background(syncClub(ctx, fresh.id));
   if (result.becamePaid) ctx.notifier.notify(ctx, 'pedido_pagado', fresh);
   if (result.newReview) ctx.notifier.notify(ctx, 'revision', fresh);
   return result.becamePaid ? 'pagado' : 'actualizado';

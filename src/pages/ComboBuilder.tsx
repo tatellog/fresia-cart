@@ -8,11 +8,13 @@ import { DEFAULT_RULES_CLIENT } from '../lib/rules';
 import { DemoBanner, Stepper, StickyAction, TopBar } from '../components/ui';
 import { ToppingPicker } from '../components/ToppingPicker';
 import { COMBO_SIZE_ID, MAX_FOR_WHOM, priceCart } from '../../shared/pricing';
-import { activeGroup, memberKey } from '../lib/groupState';
-import { api } from '../lib/api';
+import { activeGroup, memberKey, setActiveGroup } from '../lib/groupState';
+import { ApiError, api } from '../lib/api';
+import { uuid } from '../lib/uuid';
 import { GroupModeBanner } from '../components/ui';
 import type { ComboChoiceInput, Product } from '../../shared/types';
 import { track, trackGroupJoin } from '../lib/analytics';
+import { recommendedAssortment } from '../../shared/assortment';
 
 type Pick = ComboChoiceInput & { key: string };
 
@@ -44,9 +46,21 @@ export default function ComboBuilder({ product, editing }: { product: Product; e
   const [showErrors, setShowErrors] = useState(false);
   const group = activeGroup();
   const [adding, setAdding] = useState(false);
+  const [itemId] = useState(uuid);
   const [addError, setAddError] = useState<string | null>(null);
 
   const complete = picks.every((p) => p.productId && p.sizeId);
+  const missingPieces = picks.filter((p) => !p.productId || !p.sizeId).length;
+  const [assorted, setAssorted] = useState(false);
+  const recommended = useMemo(() => (data ? recommendedAssortment(product, data.products, data.toppings) : null), [data, product]);
+  // Solo vale la pena ofrecerlo si hay algo que elegir (opciones o toppings).
+  const canRecommend = !!recommended && recommended.some((c, i) => c.toppingIds.length > 0 || (slots.find((s) => s.id === c.slotId)?.options.length ?? 0) > 1 || !picks[i]?.productId);
+  function applyRecommended() {
+    if (!recommended) return;
+    setPicks((ps) => ps.map((p, i) => ({ ...p, ...recommended[i] })));
+    setAssorted(true);
+    setShowErrors(false);
+  }
   const choices: ComboChoiceInput[] = picks.map(({ slotId, productId, sizeId, toppingIds }) => ({ slotId, productId, sizeId, toppingIds }));
   const unit = useMemo(() => {
     if (!data || !complete) return product.sizes[0]?.price ?? 0;
@@ -68,7 +82,7 @@ export default function ComboBuilder({ product, editing }: { product: Product; e
     if (group && !editing) {
       setAdding(true);
       setAddError(null);
-      api(`/api/groups/${group.code}/items`, { body: { memberName: group.memberName, memberKey: memberKey(), line } }).then(
+      api(`/api/groups/${group.code}/items`, { body: { memberName: group.memberName, memberKey: memberKey(), line, itemId } }).then(
         () => {
           trackGroupJoin(group.code);
           track('agregar_carrito', { mode: 'equipo', productId: product.id });
@@ -76,6 +90,7 @@ export default function ComboBuilder({ product, editing }: { product: Product; e
         },
         (e: Error) => {
           setAddError(e.message);
+          if (e instanceof ApiError && e.body.code === 'group_closed') setActiveGroup(null);
           setAdding(false);
         },
       );
@@ -111,6 +126,16 @@ export default function ComboBuilder({ product, editing }: { product: Product; e
             <p className="muted">{product.description}</p>
             <p className="price">{money(product.sizes[0]?.price ?? 0)}</p>
           </div>
+
+          {canRecommend && (
+            <section className="card flat stack" aria-labelledby="assort-title">
+              <h2 id="assort-title" style={{ fontSize: '1.05rem' }}>¿Con prisa?</h2>
+              <p className="muted small">Armamos el combo con los toppings incluidos, sin costo extra. Después puedes cambiar cualquier pieza.</p>
+              <button type="button" className={`btn ${assorted ? 'ghost' : 'secondary'} small`} style={{ alignSelf: 'flex-start' }} onClick={applyRecommended}>
+                {assorted ? '✓ Surtido recomendado aplicado' : 'Usar surtido recomendado'}
+              </button>
+            </section>
+          )}
 
           {slots.map((slot) => {
             const mine = picks.filter((p) => p.slotId === slot.id);
@@ -195,8 +220,10 @@ export default function ComboBuilder({ product, editing }: { product: Product; e
         </div>
       </main>
       <StickyAction>
-        <button type="button" className="btn primary block" onClick={submit} style={{ justifyContent: 'space-between' }}>
-          <span>{adding ? 'Agregando…' : complete ? (editing ? 'Guardar cambios' : group ? 'Agregar al pedido del equipo' : 'Agregar al carrito') : 'Completa tu combo'}</span>
+        <button type="button" className="btn primary block" onClick={submit} disabled={!complete || adding} style={{ justifyContent: 'space-between' }}>
+          <span>
+            {adding ? 'Agregando…' : complete ? (editing ? 'Guardar cambios' : group ? 'Agregar al pedido del equipo' : 'Agregar al carrito') : `Falta${missingPieces === 1 ? '' : 'n'} ${missingPieces} pieza${missingPieces === 1 ? '' : 's'} por elegir`}
+          </span>
           <span className="price">{money(unit * qty)}</span>
         </button>
       </StickyAction>
