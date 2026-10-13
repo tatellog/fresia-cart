@@ -32,14 +32,11 @@ export default function SummaryPage() {
   const form = useMemo(readCheckoutForm, []);
   const [, setStoredForm] = useCheckoutForm();
   const [method, setMethodState] = useState<PaymentMethod>(form.paymentMethod ?? 'online');
-  const [cash, setCashState] = useState<number | 'exacto' | null>(form.cashTendered ?? null);
+  // Con cuánto paga se elige en CADA pedido (no se recuerda): el total cambia y el repartidor debe llevar el cambio correcto.
+  const [cash, setCash] = useState<number | 'exacto' | null>(null);
   const [cashOther, setCashOther] = useState('');
   // «Otro monto» solo aparece si el cliente lo pide (o si ya había escrito uno).
   const [showOther, setShowOther] = useState(false);
-  const setCash = (c: number | 'exacto' | null) => {
-    setCashState(c);
-    setStoredForm((f) => ({ ...f, cashTendered: c }));
-  };
   const setMethod = (m: PaymentMethod) => {
     setMethodState(m);
     setStoredForm((f) => ({ ...f, paymentMethod: m }));
@@ -278,7 +275,11 @@ export default function SummaryPage() {
 
             {cashDelivery && total != null && (
               <fieldset className="stack" style={{ gap: 10 }}>
-                <legend className="label" style={{ marginBottom: 10 }}>¿Con cuánto vas a pagar? <span className="muted small">· para llevarte cambio</span></legend>
+                <legend className="choice-legend">
+                  <span>¿Con cuánto vas a pagar?</span>
+                  <span className={`req${cashValue != null && cashValue >= total ? ' done' : ''}`}>{cashValue != null && cashValue >= total ? '✓ Listo' : 'Obligatorio'}</span>
+                </legend>
+                <p className="muted small" style={{ margin: '-6px 0 0' }}>Así el repartidor lleva el cambio exacto.</p>
                 <div className="tabs" role="group" aria-label="Billete con el que pagas">
                   <button type="button" aria-pressed={cash === 'exacto'} onClick={() => { setShowOther(false); setCash('exacto'); }}>Exacto</button>
                   {bills(total).map((b) => (
