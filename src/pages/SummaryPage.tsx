@@ -34,6 +34,8 @@ export default function SummaryPage() {
   const [method, setMethodState] = useState<PaymentMethod>(form.paymentMethod ?? 'online');
   const [cash, setCashState] = useState<number | 'exacto' | null>(form.cashTendered ?? null);
   const [cashOther, setCashOther] = useState('');
+  // «Otro monto» solo aparece si el cliente lo pide (o si ya había escrito uno).
+  const [showOther, setShowOther] = useState(false);
   const setCash = (c: number | 'exacto' | null) => {
     setCashState(c);
     setStoredForm((f) => ({ ...f, cashTendered: c }));
@@ -159,6 +161,7 @@ export default function SummaryPage() {
   }
 
   const products = data?.products ?? [];
+  const pieces = quote?.lines.reduce((n, l) => n + l.qty, 0) ?? 0;
 
   return (
     <>
@@ -166,7 +169,7 @@ export default function SummaryPage() {
       <main className="page stack-lg">
         <TopBar back="/entrega" />
         <CheckoutSteps current="pago" />
-        <h1>Revisa tu pedido</h1>
+        <h1>Confirma tu pedido</h1>
 
         {loadError && <LoadError message={loadError} retry={load} />}
         {!quote && !loadError && <Spinner label="Calculando total…" />}
@@ -182,49 +185,41 @@ export default function SummaryPage() {
 
             {group && <GroupBreakdown lines={quote.lines} name={group.name} />}
 
-            <section className="card stack" aria-labelledby="items-title">
-              <div className="row between">
-                <h2 id="items-title">Productos</h2>
-                <Link to={group ? `/equipo/${group.code}` : '/carrito'} className="linkbtn">Editar</Link>
+            <section className="card review" aria-label="Tu pedido">
+              <details className="review-items">
+                <summary>
+                  <span className="thumbs" aria-hidden="true">
+                    {quote.lines.slice(0, 4).map((l, i) => {
+                      const img = products.find((p) => p.id === l.productId)?.image;
+                      return img ? <img key={i} src={img} alt="" width={36} height={36} /> : null;
+                    })}
+                  </span>
+                  <span className="grow">
+                    <strong>{pieces} producto{pieces === 1 ? '' : 's'}</strong>
+                    <span className="muted small"> · ver detalle</span>
+                  </span>
+                  <span className="price">{money(quote.subtotal)}</span>
+                </summary>
+                <OrderLines lines={quote.lines} products={products} />
+                <Link to={group ? `/equipo/${group.code}` : '/carrito'} className="linkbtn small">Editar productos</Link>
+              </details>
+              <div className="review-row">
+                <span className="icon" aria-hidden="true">{form.fulfillment === 'delivery' ? '🛵' : '🏪'}</span>
+                <div className="grow">
+                  <strong>{form.fulfillment === 'delivery' ? `${form.address.street} ${form.address.number}${form.address.office ? `, ${form.address.office}` : ''}` : 'Recoges en Frésia'}</strong>
+                  <p className="muted small" style={{ margin: 0 }}>
+                    {form.fulfillment === 'delivery' ? `${form.address.colonia} · ` : ''}{form.name} · {form.phone}
+                    {quote.delivery.status === 'covered' && quoteEtaText(quote.delivery) ? ` · llega en ${quoteEtaText(quote.delivery)}` : ''}
+                    {quote.delivery.status === 'pickup' && data && prepText(data.delivery) ? ` · listo en ${prepText(data.delivery)}` : ''}
+                  </p>
+                  {form.notes && <p className="muted small" style={{ margin: 0 }}>Nota: {form.notes}</p>}
+                </div>
+                <Link to="/entrega" className="linkbtn small">Editar</Link>
               </div>
-              <OrderLines lines={quote.lines} products={products} />
             </section>
-
-            <section className="card stack" aria-labelledby="del-title">
-              <div className="row between">
-                <h2 id="del-title">{form.fulfillment === 'delivery' ? 'Entrega a domicilio' : 'Recoger en Frésia'}</h2>
-                <Link to="/entrega" className="linkbtn">Editar</Link>
-              </div>
-              <p>
-                {form.name} · {form.phone}
-              </p>
-              {form.fulfillment === 'delivery' ? (
-                <p className="muted">
-                  {form.address.street} {form.address.number}, {form.address.office}
-                  <br />
-                  {form.address.colonia}, CP {form.address.postalCode}
-                  {form.address.references && (
-                    <>
-                      <br />
-                      {form.address.references}
-                    </>
-                  )}
-                </p>
-              ) : (
-                <p className="muted">{data?.business.address}</p>
-              )}
-              {quote.delivery.status === 'covered' && quoteEtaText(quote.delivery) && (
-                <p className="small">Tiempo estimado: {quoteEtaText(quote.delivery)} después de confirmar {payLater ? 'tu pedido' : 'el pago'}.</p>
-              )}
-              {quote.delivery.status === 'pickup' && data && prepText(data.delivery) && (
-                <p className="small">Preparación: {prepText(data.delivery)}.</p>
-              )}
-              {form.notes && <p className="small muted">Notas: {form.notes}</p>}
-            </section>
-
-            <Totals subtotal={quote.subtotal} shippingFee={quote.shippingFee} total={quote.total} fulfillment={form.fulfillment} />
 
             {data && (
+              <section className="card form-card">
               <WhenPicker
                 schedule={data.schedule}
                 value={scheduledFor}
@@ -237,6 +232,7 @@ export default function SummaryPage() {
                       : 'En cuanto confirmemos el envío'
                 }
               />
+              </section>
             )}
 
             {giftAllowed && <GiftFields value={gift} onChange={setGift} showErrors={giftTried} />}
@@ -253,50 +249,50 @@ export default function SummaryPage() {
               {wantInvoice && <InvoiceFields value={invoice} onChange={setInvoice} showErrors={invoiceTried} />}
             </section>
 
-            {online && cod && (
+            <section className="card form-card" aria-labelledby="pay-title">
+            <h2 id="pay-title">¿Cómo pagas?</h2>
+            {online && cod ? (
               <fieldset>
-                <legend className="label" style={{ marginBottom: 10 }}>¿Cómo quieres pagar?</legend>
-                <div className="options">
+                <legend className="sr-only">Forma de pago</legend>
+                <div className="segmented fulfill">
                   <label className="option">
                     <input type="radio" name="pay" checked={effective === 'online'} onChange={() => setMethod('online')} />
-                    <span className="mark" aria-hidden="true" />
-                    <span className="grow">
-                      <strong>Pagar en línea</strong>
-                      <span className="muted small" style={{ display: 'block' }}>Mercado Pago: tarjeta de crédito o débito, saldo Mercado Pago u OXXO</span>
-                    </span>
+                    <span className="icon" aria-hidden="true">💳</span>
+                    <strong>En línea</strong>
+                    <span className="muted small">Tarjeta, saldo Mercado Pago u OXXO</span>
                   </label>
                   <label className="option">
                     <input type="radio" name="pay" checked={effective === 'contra_entrega'} onChange={() => setMethod('contra_entrega')} />
-                    <span className="mark" aria-hidden="true" />
-                    <span className="grow">
-                      <strong>{form.fulfillment === 'pickup' ? 'Pagar al recoger' : 'Efectivo al recibir'}</strong>
-                      <span className="muted small" style={{ display: 'block' }}>
-                        {form.fulfillment === 'pickup' ? 'Efectivo o tarjeta en Frésia.' : 'Pagas en efectivo al repartidor; no lleva terminal.'}
-                        {data?.delivery.cashOnDeliveryNote && ` ${data.delivery.cashOnDeliveryNote}`}
-                      </span>
+                    <span className="icon" aria-hidden="true">💵</span>
+                    <strong>{form.fulfillment === 'pickup' ? 'Al recoger' : 'Efectivo al recibir'}</strong>
+                    <span className="muted small">
+                      {form.fulfillment === 'pickup' ? 'Efectivo o tarjeta en Frésia' : 'Al repartidor; no lleva terminal'}
+                      {data?.delivery.cashOnDeliveryNote && ` · ${data.delivery.cashOnDeliveryNote}`}
                     </span>
                   </label>
                 </div>
               </fieldset>
+            ) : (
+              <p className="muted" style={{ margin: 0 }}>{effective === 'online' ? '💳 En línea con Mercado Pago: tarjeta, saldo u OXXO.' : form.fulfillment === 'pickup' ? '💵 Pagas al recoger en Frésia.' : '💵 Pagas en efectivo al recibir.'}</p>
             )}
 
             {cashDelivery && total != null && (
               <fieldset className="stack" style={{ gap: 10 }}>
                 <legend className="label" style={{ marginBottom: 10 }}>¿Con cuánto vas a pagar? <span className="muted small">· para llevarte cambio</span></legend>
                 <div className="tabs" role="group" aria-label="Billete con el que pagas">
-                  <button type="button" aria-pressed={cash === 'exacto'} onClick={() => setCash('exacto')}>Exacto</button>
+                  <button type="button" aria-pressed={cash === 'exacto'} onClick={() => { setShowOther(false); setCash('exacto'); }}>Exacto</button>
                   {bills(total).map((b) => (
-                    <button key={b} type="button" aria-pressed={cash === b} onClick={() => setCash(b)}>{money(b)}</button>
+                    <button key={b} type="button" aria-pressed={cash === b} onClick={() => { setShowOther(false); setCash(b); }}>{money(b)}</button>
                   ))}
                   <button
                     type="button"
                     aria-pressed={cash !== null && cash !== 'exacto' && !bills(total).includes(cash)}
-                    onClick={() => setCash(cashOther ? Math.round(parseFloat(cashOther) * 100) || null : null)}
+                    onClick={() => { setShowOther(true); setCash(cashOther ? Math.round(parseFloat(cashOther) * 100) || null : null); }}
                   >
                     Otro
                   </button>
                 </div>
-                {cash !== 'exacto' && (cash === null || !bills(total).includes(cash)) && (
+                {(showOther || (typeof cash === 'number' && !bills(total).includes(cash))) && cash !== 'exacto' && (cash === null || !bills(total).includes(cash)) && (
                   <div className="field" style={{ maxWidth: 220 }}>
                     <label htmlFor="cash-other">Otro monto</label>
                     <input
@@ -319,6 +315,13 @@ export default function SummaryPage() {
                 {cashValue != null && total != null && cashValue < total && <p className="error-text">Debe ser al menos {money(total)}.</p>}
               </fieldset>
             )}
+            {!manual && !payLater && (
+              <p className="secure-note">
+                🔒 <span>Continuarás a <strong>Mercado Pago</strong> para pagar de forma segura. Frésia no recibe ni guarda los datos de tu tarjeta.</span>
+              </p>
+            )}
+            {!manual && !payLater && data?.paymentsMode === 'demo' && <p className="small" style={{ margin: 0 }}><strong>Demostración: no se realizan cobros.</strong> Verás un simulador en lugar de Mercado Pago.</p>}
+            </section>
 
             {manual ? (
               <div className="notice warn stack">
@@ -330,28 +333,21 @@ export default function SummaryPage() {
                   {payLater ? 'Cuando confirmemos el envío lo empezaremos a preparar.' : 'Cuando confirmemos el envío podrás pagarlo desde la página de tu pedido.'}
                 </p>
               </div>
-            ) : payLater ? (
-              <div className="notice stack" style={{ gap: 6 }}>
-                <p>
-                  <strong>
-                    {form.fulfillment === 'pickup' ? `Pagas ${quote.total != null ? money(quote.total) : ''} al recoger.` : `Pagas ${quote.total != null ? money(quote.total) : ''} en efectivo al recibir.`}
-                  </strong>{' '}
+            ) : null}
+
+            <div className="pay-total">
+              <Totals subtotal={quote.subtotal} shippingFee={quote.shippingFee} total={quote.total} fulfillment={form.fulfillment} />
+              {payLater && !manual && (
+                <p className="small" style={{ margin: 0 }}>
+                  {form.fulfillment === 'pickup' ? 'Pagas al recoger.' : 'Pagas en efectivo al recibir.'}{' '}
                   {isGift ? 'El repartidor te cobra a ti primero y después entrega el regalo.' : 'Tu pedido entra a la cocina en cuanto lo confirmes.'}
                 </p>
-              </div>
-            ) : (
-              <div className="notice stack" style={{ gap: 6 }}>
-                <p>
-                  <strong>Continuarás a Mercado Pago</strong> para completar el pago de forma segura. Frésia no recibe ni guarda los datos de tu tarjeta.
-                </p>
-                {data?.paymentsMode === 'demo' && <p className="small"><strong>Demostración: no se realizan cobros.</strong> Verás un simulador en lugar de Mercado Pago.</p>}
-              </div>
-            )}
-
-            <p className="muted small">
-              Al continuar aceptas el <Link to="/legal/privacidad">aviso de privacidad</Link> y las políticas de{' '}
-              <Link to="/legal/entregas">entrega</Link> y <Link to="/legal/cancelaciones">cancelación</Link>.
-            </p>
+              )}
+              <p className="muted small" style={{ margin: 0 }}>
+                Al continuar aceptas el <Link to="/legal/privacidad">aviso de privacidad</Link> y las políticas de{' '}
+                <Link to="/legal/entregas">entrega</Link> y <Link to="/legal/cancelaciones">cancelación</Link>.
+              </p>
+            </div>
 
             {error && <div className="notice error" role="alert">{error}</div>}
           </>
@@ -363,6 +359,8 @@ export default function SummaryPage() {
             <Spinner label={manual || payLater ? 'Guardando pedido…' : 'Preparando pago…'} />
           ) : manual ? (
             'Enviar pedido y confirmar envío'
+          ) : cashDelivery && cashValue == null ? (
+            'Elige con cuánto pagas'
           ) : payLater ? (
             <>{isGift ? 'Enviar bombón' : 'Confirmar pedido'} · {quote?.total != null ? money(quote.total) : ''}</>
           ) : (

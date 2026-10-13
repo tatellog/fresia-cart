@@ -17,26 +17,24 @@ export function WhenPicker({ schedule, value, onChange, asapLabel }: { schedule:
   }, [open, value, days]);
 
   return (
-    <fieldset className="stack" style={{ gap: 10 }}>
-      <legend className="label" style={{ marginBottom: 10 }}>¿Cuándo lo quieres?</legend>
-      <div className="options">
-        <label className="option">
-          <input type="radio" name="when" checked={!programmed} disabled={!open} onChange={() => onChange(null)} />
-          <span className="mark" aria-hidden="true" />
-          <span className="grow">
-            <strong>Lo antes posible</strong>
-            <span className="muted small" style={{ display: 'block' }}>{open ? asapLabel : `Ahora estamos cerrados; abrimos ${nextOpening(now, schedule) ?? 'pronto'}`}</span>
-          </span>
-        </label>
-        <label className="option">
-          <input type="radio" name="when" checked={programmed} onChange={() => onChange(current?.slots[0]?.iso ?? null)} />
-          <span className="mark" aria-hidden="true" />
-          <span className="grow">
-            <strong>Programar</strong>
-            <span className="muted small" style={{ display: 'block' }}>Elige el día y la hora (ideal para juntas y cumpleaños).</span>
-          </span>
-        </label>
-      </div>
+    <fieldset className="stack" style={{ gap: 12 }}>
+      <legend className="choice-legend"><span>¿Cuándo lo quieres?</span></legend>
+      {open ? (
+        <div className="segmented when">
+          <label className="option">
+            <input type="radio" name="when" checked={!programmed} onChange={() => onChange(null)} />
+            <strong>⚡ Lo antes posible</strong>
+            <span className="muted small">{asapLabel}</span>
+          </label>
+          <label className="option">
+            <input type="radio" name="when" checked={programmed} onChange={() => onChange(current?.slots[0]?.iso ?? null)} />
+            <strong>📅 Programar</strong>
+            <span className="muted small">Para una junta o un cumpleaños</span>
+          </label>
+        </div>
+      ) : (
+        <p className="notice small" style={{ margin: 0 }}>Ahora estamos cerrados{nextOpening(now, schedule) ? `; abrimos ${nextOpening(now, schedule)!.replace(/\.$/, '')}` : ''}. Elige cuándo lo quieres.</p>
+      )}
       {programmed && current && (
         <div className="stack" style={{ gap: 10 }}>
           <div className="tabs" role="group" aria-label="Día">
@@ -46,7 +44,7 @@ export function WhenPicker({ schedule, value, onChange, asapLabel }: { schedule:
               </button>
             ))}
           </div>
-          <div className="field" style={{ maxWidth: 240 }}>
+          <div className="field">
             <label htmlFor="when-time">Hora</label>
             <select id="when-time" className="select" value={value ?? ''} onChange={(e) => onChange(e.target.value)}>
               {current.slots.map((s) => <option key={s.iso} value={s.iso}>{s.label}</option>)}

@@ -255,6 +255,22 @@ p {
 .two.contact { grid-template-columns: 1fr; }
 @media (min-width: 520px) { .two.contact { grid-template-columns: 1fr 1fr; } }
 
+/* Confirmar y pagar */
+.review { display: grid; gap: 0; padding-top: 6px; padding-bottom: 6px; }
+.review-items summary { display: flex; align-items: center; gap: 12px; padding: 10px 0; cursor: pointer; list-style: none; }
+.review-items summary::-webkit-details-marker { display: none; }
+.review-items[open] summary .muted { display: none; }
+.review-items .thumbs { display: flex; }
+.review-items .thumbs img { width: 36px; height: 36px; border-radius: 10px; object-fit: cover; border: 2px solid #fff; margin-left: -10px; }
+.review-items .thumbs img:first-child { margin-left: 0; }
+.review-items > .linkbtn { display: inline-block; margin: 4px 0 10px; }
+.review-row { display: flex; align-items: flex-start; gap: 12px; padding: 12px 0 8px; border-top: 1px solid var(--line); }
+.review-row .icon { font-size: 1.3rem; line-height: 1.4; }
+.grow { flex: 1; min-width: 0; }
+.segmented.when .option { min-height: 64px; }
+.secure-note { display: flex; gap: 8px; margin: 0; font-size: 0.85rem; color: var(--choc-2); }
+.pay-total { display: grid; gap: 10px; }
+
 /* ── Encabezado de la tienda ───────────── */
 .site-header {
   position: sticky;
