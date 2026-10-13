@@ -14,11 +14,12 @@ import { DemoProvider } from './payments/demo';
 import { MercadoPagoProvider, verifyMercadoPagoSignature } from './payments/mercadopago';
 import { checkReturnedPayment, handlePaymentNotification, reconcile, startCheckout } from './payments/service';
 import {
-  cancelByCustomer, createOrder, purgeOldDeliveryPhotos, setInvoiceStatus, getDeliveryPhoto, getOrderById, getOrderForCustomer, listOrders, markCollected, quoteOrder, saveCourierLocation, saveDeliveryPhoto, setOrderStatus, setRefundStatus, setShippingQuote, toAdmin, toPublic, trackingFor,
+  cancelByCustomer, createOrder, purgeOldDeliveryPhotos, setInvoiceStatus, getDeliveryPhoto, getOrderById, getOrderForCustomer, listOrders, markCollected, markSeen, quoteOrder, saveCourierLocation, saveDeliveryPhoto, setOrderStatus, setRefundStatus, setShippingQuote, toAdmin, toPublic, trackingFor,
 } from './orders';
 import * as store from './store';
 import * as S from './schemas';
 import { deadlineText } from '../shared/schedule';
+import { urgencySort } from '../shared/urgency';
 import { deviceOf, funnel, purgeOldEvents, recordEvent } from './analytics';
 import { clearSession, isAdmin, passwordMatches, secretMatches, rateLimit, requireAdmin, setSession } from './auth';
 import { addGroupItem, createGroup, groupLinesForOrder, groupView, joinGroup, removeGroupItem, setGroupOpen } from './groups';
@@ -317,7 +318,9 @@ export async function createApp(config: Config, opts: { demoWebhookDelayMs?: num
   admin.get('/orders', async (req, res) => {
     const filter = S.orderFilter.parse(req.query.filter ?? 'activos');
     const rows = await listOrders(db, filter);
-    res.json({ orders: await Promise.all(rows.map((o) => toAdmin(db, o))) });
+    const orders = await Promise.all(rows.map((o) => toAdmin(db, o, ctx.now())));
+    // En curso: lo nuevo sin ver arriba y después por urgencia real (hora de cocina / de entrega).
+    res.json({ orders: filter === 'activos' ? urgencySort(orders) : orders });
   });
   admin.get('/summary', async (_req, res) => {
     // Cancelaciones del cliente de los últimos 30 min: el panel las anuncia una vez.
@@ -325,8 +328,9 @@ export async function createApp(config: Config, opts: { demoWebhookDelayMs?: num
       `select o.id, o.number, e.at from office.order_events e join office.orders o on o.id = e.order_id
        where e.actor = 'cliente' and e.type = 'estado' and e.at > now() - interval '30 minutes' order by e.at desc limit 10`,
     );
-    const r = await db.one<{ nuevos: number; cotizar: number; revision: number }>(
+    const r = await db.one<{ nuevos: number; sinVer: number; cotizar: number; revision: number }>(
       `select count(*) filter (where order_status = 'recibido')::int as nuevos,
+              count(*) filter (where order_status in ('recibido', 'cotizando_envio') and seen_at is null)::int as "sinVer",
               count(*) filter (where order_status = 'cotizando_envio')::int as cotizar,
               count(*) filter (where needs_review is not null or refund_status = 'pendiente')::int as revision
        from office.orders`,
@@ -338,7 +342,12 @@ export async function createApp(config: Config, opts: { demoWebhookDelayMs?: num
     if (!o) throw new HttpError(404, 'Pedido no encontrado.');
     return o;
   };
-  admin.get('/orders/:id', async (req, res) => res.json({ order: await toAdmin(db, await orderOr404(String(req.params.id))) }));
+  admin.get('/orders/:id', async (req, res) => res.json({ order: await toAdmin(db, await orderOr404(String(req.params.id)), ctx.now()) }));
+  admin.post('/orders/:id/seen', async (req, res) => {
+    const o = await orderOr404(String(req.params.id));
+    await markSeen(ctx, o.id, 'panel');
+    res.json({ ok: true });
+  });
   admin.post('/orders/:id/status', async (req, res) => {
     const status = S.orderStatus.parse(req.body?.status);
     if (!ADMIN_FLOW.includes(status)) throw new HttpError(400, 'Estado no válido.');
@@ -380,7 +389,8 @@ export async function createApp(config: Config, opts: { demoWebhookDelayMs?: num
   });
   admin.post('/orders/:id/collected', async (req, res) => {
     await orderOr404(String(req.params.id));
-    res.json({ order: await toAdmin(db, await markCollected(ctx, String(req.params.id), 'panel')) });
+    const { received } = S.collectedSchema.parse(req.body ?? {});
+    res.json({ order: await toAdmin(db, await markCollected(ctx, String(req.params.id), 'panel', received), ctx.now()) });
   });
   admin.post('/orders/:id/review-clear', async (req, res) => {
     const o = await orderOr404(String(req.params.id));

@@ -55,13 +55,18 @@ export function CourierShare({ orderId, autoStart }: { orderId: string; autoStar
         // Envía cada 8 s o si se movió más de 15 m.
         if (prev && now - prev.t < 8000 && distanceM(prev, p) < 15) return;
         last.current = { t: now, ...p };
+        // Sin señal no se detiene: se sigue intentando con la siguiente lectura del GPS.
         api(`/api/admin/orders/${orderId}/tracking`, { body: { ...p, accuracyM: Math.round(pos.coords.accuracy), mode: modeRef.current } }).then(
           () => setLastSent(Date.now()),
-          () => setState('error'),
+          () => (last.current = null),
         );
       },
       (err) => {
-        setState(err.code === err.PERMISSION_DENIED ? 'denied' : 'error');
+        // Permiso negado: se detiene. Sin señal o tiempo agotado: sigue intentando.
+        if (err.code === err.PERMISSION_DENIED) {
+          stop();
+          setState('denied');
+        }
       },
       { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 },
     );
@@ -78,29 +83,43 @@ export function CourierShare({ orderId, autoStart }: { orderId: string; autoStar
   }, [orderId]);
 
   const ago = lastSent ? Math.round((Date.now() - lastSent) / 1000) : null;
+  const stale = ago != null && ago > 30;
   return (
-    <section className="card stack" aria-labelledby="courier-title">
-      <h2 id="courier-title">📍 Ubicación para el cliente</h2>
-      <div className="tabs" role="group" aria-label="¿Cómo vas?">
-        {MODES.map((m) => (
-          <button key={m.key} type="button" aria-pressed={mode === m.key} onClick={() => setMode(m.key)}>{m.label}</button>
-        ))}
+    <div className="gps-box" aria-labelledby="courier-title">
+      <div className="row between" style={{ flexWrap: 'wrap', gap: 8 }}>
+        <strong id="courier-title">📍 Ubicación en vivo para el cliente</strong>
+        {state === 'sharing' && (
+          <span className={`badge ${stale ? 'warn' : ago != null ? 'ok' : ''}`}>{ago == null ? 'Buscando GPS…' : stale ? 'Sin señal' : 'En vivo'}</span>
+        )}
       </div>
       {state === 'sharing' ? (
         <>
-          <p className="notice ok">
-            Compartiendo tu ubicación con el cliente{ago != null ? ` · enviada hace ${ago} s` : ' · buscando GPS…'}. Deja esta pantalla abierta hasta entregar.
+          <p className="small" style={{ margin: 0 }}>
+            {ago == null
+              ? 'Buscando tu ubicación. Si tarda, sal a un lugar abierto.'
+              : stale
+                ? `Sin señal desde hace ${ago} s: se reintenta solo. Puedes seguir con la entrega.`
+                : `Enviada hace ${ago} s. Deja esta pantalla abierta hasta entregar.`}
           </p>
-          <button className="btn ghost small" style={{ alignSelf: 'flex-start' }} onClick={stop}>Dejar de compartir</button>
+          <div className="row" style={{ flexWrap: 'wrap', gap: 8 }}>
+            <details className="more">
+              <summary>Voy {MODES.find((m) => m.key === mode)?.label.toLowerCase()}</summary>
+              <div className="tabs" role="group" aria-label="¿Cómo vas?" style={{ marginTop: 8 }}>
+                {MODES.map((m) => (
+                  <button key={m.key} type="button" aria-pressed={mode === m.key} onClick={() => setMode(m.key)}>{m.label}</button>
+                ))}
+              </div>
+            </details>
+            <button className="linkbtn small" onClick={stop}>Dejar de compartir</button>
+          </div>
         </>
       ) : (
         <>
-          {state === 'denied' && <p className="error-text">No diste permiso de ubicación. Actívalo en el navegador para que el cliente te vea en el mapa.</p>}
-          {state === 'error' && <p className="error-text">No se pudo enviar la ubicación. Revisa la señal y vuelve a intentar.</p>}
-          <p className="muted">Si tú llevas el pedido, comparte tu ubicación desde este celular para que el cliente vea dónde vas.</p>
-          <button className="btn primary" style={{ alignSelf: 'flex-start' }} onClick={start}>Compartir mi ubicación</button>
+          {state === 'denied' && <p className="error-text small" style={{ margin: 0 }}>No diste permiso de ubicación. Actívalo en el navegador; la entrega puede seguir sin él.</p>}
+          {state === 'error' && <p className="error-text small" style={{ margin: 0 }}>Este celular no tiene GPS disponible. La entrega puede seguir sin él.</p>}
+          <button className="btn secondary small" style={{ alignSelf: 'flex-start' }} onClick={start}>Compartir mi ubicación</button>
         </>
       )}
-    </section>
+    </div>
   );
 }

@@ -274,3 +274,37 @@ details.more > summary {
   .print-card { position: fixed; inset: 0; box-shadow: none; border-radius: 0; }
   .no-print { display: none !important; }
 }
+
+/* ── Operación: urgencia, comanda, cobro y repartidor ── */
+.urgency { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: 999px; font-size: 0.8rem; background: var(--cream); color: var(--choc); }
+.urgency.soon { background: var(--warn-bg); color: var(--warn); }
+.urgency.late { background: #fde2df; color: var(--red-ink); font-weight: 600; }
+.urgency.big { font-size: 0.95rem; padding: 6px 12px; }
+.order-card.late { border-color: var(--red); box-shadow: 0 0 0 2px #fde2df; }
+
+.ticket { display: grid; gap: 10px; padding: 16px; border: 2px dashed var(--line); border-radius: var(--radius); background: #fff; }
+.ticket-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.ticket-num { font-size: 1.4rem; font-weight: 800; letter-spacing: 0.02em; }
+.ticket-group { display: grid; gap: 6px; }
+.ticket-group + .ticket-group { border-top: 1px dashed var(--line); padding-top: 8px; }
+.ticket-who { margin: 0; font-weight: 700; font-size: 1.05rem; }
+.ticket-lines { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.ticket-line { display: grid; grid-template-columns: 48px 1fr; gap: 8px; font-size: 1.15rem; line-height: 1.3; }
+.ticket-line .qty { font-size: 1.5rem; font-weight: 800; color: var(--red-ink); }
+.ticket-line .size { font-weight: 600; color: var(--choc-2); }
+.ticket-line .tops { font-size: 1rem; }
+.ticket-line .pieces { margin: 4px 0 0; padding-left: 18px; font-size: 1rem; }
+.ticket-flag, .ticket-note { margin: 0; padding: 8px 10px; border-radius: 10px; background: var(--warn-bg); color: var(--warn); font-weight: 600; }
+.ticket.compact .ticket-line { font-size: 1.05rem; }
+.ticket-board { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); align-items: start; }
+.ticket-card { display: grid; gap: 10px; padding: 12px; border-radius: var(--radius); background: var(--cream); }
+.ticket-card.late { background: #fde2df; }
+.ticket-card.soon { background: var(--warn-bg); }
+
+.collect-card .change-line { margin: 0; font-size: 1.1rem; }
+.push-warning a { font-weight: 600; }
+
+.courier .courier-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+@media (min-width: 640px) { .courier .courier-steps { grid-template-columns: repeat(3, 1fr); } }
+.courier a[aria-disabled='true'] { opacity: 0.5; pointer-events: none; }
+.gps-box { display: grid; gap: 8px; padding: 12px; border-radius: var(--radius-sm); background: var(--cream); }

@@ -231,3 +231,7 @@ export const scheduleSchema = z.object({
   maxDays: z.number().int().min(1).max(14),
 });
 export const invoiceStatusSchema = z.enum(['solicitada', 'emitida']);
+
+/** Cobro al entregar: lo que dio el cliente, en centavos (sin dato = exacto). */
+export const collectedSchema = z.object({ received: z.number().int().min(0).max(5_000_000).nullable().optional() });
+

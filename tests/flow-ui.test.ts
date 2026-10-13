@@ -13,22 +13,25 @@ describe('tiempo estimado', () => {
   });
 });
 
-describe('un solo botón con la siguiente acción', () => {
-  it('a domicilio: preparar → salir a entregar → entregado y cobrado', () => {
+describe('un solo botón con la siguiente acción (entregar y cobrar son pasos separados)', () => {
+  it('a domicilio: preparar → iniciar entrega → confirmar entrega → registrar cobro', () => {
     expect(nextAction({ ...base, orderStatus: 'recibido' })?.label).toBe('👩‍🍳 Empezar a preparar');
-    expect(nextAction({ ...base, orderStatus: 'confirmado' })?.status).toBe('en_preparacion');
-    expect(nextAction({ ...base, orderStatus: 'en_preparacion' })?.label).toBe('📦 Salir a entregar');
-    expect(nextAction({ ...base, orderStatus: 'en_camino' })).toMatchObject({ status: 'entregado', label: '✅ Entregado y cobrado $330', collect: true });
-    expect(nextAction({ ...base, orderStatus: 'entregado' })).toBeNull();
+    expect(nextAction({ ...base, orderStatus: 'confirmado' })).toMatchObject({ kind: 'status', status: 'en_preparacion' });
+    expect(nextAction({ ...base, orderStatus: 'en_preparacion' })?.label).toBe('🛵 Iniciar entrega');
+    // Entregar NO cobra.
+    expect(nextAction({ ...base, orderStatus: 'en_camino' })).toEqual({ kind: 'status', status: 'entregado', label: '✅ Confirmar entrega' });
+    expect(nextAction({ ...base, orderStatus: 'entregado' })).toEqual({ kind: 'collect', label: '💵 Registrar cobro $330' });
+    expect(nextAction({ ...base, orderStatus: 'entregado', paymentStatus: 'aprobado' })).toBeNull();
   });
   it('para recoger: preparar → listo → entregado', () => {
     const p = { ...base, fulfillment: 'pickup' as const };
     expect(nextAction({ ...p, orderStatus: 'en_preparacion' })?.label).toBe('🛍️ Listo para recoger');
-    expect(nextAction({ ...p, orderStatus: 'listo' })?.status).toBe('entregado');
+    expect(nextAction({ ...p, orderStatus: 'listo' })).toMatchObject({ kind: 'status', status: 'entregado' });
   });
-  it('pagado en línea: entregado sin cobrar; pago pendiente: no se prepara', () => {
+  it('pagado en línea: entregado sin cobro; pago pendiente: no se prepara', () => {
     const paid = { ...base, paymentMethod: 'online' as const, paymentStatus: 'aprobado' as const };
-    expect(nextAction({ ...paid, orderStatus: 'en_camino' })).toMatchObject({ label: '✅ Entregado', collect: false });
+    expect(nextAction({ ...paid, orderStatus: 'en_camino' })).toMatchObject({ kind: 'status', label: '✅ Confirmar entrega' });
+    expect(nextAction({ ...paid, orderStatus: 'entregado' })).toBeNull();
     expect(nextAction({ ...paid, paymentStatus: 'sin_pagar', orderStatus: 'esperando_pago' })).toBeNull();
   });
 });

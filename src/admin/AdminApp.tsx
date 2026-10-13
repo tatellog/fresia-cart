@@ -4,6 +4,7 @@ import { api } from '../lib/api';
 import { Spinner } from '../components/ui';
 import Orders from './Orders';
 import OrderDetail from './OrderDetail';
+import KitchenBoard from './KitchenBoard';
 import { GiftCardPrint } from './GiftCard';
 import Catalog from './Catalog';
 import { BusinessSettings, DeliverySettings, LegalSettings, SystemSettings } from './Settings';
@@ -52,6 +53,7 @@ export default function AdminApp() {
         </div>
         <nav className="admin-nav page wide" aria-label="Secciones del panel">
           <NavLink to="/admin" end>Pedidos</NavLink>
+          <NavLink to="/admin/cocina">Cocina</NavLink>
           <NavLink to="/admin/menu">Menú</NavLink>
           <NavLink to="/admin/entrega">Entrega</NavLink>
           <NavLink to="/admin/negocio">Negocio</NavLink>
@@ -63,6 +65,7 @@ export default function AdminApp() {
         <Routes>
           <Route index element={<Orders />} />
           <Route path="pedidos/:id" element={<OrderDetail />} />
+          <Route path="cocina" element={<KitchenBoard />} />
           <Route path="pedidos/:id/tarjeta" element={<GiftCardPrint />} />
           <Route path="menu" element={<Catalog />} />
           <Route path="entrega" element={<DeliverySettings />} />

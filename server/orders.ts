@@ -4,6 +4,7 @@ import type { DB } from './db';
 import { HttpError, onlinePaymentReady } from './context';
 import type { Ctx } from './context';
 import { recordPurchase, type Attribution } from './analytics';
+import { urgencyOf } from '../shared/urgency';
 import { getDelivery, getFeatures, getRules, getSchedule, listProducts, listToppings, nextOrderNumber } from './store';
 import { groupLinesForOrder } from './groups';
 import { CUSTOMER_CANCELABLE } from '../shared/status';
@@ -71,6 +72,9 @@ export type OrderRow = {
   refund_status: RefundStatus;
   needs_review: string | null;
   club_stamped: boolean;
+  seen_at: Date | string | null;
+  cash_received: number | null;
+  change_given: number | null;
   demo: boolean;
   paid_at: Date | string | null;
   last_reconcile_at: Date | string | null;
@@ -299,16 +303,22 @@ export function toPublic(row: OrderRow): PublicOrder {
   };
 }
 
-export async function toAdmin(db: DB, row: OrderRow): Promise<AdminOrder> {
-  const [payments, events] = await Promise.all([
+export async function toAdmin(db: DB, row: OrderRow, now = new Date()): Promise<AdminOrder> {
+  const [payments, events, cfg] = await Promise.all([
     db.query<{ provider: string; provider_payment_id: string; status: string; status_detail: string; amount: number; updated_at: Date }>(
       'select provider, provider_payment_id, status, status_detail, amount, updated_at from office.payments where order_id = $1 order by created_at',
       [row.id],
     ),
     db.query<{ at: Date; type: string; detail: string; actor: string }>('select at, type, detail, actor from office.order_events where order_id = $1 order by id', [row.id]),
+    getDelivery(db),
   ]);
+  const pub = toPublic(row);
   return {
-    ...toPublic(row),
+    ...pub,
+    seenAt: isoOrNull(row.seen_at),
+    cashReceived: row.cash_received ?? null,
+    changeGiven: row.change_given ?? null,
+    urgency: urgencyOf({ ...pub, paidAt: isoOrNull(row.paid_at) }, cfg, now),
     id: row.id,
     source: row.source ?? null,
     updatedAt: iso(row.updated_at),
@@ -411,19 +421,35 @@ export async function setShippingQuote(ctx: Ctx, id: string, fee: number, etaTex
 }
 
 /** Contra entrega: el negocio registra que ya cobró al entregar. */
-export async function markCollected(ctx: Ctx, id: string, actor: string): Promise<OrderRow> {
+/**
+ * Registrar el cobro de un pedido para pagar al recibir. Es un paso aparte de la entrega:
+ * entregar NO marca pagado. Con efectivo se guarda lo que dio el cliente y el cambio.
+ */
+export async function markCollected(ctx: Ctx, id: string, actor: string, received?: number | null): Promise<OrderRow> {
   return ctx.db.tx(async (q) => {
     const row = await q.one<OrderRow>('select * from office.orders where id = $1 for update', [id]);
     if (!row) throw new HttpError(404, 'Pedido no encontrado.');
     if (row.payment_method !== 'contra_entrega') throw new HttpError(409, 'Este pedido se paga en línea.');
     if (row.payment_status === 'aprobado') return row;
     if (row.order_status === 'cancelado' || row.order_status === 'cotizando_envio') throw new HttpError(409, 'Este pedido no se puede cobrar.');
-    await addEvent(q, id, 'pago', 'por_cobrar → aprobado (cobrado al entregar)', actor);
+    const total = row.total ?? 0;
+    const got = received ?? total;
+    if (got < total) throw new HttpError(422, `Recibiste menos del total (${fmt(got)} de ${fmt(total)}).`);
+    const change = got - total;
+    await addEvent(q, id, 'pago', `Cobrado ${fmt(total)} · recibió ${fmt(got)}${change ? ` · cambio ${fmt(change)}` : ' · exacto'}`, actor);
     return (await q.one<OrderRow>(
-      "update office.orders set payment_status = 'aprobado', paid_at = now(), updated_at = now() where id = $1 returning *",
-      [id],
+      "update office.orders set payment_status = 'aprobado', paid_at = now(), cash_received = $2, change_given = $3, updated_at = now() where id = $1 returning *",
+      [id, got, change],
     ))!;
   });
+}
+
+const fmt = (c: number) => `$${(c / 100).toLocaleString('es-MX', { maximumFractionDigits: 2 })}`;
+
+/** Alguien del local abrió el pedido: «visto» (no es lo mismo que empezar a prepararlo). */
+export async function markSeen(ctx: Ctx, id: string, actor: string): Promise<void> {
+  const r = await ctx.db.query<{ id: string }>('update office.orders set seen_at = now() where id = $1 and seen_at is null returning id', [id]);
+  if (r.length) await addEvent(ctx.db, id, 'visto', 'Pedido visto en el panel', actor);
 }
 
 export function listOrders(db: DB, filter: 'activos' | 'sin_pagar' | 'todos' | 'revision' | 'programados'): Promise<OrderRow[]> {
@@ -433,7 +459,8 @@ export function listOrders(db: DB, filter: 'activos' | 'sin_pagar' | 'todos' | '
     );
   }
   const where = {
-    activos: "where ((payment_status = 'aprobado' or payment_method = 'contra_entrega') and order_status not in ('entregado', 'cancelado')) or order_status = 'cotizando_envio'",
+    // Un pedido entregado que aún no se cobra sigue en curso hasta registrar el cobro.
+    activos: "where ((payment_status = 'aprobado' or payment_method = 'contra_entrega') and order_status not in ('entregado', 'cancelado')) or order_status = 'cotizando_envio' or (order_status = 'entregado' and payment_method = 'contra_entrega' and payment_status <> 'aprobado')",
     sin_pagar: "where payment_method = 'online' and order_status = 'esperando_pago' and payment_status <> 'aprobado'",
     revision: "where needs_review is not null or refund_status = 'pendiente'",
     todos: '',
