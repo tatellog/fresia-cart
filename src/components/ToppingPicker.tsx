@@ -1,10 +1,12 @@
 import type { MenuRules, Product, Topping } from '../../shared/types';
+import { MAX_SAME_TOPPING } from '../../shared/pricing';
 import { money } from '../lib/format';
 
 /**
- * Lista de toppings que muestra el costo de cada uno ANTES de elegirlo:
+ * Lista de toppings que muestra el costo ANTES de elegir:
  * "Incluido" mientras queden incluidos, después el precio de adicional;
  * premium siempre con su precio (salvo los que el producto da sin cargo).
+ * Un mismo topping se puede repetir (doble nuez) con − / +.
  */
 export function ToppingPicker({
   product, toppings, rules, chosen, onChange, idPrefix = 't',
@@ -12,45 +14,67 @@ export function ToppingPicker({
   const list = toppings.filter((t) => product.toppingIds.includes(t.id));
   if (list.length === 0) return null;
   const isPremium = (t: Topping) => t.premium && !product.freePremiumIds.includes(t.id);
-  const usedIncluded = chosen.filter((id) => {
-    const t = list.find((x) => x.id === id);
-    return t && !isPremium(t);
-  }).length;
-  const includedLeft = Math.max(0, product.includedToppings - usedIncluded);
+  const regularIds = new Set(list.filter((t) => !isPremium(t)).map((t) => t.id));
+  const regularChosen = chosen.filter((id) => regularIds.has(id));
+  const includedLeft = Math.max(0, product.includedToppings - regularChosen.length);
   const max = product.maxToppings;
   const atMax = max != null && chosen.length >= max;
+  const countOf = (id: string) => chosen.filter((x) => x === id).length;
 
   const regular = list.filter((t) => !isPremium(t));
   const premium = list.filter(isPremium);
 
-  const priceFor = (t: Topping, on: boolean) => {
-    if (isPremium(t)) return `+${money(t.price)}`;
-    if (on) {
-      // Los primeros elegidos son los incluidos.
-      const idx = chosen.filter((id) => regular.some((r) => r.id === id)).indexOf(t.id);
-      return idx < product.includedToppings ? 'Incluido' : `+${money(rules.extraToppingPrice)}`;
-    }
-    return includedLeft > 0 ? 'Incluido' : `+${money(rules.extraToppingPrice)}`;
+  const add = (id: string) => !atMax && countOf(id) < MAX_SAME_TOPPING && onChange([...chosen, id]);
+  const removeOne = (id: string) => {
+    const i = chosen.lastIndexOf(id);
+    if (i >= 0) onChange([...chosen.slice(0, i), ...chosen.slice(i + 1)]);
   };
+  const removeAll = (id: string) => onChange(chosen.filter((x) => x !== id));
 
-  const toggle = (id: string) => onChange(chosen.includes(id) ? chosen.filter((x) => x !== id) : atMax ? chosen : [...chosen, id]);
+  /** Lo que cuesta lo elegido de este topping, o el siguiente si aún no se elige. */
+  const priceFor = (t: Topping, n: number) => {
+    if (isPremium(t)) return `+${money(t.price * Math.max(1, n))}`;
+    if (n === 0) return includedLeft > 0 ? 'Incluido' : `+${money(rules.extraToppingPrice)}`;
+    // Los primeros elegidos (en orden) son los incluidos.
+    let included = 0;
+    regularChosen.forEach((id, idx) => id === t.id && idx < product.includedToppings && included++);
+    const extra = (n - included) * rules.extraToppingPrice;
+    if (extra === 0) return n > 1 ? `${n} incluidos` : 'Incluido';
+    return `+${money(extra)}`;
+  };
 
   const group = (title: string, items: Topping[]) =>
     items.length > 0 && (
       <div className="options">
         {title && <p className="muted small" style={{ marginTop: 4 }}>{title}</p>}
         {items.map((t) => {
-          const on = chosen.includes(t.id);
+          const n = countOf(t.id);
+          const on = n > 0;
           return (
-            <label key={t.id} className="option">
-              <input type="checkbox" checked={on} disabled={!t.available || (!on && atMax)} onChange={() => toggle(t.id)} name={`${idPrefix}-${t.id}`} />
-              <span className="mark" aria-hidden="true" />
-              <span className="grow">
-                {t.name}
-                {!t.available && <span className="muted small"> · agotado</span>}
-              </span>
-              <span className={`price ${priceFor(t, on) === 'Incluido' ? '' : 'muted'}`}>{priceFor(t, on)}</span>
-            </label>
+            <div key={t.id} className={`option topping${on ? ' on' : ''}`}>
+              <label className="topping-main">
+                <input
+                  type="checkbox"
+                  checked={on}
+                  disabled={!t.available || (!on && atMax)}
+                  onChange={() => (on ? removeAll(t.id) : add(t.id))}
+                  name={`${idPrefix}-${t.id}`}
+                />
+                <span className="mark" aria-hidden="true" />
+                <span className="grow">
+                  {t.name}
+                  {!t.available && <span className="muted small"> · agotado</span>}
+                </span>
+              </label>
+              {on && (
+                <span className="topping-qty" role="group" aria-label={`Cantidad de ${t.name}`}>
+                  <button type="button" onClick={() => removeOne(t.id)} aria-label={`Quitar una porción de ${t.name}`}>−</button>
+                  <span aria-live="polite">×{n}</span>
+                  <button type="button" onClick={() => add(t.id)} disabled={atMax || n >= MAX_SAME_TOPPING} aria-label={`Agregar otra porción de ${t.name}`}>+</button>
+                </span>
+              )}
+              <span className={`price ${priceFor(t, n).startsWith('+') ? 'muted' : ''}`}>{priceFor(t, n)}</span>
+            </div>
           );
         })}
       </div>
@@ -68,7 +92,9 @@ export function ToppingPicker({
             : 'Opcional'}
         </span>
       </legend>
-      {product.includedToppings > 0 && <p className="muted small" style={{ margin: '-6px 0 0' }}>Adicionales {money(rules.extraToppingPrice)} c/u.</p>}
+      <p className="muted small" style={{ margin: '-6px 0 0' }}>
+        {product.includedToppings > 0 ? `Adicionales ${money(rules.extraToppingPrice)} c/u. ` : ''}¿Doble porción? Elige el topping y toca +.
+      </p>
       {group(premium.length ? 'Clásicos' : '', regular)}
       {group('Premium · no gastan tus incluidos', premium)}
     </fieldset>

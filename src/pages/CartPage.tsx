@@ -42,7 +42,7 @@ export default function CartPage() {
   // Fresigrama, pedido de equipo o pedido con combo: sin mínimo.
   const hasCombo = cart.lines.some((l) => data?.products.find((p) => p.id === l.productId)?.combo);
   const exempt = gift || !!groupCheckout() || hasCombo;
-  const minMsg = data && !exempt ? minimumMessage(cart.fresias, rules) : null;
+  const minMsg = data && !exempt ? minimumMessage(cart.count, rules) : null;
   const makeGift = () => {
     save(GIFT_KEY, { ...loadStored(GIFT_KEY, emptyGift), on: true });
     setGift(true);
@@ -117,7 +117,7 @@ export default function CartPage() {
         {data && rules.minFresias > 1 && minMsg && (
           <div className="notice warn stack" role="status" style={{ gap: 8 }}>
             <p>
-              <strong>{minMsg}</strong> Llevas {cart.fresias} de {rules.minFresias}. El pan de muerto y el waffle no cuentan.
+              <strong>{minMsg}</strong> Llevas {cart.count} de {rules.minFresias}; cuenta cualquier producto del menú.
             </p>
             {giftOn && (
               <p className="small">
@@ -127,7 +127,7 @@ export default function CartPage() {
             )}
           </div>
         )}
-        {data && rules.minFresias > 1 && gift && cart.fresias < rules.minFresias && (
+        {data && rules.minFresias > 1 && gift && cart.count < rules.minFresias && (
           <p className="notice small" role="status">🎁 Es un Fresigrama: no tiene pedido mínimo. Al final escribes para quién es.</p>
         )}
 
@@ -135,7 +135,7 @@ export default function CartPage() {
       </main>
       <StickyAction>
         <button type="button" className="btn primary block" disabled={hasProblems || !data || !!minMsg} onClick={() => navigate('/entrega')}>
-          {hasProblems ? 'Revisa los productos marcados' : minMsg ? `Mínimo ${rules.minFresias} Frésias` : 'Continuar a la entrega'}
+          {hasProblems ? 'Revisa los productos marcados' : minMsg ? `Mínimo ${rules.minFresias} productos` : 'Continuar a la entrega'}
         </button>
       </StickyAction>
     </>

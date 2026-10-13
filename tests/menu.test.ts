@@ -32,10 +32,10 @@ describe('menú en línea', () => {
 });
 
 describe('mínimos', () => {
-  it('mínimo de 2 Frésias por pedido en total, sin mínimo por producto', async () => {
+  it('mínimo de 2 productos por pedido en total, sin mínimo por producto', async () => {
     const one = await create([{ productId: 'clasica', sizeId: 'chico', toppingIds: [], qty: 1 }]);
     expect(one.status).toBe(422);
-    expect(one.body.error).toMatch(/mínimo es de 2 Frésias. Te falta 1/);
+    expect(one.body.error).toMatch(/mínimo es de 2 productos. Te falta 1/);
     // 1 Clásica + 1 Chocolate: 2 productos distintos de 1 pieza cada uno
     const two = await create([
       { productId: 'clasica', sizeId: 'chico', toppingIds: [], qty: 1 },
@@ -45,9 +45,14 @@ describe('mínimos', () => {
     expect(two.body.order.items.map((l: any) => l.qty)).toEqual([1, 1]);
   });
 
-  it('el pan y el waffle no cuentan como Frésias', async () => {
-    const r = await create([{ productId: 'pan-tradicional', sizeId: 'pieza', toppingIds: [], qty: 3 }]);
-    expect(r.status).toBe(422);
+  it('cuenta cualquier producto: una Frésia y un pan ya son 2', async () => {
+    const r = await create([
+      { productId: 'clasica', sizeId: 'chico', toppingIds: [], qty: 1 },
+      { productId: 'pan-tradicional', sizeId: 'pieza', toppingIds: [], qty: 1 },
+    ]);
+    expect(r.status).toBe(201);
+    expect((await create([{ productId: 'pan-tradicional', sizeId: 'pieza', toppingIds: [], qty: 2 }])).status).toBe(201);
+    expect((await create([{ productId: 'pan-tradicional', sizeId: 'pieza', toppingIds: [], qty: 1 }])).status).toBe(422);
   });
 
   it('el Fresigrama no tiene mínimo: un regalo de 1 Frésia sí se acepta', async () => {
@@ -60,17 +65,17 @@ describe('mínimos', () => {
     }));
     expect(r.status).toBe(201);
     const q = await t.api('POST', '/api/quote', { fulfillment: 'pickup', address: null, items: [{ productId: 'clasica', sizeId: 'chico', toppingIds: [], qty: 1 }] });
-    expect(q.body.errors[0]).toMatch(/mínimo es de 2 Frésias/);
+    expect(q.body.errors[0]).toMatch(/mínimo es de 2 productos/);
   });
 
-  it('el panel puede cambiar el mínimo por producto o activar un mínimo de Frésias', async () => {
+  it('el panel puede cambiar el mínimo por producto o el mínimo de productos', async () => {
     await t.api('POST', '/api/admin/login', { password: 'secreto-de-prueba' });
     await t.api('PUT', '/api/admin/rules', { extraToppingPrice: 1800, minFresias: 0, minQtyPerItem: 1 });
     expect((await create([{ productId: 'clasica', sizeId: 'chico', toppingIds: [], qty: 1 }])).status).toBe(201);
     await t.api('PUT', '/api/admin/rules', { extraToppingPrice: 1800, minFresias: 3, minQtyPerItem: 1 });
     const r = await create([{ productId: 'clasica', sizeId: 'chico', toppingIds: [], qty: 2 }]);
     expect(r.status).toBe(422);
-    expect(r.body.error).toMatch(/mínimo es de 3 Frésias/);
+    expect(r.body.error).toMatch(/mínimo es de 3 productos/);
   });
 });
 
@@ -88,6 +93,17 @@ describe('toppings', () => {
     expect(l.toppings.map((x: any) => [x.id, x.included, x.price])).toEqual([
       ['nuez', true, 0], ['pistache', false, 2500], ['coco', true, 0], ['oreo', false, 1800],
     ]);
+  });
+
+  it('el mismo topping se puede repetir: doble nuez cuenta como 2', async () => {
+    const l = await unit({ productId: 'clasica', sizeId: 'chico', toppingIds: ['nuez', 'nuez'], qty: 1 });
+    expect(l.unitPrice).toBe(10000); // los 2 incluidos
+    expect(l.toppings.map((x: any) => x.id)).toEqual(['nuez', 'nuez']);
+    const triple = await unit({ productId: 'clasica', sizeId: 'chico', toppingIds: ['nuez', 'nuez', 'nuez'], qty: 1 });
+    expect(triple.unitPrice).toBe(10000 + 1800); // la tercera es adicional
+    const r = await create([{ productId: 'clasica', sizeId: 'chico', toppingIds: ['nuez', 'nuez', 'nuez', 'nuez'], qty: 2 }]);
+    expect(r.status).toBe(422);
+    expect(r.body.error).toMatch(/hasta 3 veces el mismo topping/);
   });
 
   it('el pan relleno incluye solo 1', async () => {

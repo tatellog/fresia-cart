@@ -1,7 +1,8 @@
 import { money } from '../lib/format';
+import { toppingSummary } from '../../shared/pricing';
 import type { Fulfillment, PricedLine, PricedTopping, Product } from '../../shared/types';
 
-export const toppingText = (ts: PricedTopping[]) => ts.map((t) => `${t.name} ${t.included ? '(incluido)' : `+${money(t.price)}`}`).join(' · ');
+export const toppingText = (ts: PricedTopping[]) => toppingSummary(ts).join(' · ');
 
 /** Toppings, contenido del combo y destinatario de un renglón. */
 export function LineDetails({ line }: { line: PricedLine }) {
