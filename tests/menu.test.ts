@@ -18,7 +18,7 @@ describe('menú en línea', () => {
       'Mix Frésia': [95, 115, 135],
       'Frésia Balance': [105, 125, 145],
       'Frésia Choco Crema': [115, 135, 155],
-      'Chocolate sin crema': [135],
+      'Chocolate Turín': [135],
       'Pan tradicional': [40],
       'Pan relleno Frésia': [95],
       'Waffle Frésia': [99],

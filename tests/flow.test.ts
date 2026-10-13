@@ -37,7 +37,7 @@ describe('totales', () => {
     const one = (item: object) => orderBody({ items: [{ qty: 3, ...item }, { productId: 'clasica', sizeId: 'chico', toppingIds: [], qty: 3 }] });
     // La Brûlée solo existe en el local.
     expect((await t.api('POST', '/api/orders', one({ productId: 'brulee', sizeId: 'mediano', toppingIds: [] }))).status).toBe(422);
-    // Chocolate sin crema solo en chico.
+    // Chocolate Turín solo en chico.
     expect((await t.api('POST', '/api/orders', one({ productId: 'chocolate-sin-crema', sizeId: 'mediano', toppingIds: [] }))).status).toBe(422);
     expect((await t.api('POST', '/api/orders', one({ productId: 'chocolate-sin-crema', sizeId: 'chico', toppingIds: [] }))).status).toBe(201);
     // Productos que no están en el menú en línea.

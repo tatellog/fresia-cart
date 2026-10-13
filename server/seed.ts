@@ -41,7 +41,7 @@ export const DEMO_PRODUCTS: Product[] = [
   vaso('mix', 'Mix Frésia', 'Fresas y uva verde con crema Frèsia.', '/images/mix.jpg', tres(95, 115, 135), 30),
   vaso('balance', 'Frésia Balance', 'Fresas con yogurt griego.', '/images/balance.jpg', tres(105, 125, 145), 40),
   vaso('choco-crema', 'Frésia Choco Crema', 'Fresas, crema Frèsia y chocolate Turín.', '/images/chocolate-mediano.jpg', tres(115, 135, 155), 50),
-  vaso('chocolate-sin-crema', 'Chocolate sin crema', 'Fresas con chocolate, sin crema. Solo tamaño chico.', '/images/chocolate-turin.jpg',
+  vaso('chocolate-sin-crema', 'Chocolate Turín', 'Fresas con chocolate Turín, sin crema. Solo tamaño chico.', '/images/chocolate-turin.jpg',
     [{ ...SIZES.chico, price: MXN(135) }], 60),
   pieza('waffle', 'Waffle Frésia', 'Waffle con crema Frèsia y 2 toppings incluidos; el Turín y las mermeladas entran como incluidos.', '/images/waffle.jpg', 'Waffle', 99, 80,
     { toppingIds: ALL, includedToppings: 2, freePremiumIds: ['turin', 'mermelada-fresa', 'mermelada-zarzamora'] }),
@@ -50,16 +50,16 @@ export const DEMO_PRODUCTS: Product[] = [
     { toppingIds: ALL, includedToppings: 1 }),
 
   // ── Combos: 5 productos a precio fijo; cada pieza lleva sus toppings incluidos y los extras se cobran aparte ──
-  combo('pausa-fresia', 'Pausa Frésia', '3 Frésias Clásicas medianas + 2 Chocolate sin crema chicos.', '/images/combo-pausa.jpg', 640, 1, [
+  combo('pausa-fresia', 'Pausa Frésia', '3 Frésias Clásicas medianas + 2 Chocolate Turín chicos.', '/images/combo-pausa.jpg', 640, 1, [
     slot('clasicas', 'Frésia Clásica mediana', 3, 'clasica', 'mediano'),
-    slot('chocolates', 'Chocolate sin crema chico', 2, 'chocolate-sin-crema', 'chico'),
+    slot('chocolates', 'Chocolate Turín chico', 2, 'chocolate-sin-crema', 'chico'),
   ]),
   combo('dulce-tradicion', 'Dulce Tradición', '5 panes de muerto rellenos Frésia.', '/images/combo-dulce-tradicion.jpg', 500, 2, [
     slot('panes', 'Pan relleno Frésia', 5, 'pan-relleno', 'pieza'),
   ]),
-  combo('cumple-con-fresia', 'Cumple con Frésia', '1 Frésia Clásica mediana + 1 Chocolate sin crema chico + 2 panes rellenos Frésia + 1 Waffle Frésia.', '/images/combo-cumple.jpg', 564, 3, [
+  combo('cumple-con-fresia', 'Cumple con Frésia', '1 Frésia Clásica mediana + 1 Chocolate Turín chico + 2 panes rellenos Frésia + 1 Waffle Frésia.', '/images/combo-cumple.jpg', 564, 3, [
     slot('clasica', 'Frésia Clásica mediana', 1, 'clasica', 'mediano'),
-    slot('chocolate', 'Chocolate sin crema chico', 1, 'chocolate-sin-crema', 'chico'),
+    slot('chocolate', 'Chocolate Turín chico', 1, 'chocolate-sin-crema', 'chico'),
     slot('panes', 'Pan relleno Frésia', 2, 'pan-relleno', 'pieza'),
     slot('waffle', 'Waffle Frésia', 1, 'waffle', 'pieza'),
   ]),
