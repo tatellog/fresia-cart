@@ -87,3 +87,38 @@ describe('urgencia con tiempos reales', () => {
     expect(sorted.map((o) => o.id)).toEqual(['nuevo', 'tarde', 'luego', 'sin-hora']);
   });
 });
+
+describe('efectivo al entregar: recibido o pendiente', () => {
+  it('recibido: guarda importe, cambio, quién y la hora', async () => {
+    await login();
+    const o = await newOrder();
+    const r = (await t.api('POST', `/api/admin/orders/${o.id}/collected`, { received: o.total + 1000, by: 'Lali' })).body.order;
+    expect(r).toMatchObject({ paymentStatus: 'aprobado', cashReceived: o.total + 1000, changeGiven: 1000, collectedBy: 'Lali' });
+    expect(r.paidAt).not.toBeNull();
+  });
+
+  it('pendiente: no bloquea, queda destacado en curso hasta registrar el cobro', async () => {
+    await login();
+    const o = await newOrder();
+    expect((await t.api('POST', `/api/admin/orders/${o.id}/collect-pending`, { reason: 'x', by: 'Lali' })).status).toBe(400); // sin motivo real
+    const p = (await t.api('POST', `/api/admin/orders/${o.id}/collect-pending`, { reason: 'Lo cobra recepción', by: 'Lali' })).body.order;
+    expect(p.collectPending).toMatchObject({ reason: 'Lo cobra recepción (Lali)' });
+    expect(p.paymentStatus).toBe('por_cobrar');
+    const done = (await t.api('POST', `/api/admin/orders/${o.id}/collected`, { by: 'Tania' })).body.order;
+    expect(done).toMatchObject({ paymentStatus: 'aprobado', collectPending: null, collectedBy: 'Tania', changeGiven: 0 });
+  });
+});
+
+describe('avisos verificados', () => {
+  it('el dispositivo confirma que mostró el aviso y si el panel estaba cerrado', async () => {
+    await login();
+    const sub = { endpoint: 'https://push.example.com/abc123', keys: { p256dh: 'x'.repeat(20), auth: 'y'.repeat(10) } };
+    await t.api('POST', '/api/admin/push/subscribe', { subscription: sub, label: 'iPhone · Safari' });
+    expect((await t.api('POST', '/api/push/ack', { endpoint: sub.endpoint, background: true })).status).toBe(204);
+    const d = (await t.api('GET', '/api/admin/push')).body.devices[0];
+    expect(d).toMatchObject({ label: 'iPhone · Safari', lastReceivedBackground: true });
+    expect(d.lastReceivedAt).not.toBeNull();
+    // Un endpoint desconocido no hace nada.
+    expect((await t.api('POST', '/api/push/ack', { endpoint: 'https://push.example.com/otro', background: true })).status).toBe(204);
+  });
+});

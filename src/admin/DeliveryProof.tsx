@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { compressPhoto } from '../lib/photo';
 import { ApiError } from '../lib/api';
 import type { AdminOrder } from '../../shared/types';
+import { CashHandoff, type CashDecision } from './Ops';
 
 /**
  * Paso final de un pedido a domicilio: foto de entrega (obligatoria) y confirmar.
@@ -10,9 +11,11 @@ import type { AdminOrder } from '../../shared/types';
 export function DeliveryProof({ order, busy, onConfirm, onCancel }: {
   order: AdminOrder;
   busy: boolean;
-  onConfirm: () => Promise<void>;
+  onConfirm: (cash: CashDecision | null) => Promise<void>;
   onCancel: () => void;
 }) {
+  const needsCash = order.paymentMethod === 'contra_entrega' && order.paymentStatus !== 'aprobado';
+  const [cash, setCash] = useState<CashDecision | null>(null);
   const [preview, setPreview] = useState<string | null>(order.deliveryPhotoAt ? `/api/admin/orders/${order.id}/delivery-photo?v=${order.deliveryPhotoAt}` : null);
   const [uploading, setUploading] = useState(false);
   const [photoAt, setPhotoAt] = useState<string | null>(order.deliveryPhotoAt);
@@ -62,8 +65,9 @@ export function DeliveryProof({ order, busy, onConfirm, onCancel }: {
       {uploading && <p className="small" role="status">Subiendo foto…</p>}
       {error && <p className="error-text" role="alert">{error}</p>}
 
-      <button type="button" className="btn primary block big-action" disabled={!hasPhoto || busy} onClick={onConfirm}>
-        <span className="big-action-hint">{hasPhoto ? 'Último paso' : 'Primero toma la foto'}</span>
+      {needsCash && <CashHandoff order={order} onChange={setCash} />}
+      <button type="button" className="btn primary block big-action" disabled={!hasPhoto || busy || (needsCash && !cash)} onClick={() => onConfirm(cash)}>
+        <span className="big-action-hint">{!hasPhoto ? 'Primero toma la foto' : needsCash && !cash ? 'Falta indicar el cobro' : 'Último paso'}</span>
         <span>✅ Confirmar entrega</span>
       </button>
       <div className="row" style={{ flexWrap: 'wrap' }}>

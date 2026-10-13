@@ -25,9 +25,18 @@ export async function removeSubscription(db: DB, endpoint: string) {
 }
 
 export async function listSubscriptions(db: DB) {
-  return db.query<{ endpoint: string; keys: PushSubscriptionJSON['keys']; label: string; created_at: Date; last_success_at: Date | null }>(
-    'select endpoint, keys, label, created_at, last_success_at from office.push_subscriptions order by created_at',
+  return db.query<{ endpoint: string; keys: PushSubscriptionJSON['keys']; label: string; created_at: Date; last_success_at: Date | null; last_received_at: Date | null; last_received_background: boolean | null }>(
+    'select endpoint, keys, label, created_at, last_success_at, last_received_at, last_received_background from office.push_subscriptions order by created_at',
   );
+}
+
+/** El service worker avisa que el aviso se mostró en el dispositivo. Solo conoce el endpoint quien está suscrito. */
+export async function ackReceived(db: DB, endpoint: string, background: boolean) {
+  const r = await db.query<{ endpoint: string }>(
+    'update office.push_subscriptions set last_received_at = now(), last_received_background = $2 where endpoint = $1 returning endpoint',
+    [endpoint, background],
+  );
+  return r.length > 0;
 }
 
 /** Envía a todos los dispositivos; borra los que el navegador ya dio de baja. */

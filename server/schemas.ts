@@ -233,5 +233,10 @@ export const scheduleSchema = z.object({
 export const invoiceStatusSchema = z.enum(['solicitada', 'emitida']);
 
 /** Cobro al entregar: lo que dio el cliente, en centavos (sin dato = exacto). */
-export const collectedSchema = z.object({ received: z.number().int().min(0).max(5_000_000).nullable().optional() });
+export const collectedSchema = z.object({ received: z.number().int().min(0).max(5_000_000).nullable().optional(), by: text(40).nullable().optional() });
+
+export const pushAckSchema = z.object({ endpoint: z.string().url().max(1000), background: z.boolean().default(false) });
+
+/** Al entregar con efectivo: lo que dio el cliente y quién lo recibió, o por qué quedó pendiente. */
+export const collectPendingSchema = z.object({ reason: text(160).min(3, 'Escribe por qué queda pendiente.'), by: text(40).min(2, 'Escribe quién entregó.') });
 

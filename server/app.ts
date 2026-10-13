@@ -14,7 +14,7 @@ import { DemoProvider } from './payments/demo';
 import { MercadoPagoProvider, verifyMercadoPagoSignature } from './payments/mercadopago';
 import { checkReturnedPayment, handlePaymentNotification, reconcile, startCheckout } from './payments/service';
 import {
-  cancelByCustomer, createOrder, purgeOldDeliveryPhotos, setInvoiceStatus, getDeliveryPhoto, getOrderById, getOrderForCustomer, listOrders, markCollected, markSeen, quoteOrder, saveCourierLocation, saveDeliveryPhoto, setOrderStatus, setRefundStatus, setShippingQuote, toAdmin, toPublic, trackingFor,
+  cancelByCustomer, createOrder, purgeOldDeliveryPhotos, setInvoiceStatus, getDeliveryPhoto, getOrderById, getOrderForCustomer, listOrders, markCollectPending, markCollected, markSeen, quoteOrder, saveCourierLocation, saveDeliveryPhoto, setOrderStatus, setRefundStatus, setShippingQuote, toAdmin, toPublic, trackingFor,
 } from './orders';
 import * as store from './store';
 import * as S from './schemas';
@@ -26,7 +26,7 @@ import { addGroupItem, createGroup, groupLinesForOrder, groupView, joinGroup, re
 import { background, sleep } from './background';
 import { clubCardFor, syncClub } from './club';
 import { lookupPostalCode, postalCatalogLoaded } from './postal';
-import { listSubscriptions, pushConfigured, removeSubscription, saveSubscription, sendPushToAll } from './push';
+import { ackReceived, listSubscriptions, pushConfigured, removeSubscription, saveSubscription, sendPushToAll } from './push';
 import type { LegalSlug, MenuResponse } from '../shared/types';
 import { ADMIN_FLOW } from '../shared/status';
 
@@ -121,6 +121,13 @@ export async function createApp(config: Config, opts: { demoWebhookDelayMs?: num
   app.post('/api/events', rateLimit(120, 60_000), async (req, res) => {
     const e = S.eventSchema.parse(req.body);
     await recordEvent(db, { ...e, device: deviceOf(req.headers['user-agent']) });
+    res.status(204).end();
+  });
+
+  // Acuse del service worker: el aviso se mostró (y si el panel estaba cerrado). Sin sesión: basta el endpoint.
+  app.post('/api/push/ack', rateLimit(60, 60_000), async (req, res) => {
+    const { endpoint, background: bg } = S.pushAckSchema.parse(req.body);
+    await ackReceived(db, endpoint, bg);
     res.status(204).end();
   });
 
@@ -391,8 +398,13 @@ export async function createApp(config: Config, opts: { demoWebhookDelayMs?: num
   });
   admin.post('/orders/:id/collected', async (req, res) => {
     await orderOr404(String(req.params.id));
-    const { received } = S.collectedSchema.parse(req.body ?? {});
-    res.json({ order: await toAdmin(db, await markCollected(ctx, String(req.params.id), 'panel', received), ctx.now()) });
+    const { received, by } = S.collectedSchema.parse(req.body ?? {});
+    res.json({ order: await toAdmin(db, await markCollected(ctx, String(req.params.id), 'panel', received, by), ctx.now()) });
+  });
+  admin.post('/orders/:id/collect-pending', async (req, res) => {
+    await orderOr404(String(req.params.id));
+    const { reason, by } = S.collectPendingSchema.parse(req.body ?? {});
+    res.json({ order: await toAdmin(db, await markCollectPending(ctx, String(req.params.id), reason, by, 'panel'), ctx.now()) });
   });
   admin.post('/orders/:id/review-clear', async (req, res) => {
     const o = await orderOr404(String(req.params.id));
@@ -419,7 +431,14 @@ export async function createApp(config: Config, opts: { demoWebhookDelayMs?: num
     res.json({
       configured: pushConfigured(config),
       publicKey: config.vapidPublicKey,
-      devices: subs.map((s) => ({ endpoint: s.endpoint, label: s.label, createdAt: iso(s.created_at), lastSuccessAt: s.last_success_at ? iso(s.last_success_at) : null })),
+      devices: subs.map((s) => ({
+        endpoint: s.endpoint,
+        label: s.label,
+        createdAt: iso(s.created_at),
+        lastSuccessAt: s.last_success_at ? iso(s.last_success_at) : null,
+        lastReceivedAt: s.last_received_at ? iso(s.last_received_at) : null,
+        lastReceivedBackground: s.last_received_background ?? null,
+      })),
     });
   });
   admin.post('/push/subscribe', async (req, res) => {
@@ -431,8 +450,15 @@ export async function createApp(config: Config, opts: { demoWebhookDelayMs?: num
     await removeSubscription(db, S.pushEndpointSchema.parse(req.body).endpoint);
     res.json({ ok: true });
   });
-  admin.post('/push/test', async (_req, res) => {
-    res.json(await sendPushToAll(config, db, { title: '🍓 Prueba de Frésia Office', body: 'Así te llegarán los pedidos nuevos.', url: '/admin', tag: 'prueba' }));
+  admin.post('/push/test', async (req, res) => {
+    const payload = { title: '🔔 PRUEBA · Pedido nuevo', body: 'Así te llegarán los pedidos nuevos. Toca para abrir el panel.', url: '/admin', tag: `prueba-${Date.now()}` };
+    // Con espera: da tiempo de cerrar el panel o bloquear el teléfono antes de que llegue.
+    const delay = Math.min(25, Math.max(0, Number(req.body?.delaySeconds) || 0));
+    if (delay) {
+      background(sleep(delay * 1000).then(() => sendPushToAll(config, db, payload)));
+      return res.json({ scheduled: true, delaySeconds: delay });
+    }
+    res.json(await sendPushToAll(config, db, payload));
   });
 
   admin.get('/catalog', async (_req, res) => res.json({ products: await store.listProducts(db), toppings: await store.listToppings(db), images: listImages() }));

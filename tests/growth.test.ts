@@ -130,7 +130,7 @@ describe('pedido de equipo', () => {
     expect((await g.add('Sofía', 'key-sofi-123456', item('pan-relleno', 'pieza', ['cajeta']))).status).toBe(201);
     const v = (await t.api('GET', `/api/groups/${g.code}?k=key-luis-123456`)).body;
     expect(v.items.map((i: any) => [i.memberName, i.line.forWhom, i.mine])).toEqual([['Ana', 'Ana', false], ['Luis', 'Luis', true], ['Sofía', 'Sofía', false]]);
-    expect(v.subtotal).toBe(10000 + 14000 + 10000);
+    expect(v.subtotal).toBe(9500 + 13500 + 9500);
     expect(v.isOrganizer).toBe(false);
     expect((await t.api('GET', `/api/groups/${g.code}?a=${g.adminToken}`)).body.isOrganizer).toBe(true);
   });
@@ -153,7 +153,7 @@ describe('pedido de equipo', () => {
     const ref = { code: g.code, token: g.adminToken };
     const q = await t.api('POST', '/api/quote', { fulfillment: 'pickup', address: null, items: [], group: ref });
     expect(q.body.errors).toEqual([]);
-    expect(q.body.total).toBe(30000);
+    expect(q.body.total).toBe(28500);
     const r = await t.api('POST', '/api/orders', pickup({ items: [], group: ref }));
     expect(r.status).toBe(201);
     expect(r.body.order.groupName).toBe('Equipo de Ventas');
@@ -242,6 +242,35 @@ describe('pedido de equipo', () => {
     expect(html).toContain('Cierra hoy a las 3:00 p.m.');
     expect(html).not.toContain('Ana Pérez');
     expect(html).toContain('<div id="root">');
+  });
+
+  it('identidad por llave, no por nombre: usar el nombre de otro no da acceso a lo suyo', async () => {
+    const g = await group();
+    await g.add('Lali', 'key-lali-123456', item('clasica', 'chico'));
+    // Alguien escribe «Lali» desde otro teléfono: es otra persona.
+    await g.add('Lali', 'key-impostor-1234', item('uvas', 'chico'));
+    const v = (await t.api('GET', `/api/groups/${g.code}?k=key-impostor-1234`)).body;
+    expect(v.participants.map((p: any) => [p.name, p.mine])).toEqual([['Lali', false], ['Lali (2)', true]]);
+    const lali = v.items.find((i: any) => i.line.productId === 'clasica');
+    expect((await t.api('POST', `/api/groups/${g.code}/items/${lali.id}/delete`, { memberKey: 'key-impostor-1234' })).status).toBe(403);
+    // Renombrarse cambia SOLO lo propio.
+    await t.api('POST', `/api/groups/${g.code}/join`, { memberName: 'Tania Anahí', memberKey: 'key-impostor-1234' });
+    const after = (await t.api('GET', `/api/groups/${g.code}`)).body.items.map((i: any) => [i.memberName, i.line.forWhom]);
+    expect(after).toEqual([['Lali', 'Lali'], ['Tania Anahí', 'Tania Anahí']]);
+    // Solo el organizador cierra.
+    expect((await t.api('POST', `/api/groups/${g.code}/close`, { adminToken: 'key-impostor-1234' })).status).toBe(403);
+  });
+
+  it('al entregar se guarda la hora para confirmarla al cliente', async () => {
+    const g = await group();
+    await g.add('Ana', 'key-ana-123456', item('clasica', 'chico'));
+    const r = await t.api('POST', '/api/orders', pickup({ items: [], group: { code: g.code, token: g.adminToken } }));
+    await login();
+    const id = (await t.api('GET', '/api/admin/orders?filter=todos')).body.orders[0].id;
+    for (const s of ['en_preparacion', 'listo', 'entregado']) await t.api('POST', `/api/admin/orders/${id}/status`, { status: s });
+    const pub = (await t.api('GET', `/api/orders/${r.body.number}?t=${r.body.token}`)).body.order;
+    expect(pub.deliveredAt).not.toBeNull();
+    expect(pub.paymentStatus).toBe('por_cobrar'); // entregar no marca pagado
   });
 
   it('respeta la hora límite', async () => {

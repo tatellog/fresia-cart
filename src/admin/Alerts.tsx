@@ -4,7 +4,15 @@ import { load, save } from '../lib/storage';
 
 // ── Notificaciones push en este dispositivo ─────────────────────────────
 
-type PushInfo = { configured: boolean; publicKey: string; devices: { endpoint: string; label: string; lastSuccessAt: string | null }[] };
+export type PushDevice = { endpoint: string; label: string; lastSuccessAt: string | null; lastReceivedAt: string | null; lastReceivedBackground: boolean | null };
+type PushInfo = { configured: boolean; publicKey: string; devices: PushDevice[] };
+
+/** Un dispositivo está verificado si mostró un aviso con el panel cerrado o en segundo plano en los últimos 14 días. */
+export const verified = (d: PushDevice) => !!d.lastReceivedAt && d.lastReceivedBackground === true && Date.now() - Date.parse(d.lastReceivedAt) < 14 * 86400_000;
+const ago = (iso: string) => {
+  const m = Math.round((Date.now() - Date.parse(iso)) / 60000);
+  return m < 1 ? 'hace un momento' : m < 60 ? `hace ${m} min` : m < 1440 ? `hace ${Math.round(m / 60)} h` : `hace ${Math.round(m / 1440)} d`;
+};
 
 const isIOS = () => /iPhone|iPad|iPod/.test(navigator.userAgent);
 const isStandalone = () => window.matchMedia('(display-mode: standalone)').matches || (navigator as unknown as { standalone?: boolean }).standalone === true;
@@ -38,6 +46,12 @@ export function PushSetup() {
     }
   };
   useEffect(() => void refresh().catch(() => undefined), []);
+  // Al volver al panel (p. ej. después de la prueba con el panel cerrado) se ve si llegó el aviso.
+  useEffect(() => {
+    const onVisible = () => document.visibilityState === 'visible' && void refresh().catch(() => undefined);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, []);
 
   if (!info) return null;
   const subscribed = mine && info.devices.some((d) => d.endpoint === mine);
@@ -73,12 +87,22 @@ export function PushSetup() {
     setBusy(false);
   }
 
-  async function test() {
+  async function test(delaySeconds = 0) {
     setBusy(true);
-    const r = await api<{ sent: number; failed: number }>('/api/admin/push/test', { body: {} });
-    setMsg(r.sent ? `Prueba enviada a ${r.sent} dispositivo(s).` : 'No hay dispositivos activos.');
+    const r = await api<{ sent?: number; scheduled?: boolean }>('/api/admin/push/test', { body: { delaySeconds } });
+    setMsg(
+      r.scheduled
+        ? `Listo: en ${delaySeconds} s llega un aviso de PRUEBA. Cierra el panel o bloquea el teléfono ahora y espera a que suene. Al volver verás aquí si llegó.`
+        : r.sent
+          ? `Prueba enviada a ${r.sent} dispositivo(s).`
+          : 'No hay dispositivos activos.',
+    );
     setBusy(false);
+    // Revisa los acuses durante un minuto (si el panel sigue abierto) y otra vez al volver.
+    const until = Date.now() + 60_000;
+    const poll = setInterval(() => (Date.now() > until ? clearInterval(poll) : void refresh().catch(() => undefined)), 5000);
   }
+
 
   return (
     <section className="card stack" aria-labelledby="push-title">
@@ -98,9 +122,15 @@ export function PushSetup() {
         )
       ) : subscribed ? (
         <>
-          <p className="notice ok">Este dispositivo recibe un aviso con cada pedido nuevo, aunque el panel esté cerrado.</p>
+          <p className="notice ok">Este dispositivo está suscrito a los avisos de pedidos nuevos.</p>
+          <ol className="small" style={{ margin: 0, paddingLeft: '1.2em' }}>
+            <li>Toca «Probar con el panel cerrado».</li>
+            <li>Cierra el panel o bloquea el teléfono en menos de 20 s.</li>
+            <li>Debe sonar y aparecer «🔔 PRUEBA · Pedido nuevo». Al volver, aquí dirá si llegó.</li>
+          </ol>
           <div className="row" style={{ flexWrap: 'wrap' }}>
-            <button className="btn secondary small" disabled={busy} onClick={test}>Enviar prueba</button>
+            <button className="btn primary small" disabled={busy} onClick={() => test(20)}>Probar con el panel cerrado (20 s)</button>
+            <button className="btn secondary small" disabled={busy} onClick={() => test(0)}>Probar ahora</button>
             <button className="linkbtn" disabled={busy} onClick={disable}>Desactivar en este dispositivo</button>
           </div>
         </>
@@ -114,8 +144,24 @@ export function PushSetup() {
       )}
       {msg && <p className="small" role="status">{msg}</p>}
       {info.devices.length > 0 && (
-        <p className="muted small">Activos: {info.devices.map((d) => d.label || 'Dispositivo').join(' · ')}</p>
+        <ul className="device-list">
+          {info.devices.map((d) => (
+            <li key={d.endpoint}>
+              <strong>{d.label || 'Dispositivo'}{mine === d.endpoint ? ' (este)' : ''}</strong>
+              <span className={`small ${verified(d) ? 'ok-text' : 'warn-text'}`}>
+                {verified(d)
+                  ? `✅ Verificado: recibió un aviso con el panel cerrado ${ago(d.lastReceivedAt!)}`
+                  : d.lastReceivedAt
+                    ? `⚠️ Recibió un aviso ${ago(d.lastReceivedAt)}, pero con el panel abierto. Falta probar con el panel cerrado.`
+                    : '⚠️ Aún no confirma haber recibido ningún aviso.'}
+              </span>
+            </li>
+          ))}
+        </ul>
       )}
+      <p className="muted small">
+        Si los avisos no llegan: deja el panel abierto en una tablet o laptop del local con «Activar sonido» y «Mantener pantalla encendida»; suena con cada pedido y repite el aviso cada 45 s.
+      </p>
     </section>
   );
 }

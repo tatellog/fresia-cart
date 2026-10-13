@@ -5,6 +5,7 @@ import { money } from '../lib/format';
 import { toppingSummary } from '../../shared/pricing';
 import { timeLabel } from '../../shared/schedule';
 import type { AdminOrder, PricedLine } from '../../shared/types';
+import { verified, type PushDevice } from './Alerts';
 
 // ── Urgencia ──────────────────────────────────────────────────────────
 
@@ -73,7 +74,7 @@ function TicketLine({ l }: { l: PricedLine }) {
  * Lo que necesita quien prepara, sin dirección ni facturación: producto, tamaño,
  * toppings (con porciones dobles), cantidades, nota y, en equipo, para quién es.
  */
-export function KitchenTicket({ order, compact }: { order: AdminOrder; compact?: boolean }) {
+export function KitchenTicket({ order, compact, dense }: { order: AdminOrder; compact?: boolean; dense?: boolean }) {
   const team = !!order.groupName;
   const byPerson = new Map<string, PricedLine[]>();
   order.items.forEach((l) => {
@@ -82,7 +83,7 @@ export function KitchenTicket({ order, compact }: { order: AdminOrder; compact?:
   });
   const pieces = order.items.reduce((s, l) => s + l.qty, 0);
   return (
-    <section className={`ticket${compact ? ' compact' : ''}`} aria-label={`Comanda ${order.number}`}>
+    <section className={`ticket${compact ? ' compact' : ''}${dense ? ' dense' : ''}`} aria-label={`Comanda ${order.number}`}>
       <header className="ticket-head">
         <span className="ticket-num">{order.number}</span>
         <span>{order.fulfillment === 'delivery' ? '🛵 A domicilio' : '🏪 Recoge'} · {pieces} pieza{pieces === 1 ? '' : 's'}</span>
@@ -183,22 +184,30 @@ export function CollectCash({ order, onDone }: { order: AdminOrder; onDone: (o: 
 // ── Avisos: que alguien del local reciba los pedidos aunque no mire el panel ──
 
 export function PushWarning() {
-  const [devices, setDevices] = useState<number | null>(null);
+  const [devices, setDevices] = useState<PushDevice[] | null>(null);
   const [configured, setConfigured] = useState(true);
   useEffect(() => {
-    api<{ configured: boolean; devices: unknown[] }>('/api/admin/push').then((r) => { setDevices(r.devices.length); setConfigured(r.configured); }, () => undefined);
+    api<{ configured: boolean; devices: PushDevice[] }>('/api/admin/push').then((r) => { setDevices(r.devices); setConfigured(r.configured); }, () => undefined);
   }, []);
-  if (devices == null || devices > 0) return null;
-  return (
-    <div className="notice error push-warning" role="alert">
-      <strong>🔕 Nadie recibe avisos de pedidos nuevos.</strong> Si no estás mirando el panel, un pedido puede pasar desapercibido.{' '}
-      {configured ? (
-        <a href="#push-title" onClick={(e) => { e.preventDefault(); document.getElementById('push-title')?.scrollIntoView({ behavior: 'smooth' }); }}>Activar avisos en este dispositivo ↓</a>
-      ) : (
-        'Faltan las llaves de notificaciones en el servidor.'
-      )}
-    </div>
-  );
+  if (!devices) return null;
+  const go = (e: React.MouseEvent) => { e.preventDefault(); document.getElementById('push-title')?.scrollIntoView({ behavior: 'smooth' }); };
+  if (devices.length === 0) {
+    return (
+      <div className="notice error push-warning" role="alert">
+        <strong>🔕 Nadie recibe avisos de pedidos nuevos.</strong> Si no estás mirando el panel, un pedido puede pasar desapercibido.{' '}
+        {configured ? <a href="#push-title" onClick={go}>Activar avisos en este dispositivo ↓</a> : 'Faltan las llaves de notificaciones en el servidor.'}
+      </div>
+    );
+  }
+  if (!devices.some(verified)) {
+    return (
+      <div className="notice warn push-warning" role="status">
+        <strong>⚠️ Falta comprobar que los avisos llegan con el panel cerrado.</strong> {devices.length} dispositivo(s) suscrito(s), ninguno verificado.{' '}
+        <a href="#push-title" onClick={go}>Hacer la prueba ↓</a>
+      </div>
+    );
+  }
+  return null;
 }
 
 // ── Repartidor: tres acciones ─────────────────────────────────────────
@@ -260,4 +269,74 @@ export function CourierPanel({ order, busy, onStart, onConfirm, children }: {
       <Link to="/admin" className="linkbtn small">← Volver a pedidos</Link>
     </section>
   );
+}
+
+// ── Efectivo al entregar: recibido (importe, quién) o pendiente (motivo) ──
+
+export type CashDecision = { mode: 'received'; received: number; by: string } | { mode: 'pending'; reason: string; by: string };
+const STAFF = 'fo.staff.name';
+const REASONS = ['El cliente paga después', 'Lo cobra recepción', 'Autorizado por encargado'];
+
+/** Pregunta obligatoria al entregar un pedido con efectivo sin registrar. No bloquea: «pendiente» es una opción válida. */
+export function CashHandoff({ order, onChange }: { order: AdminOrder; onChange: (d: CashDecision | null) => void }) {
+  const total = order.total ?? 0;
+  const said = order.cashTendered;
+  const [mode, setMode] = useState<'received' | 'pending' | null>(null);
+  const [received, setReceived] = useState<number | null>(said ?? null);
+  const [other, setOther] = useState('');
+  const [reason, setReason] = useState('');
+  const [by, setBy] = useState(() => localStorage.getItem(STAFF) ?? '');
+  const options = [...new Set([total, ...(said ? [said] : []), ...billsFor(total)])].sort((a, b) => a - b);
+
+  useEffect(() => {
+    const who = by.trim();
+    if (who.length >= 2) localStorage.setItem(STAFF, who);
+    if (who.length < 2 || !mode) return onChange(null);
+    if (mode === 'received') onChange(received != null && received >= total ? { mode, received, by: who } : null);
+    else onChange(reason.trim().length >= 3 ? { mode, reason: reason.trim(), by: who } : null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, received, reason, by]);
+
+  return (
+    <div className="cash-handoff" role="group" aria-labelledby="cash-q">
+      <p id="cash-q" className="choice-legend" style={{ margin: 0 }}>
+        <span>💵 ¿Recibiste el efectivo? · {money(total)}</span>
+        <span className={`req${mode ? ' done' : ''}`}>{mode ? '✓' : 'Obligatorio'}</span>
+      </p>
+      <div className="segmented">
+        <label className="option"><input type="radio" name="cash-mode" checked={mode === 'received'} onChange={() => setMode('received')} /><strong>✅ Sí, lo recibí</strong><span className="muted small">Registra cuánto y el cambio</span></label>
+        <label className="option"><input type="radio" name="cash-mode" checked={mode === 'pending'} onChange={() => setMode('pending')} /><strong>⏳ Queda pendiente</strong><span className="muted small">Excepción: queda destacado</span></label>
+      </div>
+      {mode === 'received' && (
+        <>
+          <div className="tabs" role="group" aria-label="¿Cuánto te dio?">
+            {options.map((v) => (
+              <button key={v} type="button" aria-pressed={received === v} onClick={() => { setReceived(v); setOther(''); }}>{v === total ? `Exacto ${money(v)}` : money(v)}</button>
+            ))}
+          </div>
+          <input className="input sm" style={{ maxWidth: 200 }} inputMode="decimal" placeholder="Otro monto" aria-label="Otro monto recibido" value={other}
+            onChange={(e) => { setOther(e.target.value); const v = Math.round(parseFloat(e.target.value.replace(/[$,\s]/g, '')) * 100); setReceived(Number.isFinite(v) ? v : null); }} />
+          {received != null && (received < total ? <p className="error-text" style={{ margin: 0 }}>Falta {money(total - received)}.</p> : <p className="change-line" style={{ margin: 0 }}>Cambio a entregar: <strong>{money(received - total)}</strong></p>)}
+        </>
+      )}
+      {mode === 'pending' && (
+        <>
+          <div className="tabs" role="group" aria-label="Motivo">
+            {REASONS.map((r) => <button key={r} type="button" aria-pressed={reason === r} onClick={() => setReason(r)}>{r}</button>)}
+          </div>
+          <input className="input sm" placeholder="Otro motivo" aria-label="Motivo del cobro pendiente" value={REASONS.includes(reason) ? '' : reason} onChange={(e) => setReason(e.target.value)} maxLength={120} />
+        </>
+      )}
+      <div className="field" style={{ maxWidth: 260 }}>
+        <label htmlFor="staff">¿Quién entrega?</label>
+        <input id="staff" className="input sm" value={by} onChange={(e) => setBy(e.target.value)} maxLength={40} placeholder="Tu nombre" autoComplete="given-name" />
+      </div>
+    </div>
+  );
+}
+
+/** Aplica la decisión de efectivo después de marcar entregado. */
+export async function applyCash(orderId: string, d: CashDecision) {
+  if (d.mode === 'received') return api<{ order: AdminOrder }>(`/api/admin/orders/${orderId}/collected`, { body: { received: d.received, by: d.by } });
+  return api<{ order: AdminOrder }>(`/api/admin/orders/${orderId}/collect-pending`, { body: { reason: d.reason, by: d.by } });
 }

@@ -224,6 +224,8 @@ export type RefundStatus = 'no_aplica' | 'pendiente' | 'reembolsado';
 
 export type PublicOrder = {
   number: string;
+  /** Hora en que se entregó (o se recogió). */
+  deliveredAt: string | null;
   createdAt: string;
   customerName: string;
   customerPhone: string;
@@ -261,6 +263,10 @@ export type AdminOrder = PublicOrder & {
   /** Efectivo: lo que dio el cliente y el cambio que se le entregó. */
   cashReceived: number | null;
   changeGiven: number | null;
+  /** Quién recibió el efectivo. */
+  collectedBy: string | null;
+  /** Se entregó sin registrar el cobro (con el motivo); destacado hasta conciliarlo. */
+  collectPending: { at: string; reason: string } | null;
   urgency: import('./urgency').Urgency;
   /** QR / edificio que trajo al cliente. */
   source: string | null;
