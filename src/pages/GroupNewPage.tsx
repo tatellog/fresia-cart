@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
 import { rememberGroupAdmin, setActiveGroup } from '../lib/groupState';
 import { Field, Spinner, TopBar } from '../components/ui';
+import { track } from '../lib/analytics';
 
 const LIMITS: { label: string; minutes: number | null }[] = [
   { label: 'Sin límite', minutes: null },
@@ -26,6 +27,7 @@ export default function GroupNewPage() {
     try {
       const g = await api<{ code: string; adminToken: string }>('/api/groups', { body: { name: name.trim(), organizerName: organizer.trim(), closesInMinutes: minutes } });
       rememberGroupAdmin(g.code, g.adminToken);
+      track('crear_equipo', { mode: 'equipo' });
       setActiveGroup({ code: g.code, name: name.trim(), memberName: organizer.trim() });
       navigate(`/equipo/${g.code}?nuevo=1`, { replace: true });
     } catch (e) {

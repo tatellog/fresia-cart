@@ -6,10 +6,11 @@ import { useMenu } from '../lib/menu';
 import { idempotencyKeyFor, readCheckoutForm, rememberOrder, resetIdempotencyKey, useCheckoutForm } from '../lib/checkout';
 import { api, ApiError } from '../lib/api';
 import { money } from '../lib/format';
-import { DemoBanner, LoadError, Spinner, StickyAction, TopBar } from '../components/ui';
+import { CheckoutSteps, DemoBanner, LoadError, Spinner, StickyAction, TopBar } from '../components/ui';
 import { InvoiceFields, emptyInvoice } from '../components/InvoiceFields';
 import { WhenPicker } from '../components/WhenPicker';
 import { currentSource } from '../lib/source';
+import { attribution } from '../lib/analytics';
 import { groupCheckout, setActiveGroup, setGroupCheckout } from '../lib/groupState';
 import { load as loadStored, save } from '../lib/storage';
 import { invoiceErrors } from '../../shared/invoice';
@@ -112,6 +113,7 @@ export default function SummaryPage() {
     }
     const body = {
       source: currentSource(),
+      attribution: attribution(),
       invoice: wantInvoice ? invoice : null,
       gift: isGift ? { to: gift.to.trim(), note: gift.note.trim(), anonymous: gift.anonymous } : null,
       scheduledFor,
@@ -162,7 +164,8 @@ export default function SummaryPage() {
     <>
       <DemoBanner />
       <main className="page stack-lg">
-        <TopBar back="/entrega" step="Resumen" />
+        <TopBar back="/entrega" />
+        <CheckoutSteps current="pago" />
         <h1>Revisa tu pedido</h1>
 
         {loadError && <LoadError message={loadError} retry={load} />}

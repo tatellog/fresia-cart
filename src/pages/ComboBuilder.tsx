@@ -12,6 +12,7 @@ import { activeGroup, memberKey } from '../lib/groupState';
 import { api } from '../lib/api';
 import { GroupModeBanner } from '../components/ui';
 import type { ComboChoiceInput, Product } from '../../shared/types';
+import { track, trackGroupJoin } from '../lib/analytics';
 
 type Pick = ComboChoiceInput & { key: string };
 
@@ -68,7 +69,11 @@ export default function ComboBuilder({ product, editing }: { product: Product; e
       setAdding(true);
       setAddError(null);
       api(`/api/groups/${group.code}/items`, { body: { memberName: group.memberName, memberKey: memberKey(), line } }).then(
-        () => navigate(`/equipo/${group.code}`),
+        () => {
+          trackGroupJoin(group.code);
+          track('agregar_carrito', { mode: 'equipo', productId: product.id });
+          navigate(`/equipo/${group.code}`);
+        },
         (e: Error) => {
           setAddError(e.message);
           setAdding(false);
@@ -81,6 +86,7 @@ export default function ComboBuilder({ product, editing }: { product: Product; e
       navigate('/carrito');
     } else {
       cart.add(line);
+      track('agregar_carrito', { productId: product.id });
       navigate('/', { state: { added: product.name } });
     }
   }

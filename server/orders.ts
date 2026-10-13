@@ -3,6 +3,7 @@ import { iso, isoOrNull } from './db';
 import type { DB } from './db';
 import { HttpError, onlinePaymentReady } from './context';
 import type { Ctx } from './context';
+import { recordPurchase, type Attribution } from './analytics';
 import { getDelivery, getFeatures, getRules, getSchedule, listProducts, listToppings, nextOrderNumber } from './store';
 import { groupLinesForOrder } from './groups';
 import { CUSTOMER_CANCELABLE } from '../shared/status';
@@ -33,6 +34,9 @@ export type OrderInput = {
   scheduledFor?: string | null;
   /** Pedido de equipo: el servidor toma los productos del grupo. */
   group?: { code: string; token: string } | null;
+  /** Campaña de origen (UTM) y dispositivo, solo para medición. */
+  attribution?: Attribution | null;
+  device?: string | null;
 };
 
 export type OrderRow = {
@@ -200,9 +204,9 @@ export async function createOrder(ctx: Ctx, idempotencyKey: string, input: Order
     const row = await q.one<OrderRow>(
       `insert into office.orders (id, number, access_token, idempotency_key, request_hash, customer_name, customer_phone,
          fulfillment, address, notes, items, subtotal, shipping_fee, total, delivery_quote, payment_method, payment_status, order_status, demo, cash_tendered,
-         source, invoice, invoice_status, scheduled_for, group_name, gift)
+         source, invoice, invoice_status, scheduled_for, group_name, gift, utm_source, utm_medium, utm_campaign, device, order_mode)
        values ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11::jsonb, $12, $13, $14, $15::jsonb, $18, $19, $16, $17, $20,
-         $21, $22::jsonb, $23, $24, $25, $26::jsonb)
+         $21, $22::jsonb, $23, $24, $25, $26::jsonb, $27, $28, $29, $30, $31)
        on conflict (idempotency_key) do nothing
        returning *`,
       [
@@ -211,6 +215,8 @@ export async function createOrder(ctx: Ctx, idempotencyKey: string, input: Order
         quote.subtotal, quote.shippingFee, quote.total, JSON.stringify(quote.delivery), orderStatus,
         ctx.provider.name === 'demo', input.paymentMethod, cod ? 'por_cobrar' : 'sin_pagar', cashTendered,
         source, invoice ? JSON.stringify(invoice) : null, invoice ? 'solicitada' : 'no_aplica', input.scheduledFor ?? null, group?.name ?? null, gift ? JSON.stringify(gift) : null,
+        input.attribution?.source ?? source, input.attribution?.medium ?? null, input.attribution?.campaign ?? null, input.device ?? null,
+        group ? 'equipo' : gift ? 'regalo' : 'individual',
       ],
     );
     if (row && group) {
@@ -221,6 +227,8 @@ export async function createOrder(ctx: Ctx, idempotencyKey: string, input: Order
       if (!taken.length) throw new HttpError(409, 'Este pedido de equipo ya se envió.');
     }
     if (row) {
+      // Pagar al recibir: el pedido ya es una compra; en línea cuenta hasta que se aprueba el pago.
+      if (cod) await recordPurchase(q, id);
       await addEvent(q, id, 'creado', `${manual ? 'Requiere cotización de envío' : cod ? 'Recibido' : 'Esperando pago'} · ${cod ? 'paga al recibir' : 'pago en línea'}`, 'cliente');
     }
     return row;

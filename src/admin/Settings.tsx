@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../lib/api';
 import { formatDate } from '../lib/format';
 import { LoadError, Spinner } from '../components/ui';
+import { Conversion } from './Conversion';
 import { MoneyInput, SaveBar, Toggle, splitList } from './fields';
 import type { BusinessInfo, CourierMode, DeliveryConfig, Features, LegalDoc, Zone } from '../../shared/types';
 import { deliveryEta, etaText } from '../../shared/coverage';
@@ -416,6 +417,7 @@ export function SystemSettings() {
           </table>
         )}
       </section>
+      <Conversion />
       <QrSources />
       <FeatureFlags />
 

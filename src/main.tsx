@@ -8,8 +8,12 @@ import { CartProvider } from './lib/cart';
 import { Spinner } from './components/ui';
 import { useNewVersion } from './lib/version';
 import { captureSource } from './lib/source';
+import { captureAttribution, trackVisit } from './lib/analytics';
 
+// Antes de que captureSource limpie ?src= de la URL.
+captureAttribution();
 captureSource();
+if (!window.location.pathname.startsWith('/admin')) trackVisit();
 import MenuPage from './pages/MenuPage';
 import ProductPage from './pages/ProductPage';
 import CartPage from './pages/CartPage';

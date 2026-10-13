@@ -28,19 +28,14 @@ export default function MenuPage() {
         <section className="hero">
           <img src="/brand/fresia-logo.svg" alt="Frésia, fresas con crema" className="logo" width={132} height={196} />
           <h1>Fresas con crema para tu oficina</h1>
-          <p className="muted">Pide para todo el equipo. Sin crear cuenta.</p>
+          <p className="muted">Para ti o para todo el equipo. Sin crear cuenta.</p>
+          {!activeGroup() && <ModeChoice />}
           {data && !activeGroup() && (data.rules.minQtyPerItem > 1 || data.rules.minFresias > 1) && (
             <p className="badge min-banner">
               {data.rules.minQtyPerItem > 1 ? `Mínimo ${data.rules.minQtyPerItem} piezas por producto · combos desde 1` : `Pedido mínimo: ${data.rules.minFresias} Frésias`}
             </p>
           )}
-          {data?.delivery.deliveryEnabled && data.delivery.mode === 'radius' && (
-            <p className="small muted" style={{ margin: 0 }}>
-              Envío {money(data.delivery.radiusFee)}
-              {data.delivery.freeShippingFrom != null && <> · <strong className="ok-text">gratis desde {money(data.delivery.freeShippingFrom)}</strong></>}
-            </p>
-          )}
-          <Link to="/equipo/nuevo" className="btn secondary small">👥 Pedido de equipo</Link>
+          {data && <DeliveryTerms d={data.delivery} />}
           {data?.features?.fresigrama && data.delivery.deliveryEnabled && !activeGroup() && <GiftCta />}
           {data && !isOpenAt(new Date(), data.schedule) && (
             <p className="notice closed-banner small">
@@ -61,7 +56,7 @@ export default function MenuPage() {
           </div>
         )}
 
-        <section aria-labelledby="menu-title" className="stack-lg" style={{ marginTop: 24 }}>
+        <section id="menu" aria-labelledby="menu-title" className="stack-lg" style={{ marginTop: 24 }}>
           <h2 id="menu-title" className="sr-only">Menú</h2>
 
           {error && <LoadError message={error} retry={reload} />}
@@ -256,5 +251,45 @@ function GiftCta() {
         )}
       </span>
     </button>
+  );
+}
+
+/** Dos formas de pedir; la de equipo va primero y destacada. */
+function ModeChoice() {
+  return (
+    <div className="mode-choice">
+      <section className="mode-card team" aria-labelledby="mode-team">
+        <h2 id="mode-team">👥 Para tu equipo</h2>
+        <ol className="mode-steps">
+          <li><strong>Crea</strong> el pedido y ponle hora de cierre.</li>
+          <li><strong>Comparte</strong> el enlace: cada quien elige lo suyo.</li>
+          <li><strong>Reciban</strong> todo junto; quien organiza paga una vez.</li>
+        </ol>
+        <Link to="/equipo/nuevo" className="btn primary block">Pedir en equipo</Link>
+      </section>
+      <section className="mode-card" aria-labelledby="mode-solo">
+        <h2 id="mode-solo">🍓 Solo para ti</h2>
+        <p className="muted small">Elige del menú, agrega al carrito y paga al final.</p>
+        <a href="#menu" className="btn secondary block" onClick={(e) => { e.preventDefault(); document.getElementById('menu')?.scrollIntoView({ behavior: 'smooth' }); }}>
+          Ver el menú
+        </a>
+      </section>
+    </div>
+  );
+}
+
+/** Condiciones de entrega antes de elegir productos: a dónde llegamos, cuánto cuesta y desde cuánto es gratis. */
+function DeliveryTerms({ d }: { d: MenuResponse['delivery'] }) {
+  if (!d.deliveryEnabled) {
+    return <p className="small muted" style={{ margin: 0 }}>{d.pickupEnabled ? 'Por ahora solo para recoger en Frésia.' : 'Por ahora no recibimos pedidos en línea.'}</p>;
+  }
+  const where = d.mode === 'radius' ? (d.area ? 'Entregamos a oficinas cerca de Frésia' : `Entregamos a oficinas a menos de ${d.radiusM} m`) : 'Entregamos en nuestras zonas de cobertura';
+  return (
+    <p className="small muted" style={{ margin: 0 }}>
+      {where}
+      {d.mode === 'radius' ? <> · envío {money(d.radiusFee)}</> : ' · el envío depende de tu zona'}
+      {d.freeShippingFrom != null && <> · <strong className="ok-text">gratis desde {money(d.freeShippingFrom)}</strong></>}
+      {d.pickupEnabled && ' · o recoge sin costo'}
+    </p>
   );
 }

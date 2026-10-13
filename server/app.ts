@@ -18,6 +18,7 @@ import {
 } from './orders';
 import * as store from './store';
 import * as S from './schemas';
+import { deviceOf, funnel, purgeOldEvents, recordEvent } from './analytics';
 import { clearSession, isAdmin, passwordMatches, secretMatches, rateLimit, requireAdmin, setSession } from './auth';
 import { addGroupItem, createGroup, groupLinesForOrder, groupView, removeGroupItem } from './groups';
 import { background, sleep } from './background';
@@ -82,8 +83,9 @@ export async function createApp(config: Config, opts: { demoWebhookDelayMs?: num
     const got = String(req.headers.authorization ?? '').replace(/^Bearer\s+/i, '');
     if (!secretMatches(got, config.cronSecret)) throw new HttpError(401, 'No autorizado.');
     const purged = await purgeOldDeliveryPhotos(db);
-    console.log(`[cron] latido ok · ${purged} foto(s) de entrega borradas`);
-    res.json({ ok: true, purgedPhotos: purged });
+    const events = await purgeOldEvents(db);
+    console.log(`[cron] latido ok · ${purged} foto(s) de entrega borradas · ${events} evento(s) viejos`);
+    res.json({ ok: true, purgedPhotos: purged, purgedEvents: events });
   });
 
   // Código postal → colonias y alcaldía (catálogo de SEPOMEX) para autollenar la dirección.
@@ -109,6 +111,13 @@ export async function createApp(config: Config, opts: { demoWebhookDelayMs?: num
     }
     const gift = !!input.gift && (await store.getFeatures(db)).fresigrama;
     res.json(await quoteOrder(db, input, { gift }));
+  });
+
+  // ── Medición: eventos anónimos del embudo (sin datos personales) ──
+  app.post('/api/events', rateLimit(120, 60_000), async (req, res) => {
+    const e = S.eventSchema.parse(req.body);
+    await recordEvent(db, { ...e, device: deviceOf(req.headers['user-agent']) });
+    res.status(204).end();
   });
 
   // ── Pedido de equipo ─────────────────────────────────────────────
@@ -140,6 +149,8 @@ export async function createApp(config: Config, opts: { demoWebhookDelayMs?: num
       gift: input.gift ?? null,
       scheduledFor: input.scheduledFor ?? null,
       group: input.group ?? null,
+      attribution: input.attribution ?? null,
+      device: deviceOf(req.headers['user-agent']),
       address: input.fulfillment === 'delivery' ? input.address : null,
       notes: input.notes,
       items: input.items,
@@ -438,6 +449,13 @@ export async function createApp(config: Config, opts: { demoWebhookDelayMs?: num
     if (s.days.some((d) => d && d.close <= d.open)) throw new HttpError(400, 'La hora de cierre debe ser después de la de apertura.');
     await store.setSchedule(db, s);
     res.json({ ok: true });
+  });
+
+  // ── Conversión por campaña, dispositivo y modalidad ──
+  admin.get('/analytics', async (req, res) => {
+    const days = Math.min(365, Math.max(1, Number(req.query.days) || 30));
+    const [campana, dispositivo, modalidad] = await Promise.all([funnel(db, 'campana', days), funnel(db, 'dispositivo', days), funnel(db, 'modalidad', days)]);
+    res.json({ days, campana, dispositivo, modalidad });
   });
 
   // ── QR por edificio: escaneos, pedidos y ventas de cada uno ──

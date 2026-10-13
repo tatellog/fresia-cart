@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { isPostalCode } from '../shared/coverage';
+import { EVENTS, cleanTag } from './analytics';
 
 const text = (max: number) => z.string().trim().max(max);
 
@@ -66,10 +67,22 @@ export const giftSchema = z.object({
   anonymous: z.boolean().default(false),
 });
 
+const utmTag = z.string().trim().max(100).nullable().transform(cleanTag);
+export const attributionSchema = z.object({ source: utmTag, medium: utmTag, campaign: utmTag });
+
+export const eventSchema = z.object({
+  event: z.enum(EVENTS).exclude(['compra']),
+  visitor: z.string().regex(/^[a-zA-Z0-9-]{8,64}$/),
+  attribution: attributionSchema.nullable().default(null),
+  mode: z.enum(['individual', 'equipo', 'regalo']).nullable().default(null),
+  productId: z.string().regex(/^[a-z0-9-]{1,60}$/).nullable().default(null),
+});
+
 export const orderSchema = quoteSchema.extend({
   idempotencyKey: z.string().uuid(),
   paymentMethod: z.enum(['online', 'contra_entrega']).default('online'),
   source: z.string().regex(/^[a-z0-9-]{1,40}$/).nullable().optional(),
+  attribution: attributionSchema.nullable().optional(),
   invoice: invoiceSchema.nullable().optional(),
   gift: giftSchema.nullable().optional(),
   scheduledFor: z.string().datetime().nullable().optional(),

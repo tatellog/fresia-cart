@@ -33,7 +33,7 @@ describe('tarea diaria: latido y fotos de entrega', () => {
 
     const r = await fetch(`${t.base}/api/cron/daily`, { headers: { Authorization: 'Bearer clave-cron' } });
     expect(r.status).toBe(200);
-    expect(await r.json()).toEqual({ ok: true, purgedPhotos: 1 });
+    expect(await r.json()).toEqual({ ok: true, purgedPhotos: 1, purgedEvents: 0 });
 
     const old = await t.api('GET', `/api/orders/${orders[0].number}?t=${orders[0].token}`);
     expect(old.body.order.deliveryPhotoAt).toBeNull();
