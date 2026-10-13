@@ -7,7 +7,7 @@ import { useMenu } from '../lib/menu';
 import { money } from '../lib/format';
 import { recentOrders } from '../lib/checkout';
 import { CartBar, DemoBanner, Footer, GroupModeBanner, LoadError } from '../components/ui';
-import { activeGroup } from '../lib/groupState';
+import { activeGroup, myGroups } from '../lib/groupState';
 import { GIFT_KEY, emptyGift } from '../components/GiftFields';
 import { load as loadStored, save } from '../lib/storage';
 import { minQtyFor } from '../../shared/pricing';
@@ -46,6 +46,9 @@ export default function MenuPage() {
             <Link to={`/pedido/${active.number}?t=${active.token}`} className="btn ghost small">
               Ver mi pedido {active.number} · {ORDER_LABEL[active.status]}
             </Link>
+          )}
+          {(recentOrders().length > 0 || myGroups().length > 0) && (
+            <Link to="/mis-pedidos" className="linkbtn small">Mis pedidos · repetir uno anterior</Link>
           )}
         </section>
 

@@ -38,6 +38,8 @@ export default function GroupPage() {
   const [error, setError] = useState<string | null>(null);
   const [name, setName] = useState(() => (activeGroup()?.code === code ? activeGroup()!.memberName : ''));
   const [copied, setCopied] = useState(false);
+  const [joining, setJoining] = useState(false);
+  const [busy, setBusy] = useState(false);
   const admin = groupAdminToken(code);
   const link = `${window.location.origin}/equipo/${code}`;
 
@@ -77,7 +79,6 @@ export default function GroupPage() {
   const byMember = new Map<string, GroupView['items']>();
   g.items.forEach((i) => byMember.set(i.memberName, [...(byMember.get(i.memberName) ?? []), i]));
 
-  const [joining, setJoining] = useState(false);
   async function join() {
     if (name.trim().length < 2 || joining) return;
     setJoining(true);
@@ -91,7 +92,6 @@ export default function GroupPage() {
     }
   }
 
-  const [busy, setBusy] = useState(false);
   async function setOpen(open: boolean) {
     setBusy(true);
     await api(`/api/groups/${code}/${open ? 'reopen' : 'close'}`, { body: { adminToken: admin } }).catch((e: Error) => setError(e.message));
@@ -156,7 +156,7 @@ export default function GroupPage() {
         {!g.closed && (
           <section className="card stack">
             <h2>{params.get('nuevo') ? '¡Listo! Comparte el enlace' : 'Invita a tu equipo'}</h2>
-            <p className="muted small">Cada quien entra con su nombre, elige lo suyo y llega todo junto.{deadline ? ` Se pueden agregar productos hasta ${deadline}.` : ''}</p>
+            <p className="muted small">Cada quien entra con su nombre, elige lo suyo y llega todo junto.{deadline ? ` Se pueden agregar productos hasta ${deadline}` : ''}</p>
             <div className="row" style={{ flexWrap: 'wrap' }}>
               <a className="btn primary small" href={`https://wa.me/?text=${encodeURIComponent(shareText)}`} target="_blank" rel="noopener noreferrer">Compartir por WhatsApp</a>
               <button type="button" className="btn secondary small" onClick={share}>{copied ? 'Enlace copiado ✓' : 'Copiar enlace'}</button>
@@ -258,7 +258,7 @@ export default function GroupPage() {
 function StateNotice({ g, deadline }: { g: GroupView; deadline: string | null }) {
   switch (g.state) {
     case 'abierto':
-      return <div className="notice">🟢 Abierto · {deadline ? `se pueden agregar productos hasta ${deadline}` : 'sin hora límite: cierra cuando quien organiza haga el pedido'}.</div>;
+      return <div className="notice">🟢 Abierto · {deadline ? `se pueden agregar productos hasta ${deadline}` : 'sin hora límite: cierra cuando quien organiza haga el pedido.'}</div>;
     case 'cerrado':
       return (
         <div className="notice warn">

@@ -23,7 +23,7 @@ import { deviceOf, funnel, purgeOldEvents, recordEvent } from './analytics';
 import { clearSession, isAdmin, passwordMatches, secretMatches, rateLimit, requireAdmin, setSession } from './auth';
 import { addGroupItem, createGroup, groupLinesForOrder, groupView, joinGroup, removeGroupItem, setGroupOpen } from './groups';
 import { background, sleep } from './background';
-import { clubCardFor, stampClub } from './club';
+import { clubCardFor, syncClub } from './club';
 import { lookupPostalCode, postalCatalogLoaded } from './postal';
 import { listSubscriptions, pushConfigured, removeSubscription, saveSubscription, sendPushToAll } from './push';
 import type { LegalSlug, MenuResponse } from '../shared/types';
@@ -344,13 +344,15 @@ export async function createApp(config: Config, opts: { demoWebhookDelayMs?: num
     if (!ADMIN_FLOW.includes(status)) throw new HttpError(400, 'Estado no válido.');
     const before = await orderOr404(String(req.params.id));
     const row = await setOrderStatus(ctx, before.id, status, 'panel');
-    if (status === 'entregado' && before.order_status !== 'entregado') background(stampClub(ctx, row));
+    if (status !== before.order_status) background(syncClub(ctx, row.id));
     res.json({ order: await toAdmin(db, row) });
   });
   admin.post('/orders/:id/refund', async (req, res) => {
     const status = S.refundStatus.parse(req.body?.status);
     await orderOr404(String(req.params.id));
-    res.json({ order: await toAdmin(db, await setRefundStatus(ctx, String(req.params.id), status, 'panel')) });
+    const row = await setRefundStatus(ctx, String(req.params.id), status, 'panel');
+    background(syncClub(ctx, row.id));
+    res.json({ order: await toAdmin(db, row) });
   });
   admin.post('/orders/:id/shipping', async (req, res) => {
     const { fee, etaText } = S.shippingQuote.parse(req.body);
@@ -566,7 +568,7 @@ export async function createApp(config: Config, opts: { demoWebhookDelayMs?: num
       const when = g.closes_at ? deadlineText(new Date(g.closes_at), ctx.now()) : null;
       const title = `Pedido de equipo «${g.name}» · Frésia`;
       const description = open
-        ? `Elige tus fresas con crema y llegan todas juntas a la oficina.${when ? ` Cierra ${when}.` : ''}`
+        ? `Elige tus fresas con crema y llegan todas juntas a la oficina.${when ? ` Cierra ${when}` : ''}`
         : 'Este pedido de equipo ya cerró.';
       const esc = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
       const tags = [

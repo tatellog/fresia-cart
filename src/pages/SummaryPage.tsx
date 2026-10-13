@@ -138,7 +138,7 @@ export default function SummaryPage() {
         } else throw e;
       }
       if (isGift) setGift(emptyGift);
-      rememberOrder({ number: created.number, token: created.token, at: new Date().toISOString(), cartFingerprint: fingerprint });
+      rememberOrder({ number: created.number, token: created.token, at: new Date().toISOString(), cartFingerprint: fingerprint, groupName: group?.name ?? null });
       if (group) {
         setGroupCheckout(null);
         setActiveGroup(null);

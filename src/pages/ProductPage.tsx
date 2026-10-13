@@ -184,7 +184,7 @@ export default function ProductPage() {
         </form>
       </main>
       <StickyAction>
-        <button type="button" className="btn primary block" disabled={adding} onClick={() => void submit()} style={{ justifyContent: 'space-between' }}>
+        <button type="button" className="btn primary block" disabled={adding || !size} onClick={() => void submit()} style={{ justifyContent: 'space-between' }}>
           <span>{adding ? 'Agregando…' : size ? (editing ? 'Guardar cambios' : group ? 'Agregar al pedido del equipo' : 'Agregar al carrito') : 'Elige un tamaño'}</span>
           {size && <span className="price">{money(unit * Math.max(qty, minQty(product)))}</span>}
         </button>

@@ -15,20 +15,43 @@ async function call(ctx: Ctx, path: string, body: object): Promise<ClubCard> {
   return (await res.json()) as ClubCard;
 }
 
-/** Al entregar un pedido: suma un sello a la tarjeta con ese teléfono (el club evita duplicados). */
-export async function stampClub(ctx: Ctx, row: OrderRow) {
+/**
+ * Regla del programa: un sello por pedido ENTREGADO, para el teléfono de quien pidió y pagó
+ * (en pedidos de equipo, el organizador). Si después se cancela o se reembolsa, el sello se retira.
+ */
+export const earnsStamp = (o: Pick<OrderRow, 'order_status' | 'refund_status' | 'payment_status'>) =>
+  o.order_status === 'entregado' && o.refund_status !== 'reembolsado' && o.payment_status !== 'devuelto';
+
+/** Deja la tarjeta del cliente de acuerdo con el estado del pedido: suma o retira su sello, una sola vez. */
+export async function syncClub(ctx: Ctx, orderId: string) {
   if (!clubEnabled(ctx)) return;
+  const row = await ctx.db.one<OrderRow>('select * from office.orders where id = $1', [orderId]);
+  if (!row) return;
+  const want = earnsStamp(row);
+  if (want === row.club_stamped) return;
   try {
-    const r = await call(ctx, 'online-order', { phone: row.customer_phone, orderNumber: row.number });
-    const detail = !r.found
-      ? 'Sin tarjeta con ese teléfono'
-      : r.alreadyStamped
-        ? 'Sello ya registrado'
-        : `Sello sumado (${r.visits}/${r.goal}${r.rewardsPending ? ` · ${r.rewardsPending} recompensa(s)` : ''})`;
-    await addEvent(ctx.db, row.id, 'club', detail, 'sistema');
+    if (want) {
+      const r = await call(ctx, 'online-order', { phone: row.customer_phone, orderNumber: row.number });
+      if (r.found) await ctx.db.query('update office.orders set club_stamped = true where id = $1', [row.id]);
+      const detail = !r.found
+        ? 'Sin tarjeta con ese teléfono'
+        : r.alreadyStamped
+          ? 'Sello ya registrado'
+          : `Sello sumado (${r.visits}/${r.goal}${r.rewardsPending ? ` · ${r.rewardsPending} recompensa(s)` : ''})`;
+      await addEvent(ctx.db, row.id, 'club', detail, 'sistema');
+    } else {
+      const r = await call(ctx, 'online-order-revert', { phone: row.customer_phone, orderNumber: row.number });
+      await ctx.db.query('update office.orders set club_stamped = false where id = $1', [row.id]);
+      const detail = !r.found || r.alreadyReverted
+        ? 'Sello ya retirado'
+        : r.rewardRedeemed
+          ? 'No se retiró el sello: la recompensa ya se canjeó'
+          : `Sello retirado por cancelación o reembolso (${r.visits}/${r.goal})`;
+      await addEvent(ctx.db, row.id, 'club', detail, 'sistema');
+    }
   } catch (e) {
-    console.error('[club] no se pudo sumar el sello', e);
-    await addEvent(ctx.db, row.id, 'club', 'No se pudo sumar el sello (Frésia Club no respondió)', 'sistema').catch(() => {});
+    console.error('[club] no se pudo actualizar la tarjeta', e);
+    await addEvent(ctx.db, row.id, 'club', `No se pudo ${want ? 'sumar' : 'retirar'} el sello (Frésia Club no respondió)`, 'sistema').catch(() => {});
   }
 }
 

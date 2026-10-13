@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useCart } from '../lib/cart';
 import { useMenu } from '../lib/menu';
 import { money } from '../lib/format';
@@ -16,6 +16,7 @@ export default function CartPage() {
   const { data } = useMenu();
   const navigate = useNavigate();
   const [giftStored, setGift] = useState(() => loadStored(GIFT_KEY, emptyGift).on);
+  const repeatNotes = (useLocation().state as { repeatNotes?: string[] } | null)?.repeatNotes ?? [];
 
   if (cart.lines.length === 0) {
     return (
@@ -25,6 +26,7 @@ export default function CartPage() {
           <TopBar back="/" step="Carrito" />
           <div className="stack" style={{ textAlign: 'center', alignItems: 'center', paddingTop: 40 }}>
             <h1>Tu carrito está vacío</h1>
+            {repeatNotes.length > 0 && <div className="notice warn" role="status">{repeatNotes.join(' ')}</div>}
             <p className="muted">Elige algo rico para ti o tu equipo.</p>
             <Link to="/" className="btn primary">Ver menú</Link>
           </div>
@@ -52,6 +54,12 @@ export default function CartPage() {
       <main className="page stack-lg">
         <TopBar back="/" step="Carrito" />
         <h1>Tu pedido</h1>
+        {repeatNotes.length > 0 && (
+          <div className="notice warn" role="status">
+            <strong>Revisa tu pedido repetido:</strong>
+            <ul style={{ margin: '6px 0 0', paddingLeft: '1.2em' }}>{repeatNotes.map((n) => <li key={n}>{n}</li>)}</ul>
+          </div>
+        )}
         {!data ? (
           <Spinner label="Cargando…" />
         ) : (

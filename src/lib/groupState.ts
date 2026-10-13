@@ -23,9 +23,14 @@ export function memberKey(): string {
 
 /** Token de organizador por grupo (solo en el teléfono de quien lo creó). */
 export const groupAdminToken = (code: string) => load<Record<string, string>>(ADMIN, {})[code] ?? null;
-export function rememberGroupAdmin(code: string, token: string) {
+export function rememberGroupAdmin(code: string, token: string, name?: string) {
   save(ADMIN, { ...load<Record<string, string>>(ADMIN, {}), [code]: token });
+  if (name) save(MINE, [{ code, name, at: new Date().toISOString() }, ...myGroups().filter((g) => g.code !== code)].slice(0, 20));
 }
+
+/** Pedidos de equipo que organizaste desde este teléfono (para «Mis pedidos»). */
+const MINE = 'fo.group.mine.v1';
+export const myGroups = () => load<{ code: string; name: string; at: string }[]>(MINE, []);
 
 /** El organizador está pagando el pedido de equipo (entrega → resumen). */
 export const groupCheckout = () => load<{ code: string; token: string; name: string } | null>(CHECKOUT, null);
