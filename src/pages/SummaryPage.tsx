@@ -3,7 +3,7 @@ import type { PaymentMethod } from '../../shared/types';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { toLineInput, useCart } from '../lib/cart';
 import { useMenu } from '../lib/menu';
-import { idempotencyKeyFor, readCheckoutForm, rememberOrder, resetIdempotencyKey, useCheckoutForm } from '../lib/checkout';
+import { idempotencyKeyFor, orderPlaced, readCheckoutForm, recentOrders, rememberOrder, useCheckoutForm } from '../lib/checkout';
 import { api, ApiError } from '../lib/api';
 import { money } from '../lib/format';
 import { CheckoutSteps, DemoBanner, LoadError, Spinner, StickyAction, TopBar } from '../components/ui';
@@ -125,22 +125,47 @@ export default function SummaryPage() {
       notes: form.notes.trim(),
       items,
     };
-    const fingerprint = JSON.stringify(body);
+    const fingerprint = JSON.stringify({ ...body, expectedTotal: undefined });
+    let created: CreateRes | null = null;
     try {
-      let created: CreateRes;
-      try {
-        created = await api<CreateRes>('/api/orders', { body: { ...body, idempotencyKey: idempotencyKeyFor(fingerprint) } });
-      } catch (e) {
-        if (e instanceof ApiError && e.body.code === 'idempotency_mismatch') {
-          resetIdempotencyKey();
-          created = await api<CreateRes>('/api/orders', { body: { ...body, idempotencyKey: idempotencyKeyFor(fingerprint) } });
-        } else throw e;
+      // ¿Ya existe un pedido en línea SIN PAGAR con este mismo carrito (p. ej. volvió de Mercado Pago)?
+      // Se paga ese, no se crea otro (evita dos cobros posibles).
+      const prior = recentOrders().find((o) => o.cartFingerprint === fingerprint && Date.now() - Date.parse(o.at) < 2 * 3600_000);
+      if (prior) {
+        const r = await api<{ order: CreateRes['order'] }>(`/api/orders/${prior.number}?t=${prior.token}`).catch(() => null);
+        if (r?.order.canPay) {
+          navigate(`/pedido/${prior.number}?t=${prior.token}`);
+          return;
+        }
       }
+      try {
+        created = await api<CreateRes>('/api/orders', { body: { ...body, expectedTotal: quote?.total ?? null, idempotencyKey: idempotencyKeyFor(fingerprint) } });
+      } catch (e) {
+        // Ya existía un pedido con esta llave (respuesta perdida + cambio del lado del servidor): se abre ese, no se crea otro.
+        if (e instanceof ApiError && e.body.code === 'idempotency_mismatch' && e.body.number) {
+          orderPlaced();
+          navigate(`/pedido/${e.body.number}?t=${e.body.token}`);
+          return;
+        }
+        // El total cambió (precios, envío o alguien del equipo agregó algo): se muestra el nuevo y se pide confirmar.
+        if (e instanceof ApiError && (e.body.code === 'total_changed' || e.body.code === 'group_changed')) {
+          setError(`${e.message} ${e.body.total != null ? `Nuevo total: ${money(Number(e.body.total))}.` : ''}`.trim());
+          setBusy(false);
+          load();
+          return;
+        }
+        throw e;
+      }
+      // El pedido existe: a partir de aquí nada debe volver a crearlo.
+      orderPlaced();
       if (isGift) setGift(emptyGift);
       rememberOrder({ number: created.number, token: created.token, at: new Date().toISOString(), cartFingerprint: fingerprint, groupName: group?.name ?? null });
       if (group) {
         setGroupCheckout(null);
         setActiveGroup(null);
+      } else if (!created.order.canPay) {
+        // Pagar al recibir o envío por cotizar: el pedido ya está hecho; el carrito se vacía.
+        cart.clear();
       }
 
       if (!created.order.canPay) {
@@ -152,6 +177,11 @@ export default function SummaryPage() {
       else if (co.checkoutUrl.startsWith('/')) navigate(co.checkoutUrl);
       else window.location.assign(co.checkoutUrl);
     } catch (e) {
+      // Si el pedido ya se creó y falló el paso de pago, se va a su página (ahí se reintenta el pago sin duplicar).
+      if (created) {
+        navigate(`/pedido/${created.number}?t=${created.token}`);
+        return;
+      }
       setError(e instanceof Error ? e.message : 'Algo salió mal.');
       setBusy(false);
     }

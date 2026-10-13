@@ -75,7 +75,7 @@ describe('Frésia Club', () => {
     expect(r2.body.club).toEqual({ found: false, joinUrl: 'https://club.test' });
   });
 
-  it('al entregar se suma un sello una sola vez y queda en el historial', async () => {
+  it('al entregar y cobrar se suma un sello una sola vez y queda en el historial', async () => {
     club = await fakeClub();
     t = await start({ clubUrl: club.url, clubSecret: 'clave-club' });
     const o = await t.api('POST', '/api/orders', pickup());
@@ -85,6 +85,8 @@ describe('Frésia Club', () => {
     expect(club.calls.filter((c) => c.path.endsWith('/online-order'))).toHaveLength(0);
 
     expect((await t.api('POST', `/api/admin/orders/${id}/status`, { status: 'entregado' })).status).toBe(200);
+    // Efectivo: el sello se suma cuando se registra el cobro (entregado Y pagado).
+    await t.api('POST', `/api/admin/orders/${id}/collected`, {});
     const ev = await waitFor(async () => {
       const r = await t.api('GET', `/api/admin/orders/${id}`);
       return r.body.order.events.find((e: any) => e.type === 'club');
@@ -106,6 +108,8 @@ describe('Frésia Club', () => {
     const id = (await t.api('GET', '/api/admin/orders?filter=todos')).body.orders.find((x: any) => x.number === o.body.number).id;
     const events = async () => (await t.api('GET', `/api/admin/orders/${id}`)).body.order.events.filter((e: any) => e.type === 'club');
     await t.api('POST', `/api/admin/orders/${id}/status`, { status: 'entregado' });
+    // Efectivo: el sello se suma cuando se registra el cobro (entregado Y pagado).
+    await t.api('POST', `/api/admin/orders/${id}/collected`, {});
     await waitFor(async () => ((await events()).length === 1 ? true : undefined));
     const r = await t.api('POST', `/api/admin/orders/${id}/status`, { status: 'cancelado' });
     expect(r.status).toBe(200);
@@ -125,6 +129,8 @@ describe('Frésia Club', () => {
     await t.api('POST', '/api/admin/login', { password: 'secreto-de-prueba' });
     const id = (await t.api('GET', '/api/admin/orders?filter=todos')).body.orders.find((x: any) => x.number === o.body.number).id;
     await t.api('POST', `/api/admin/orders/${id}/status`, { status: 'entregado' });
+    // Efectivo: el sello se suma cuando se registra el cobro (entregado Y pagado).
+    await t.api('POST', `/api/admin/orders/${id}/collected`, {});
     await waitFor(async () => (club.calls.some((c) => c.path.endsWith('/online-order')) ? true : undefined));
     expect(club.calls.filter((c) => c.path.endsWith('/online-order')).map((c) => c.body)).toEqual([{ phone: '5512345678', orderNumber: o.body.number }]);
   });
@@ -135,6 +141,8 @@ describe('Frésia Club', () => {
     await t.api('POST', '/api/admin/login', { password: 'secreto-de-prueba' });
     const id = (await t.api('GET', '/api/admin/orders?filter=todos')).body.orders.find((x: any) => x.number === o.body.number).id;
     const r = await t.api('POST', `/api/admin/orders/${id}/status`, { status: 'entregado' });
+    // Efectivo: el sello se suma cuando se registra el cobro (entregado Y pagado).
+    await t.api('POST', `/api/admin/orders/${id}/collected`, {});
     expect(r.status).toBe(200);
     const ev = await waitFor(async () => {
       const a = await t.api('GET', `/api/admin/orders/${id}`);

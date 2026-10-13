@@ -132,7 +132,9 @@ export async function syncPayment(ctx: Ctx, p: ProviderPayment, source: string):
       `insert into office.payments (provider, provider_payment_id, order_id, status, status_detail, amount, currency, raw)
        values ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)
        on conflict (provider, provider_payment_id) do update set status = excluded.status, status_detail = excluded.status_detail,
-         amount = excluded.amount, raw = excluded.raw, updated_at = now()`,
+         amount = excluded.amount, raw = excluded.raw, updated_at = now()
+       -- Avisos fuera de orden: un estado viejo nunca pisa uno más avanzado (pendiente < aprobado/rechazado < devuelto).
+       where ${STAGE('excluded.status')} >= ${STAGE('office.payments.status')}`,
       [ctx.provider.name, p.id, order.id, p.status, p.statusDetail, p.amount, p.currency, JSON.stringify(p.raw)],
     );
     return recompute(q, order.id, source);
@@ -144,6 +146,11 @@ export async function syncPayment(ctx: Ctx, p: ProviderPayment, source: string):
   if (result.becamePaid) ctx.notifier.notify(ctx, 'pedido_pagado', fresh);
   if (result.newReview) ctx.notifier.notify(ctx, 'revision', fresh);
   return result.becamePaid ? 'pagado' : 'actualizado';
+}
+
+/** Etapa de un estado de pago de Mercado Pago: solo se avanza, nunca se retrocede. */
+function STAGE(col: string) {
+  return `(case when ${col} in ('refunded', 'charged_back') then 2 when ${col} in ('approved', 'rejected', 'cancelled') then 1 else 0 end)`;
 }
 
 async function recompute(db: DB, orderId: string, source: string) {
@@ -162,7 +169,8 @@ async function recompute(db: DB, orderId: string, source: string) {
   else if (payments[0]?.status === 'cancelled') status = 'cancelado';
 
   const reviews: string[] = [];
-  if (approved.length > 1) reviews.push(`Hay ${approved.length} pagos aprobados: reembolsa el excedente.`);
+  const doubleCharge = approved.length > 1;
+  if (doubleCharge) reviews.push(`Hay ${approved.length} pagos aprobados: reembolsa el excedente.`);
   if (approved.length && (approved[0].amount !== order.total || approved[0].currency !== 'MXN')) reviews.push('El monto pagado no coincide con el total del pedido.');
 
   const becamePaid = status === 'aprobado' && order.payment_status !== 'aprobado';
@@ -174,8 +182,11 @@ async function recompute(db: DB, orderId: string, source: string) {
     refund = 'pendiente';
   }
   if (status === 'devuelto') refund = 'reembolsado';
+  // Cobro doble: queda como reembolso pendiente para que no se olvide.
+  if (doubleCharge && refund === 'no_aplica') refund = 'pendiente';
 
-  const review = reviews.length ? reviews.join(' ') : null;
+  // Una revisión no se borra sola: solo la quita alguien del panel («Marcar como revisado»).
+  const review = reviews.length ? reviews.join(' ') : order.needs_review;
   const newReview = review != null && review !== order.needs_review;
   if (status !== order.payment_status || orderStatus !== order.order_status || refund !== order.refund_status || review !== order.needs_review) {
     await db.query(

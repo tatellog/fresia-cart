@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { api } from '../lib/api';
+import { ApiError, api } from '../lib/api';
 import { formatDate, money } from '../lib/format';
 import { LoadError, Spinner } from '../components/ui';
 import { ORDER_LABEL } from '../../shared/status';
@@ -69,6 +69,13 @@ export default function Orders() {
       }
       document.title = s.sinVer ? `(${s.sinVer}) Sin ver · Frésia` : 'Panel · Frésia Office';
     } catch (e) {
+      // Sesión vencida: el panel dejaría de recibir pedidos en silencio. Se avisa fuerte.
+      if (e instanceof ApiError && e.status === 401) {
+        setError('SESSION');
+        document.title = '⚠️ Sesión cerrada · Frésia';
+        chime();
+        return;
+      }
       setError((e as Error).message);
     }
   }, [filter]);
@@ -139,7 +146,12 @@ export default function Orders() {
           </button>
         ))}
       </div>
-      {error && <LoadError message={error} retry={load} />}
+      {error === 'SESSION' ? (
+        <div className="notice error" role="alert">
+          <strong>⚠️ Se cerró la sesión del panel.</strong> Aquí ya no están llegando pedidos nuevos.{' '}
+          <a href="/admin" onClick={() => window.location.reload()}>Volver a entrar</a>
+        </div>
+      ) : error && <LoadError message={error} retry={load} />}
       {!orders && !error && <Spinner label="Cargando pedidos…" />}
       {orders && orders.length === 0 && <p className="muted">No hay pedidos aquí.</p>}
       <div className="stack">

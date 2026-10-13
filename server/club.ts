@@ -20,7 +20,8 @@ async function call(ctx: Ctx, path: string, body: object): Promise<ClubCard> {
  * (en pedidos de equipo, el organizador). Si después se cancela o se reembolsa, el sello se retira.
  */
 export const earnsStamp = (o: Pick<OrderRow, 'order_status' | 'refund_status' | 'payment_status'>) =>
-  o.order_status === 'entregado' && o.refund_status !== 'reembolsado' && o.payment_status !== 'devuelto';
+  // Entregado Y pagado: un pedido en efectivo suma su sello cuando se registra el cobro.
+  o.order_status === 'entregado' && o.payment_status === 'aprobado' && o.refund_status !== 'reembolsado';
 
 /** Deja la tarjeta del cliente de acuerdo con el estado del pedido: suma o retira su sello, una sola vez. */
 export async function syncClub(ctx: Ctx, orderId: string) {

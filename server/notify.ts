@@ -31,6 +31,7 @@ export class Notifier {
 
   notify(ctx: Ctx, kind: NotifyKind, order: OrderRow) {
     this.sent.push({ kind, number: order.number });
+    if (this.sent.length > 500) this.sent.splice(0, this.sent.length - 500);
     console.log(`[aviso] ${TITLES[kind]}: ${order.number}`);
     background(this.deliverAll(ctx, kind, order));
   }
@@ -66,9 +67,11 @@ export class Notifier {
         needsReview: order.needsReview,
       },
     };
+    // 3 intentos de 5 s con espera 1 s y 2 s (≈ 18 s): termina antes del límite de 30 s de la función.
     for (let i = 0; i < 3; i++) {
+      if (i > 0) await new Promise((r) => setTimeout(r, 1000 * i));
       try {
-        const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload), signal: AbortSignal.timeout(8000) });
+        const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload), signal: AbortSignal.timeout(5000) });
         if (res.ok) {
           await addEvent(ctx.db, order.id, 'aviso', `Webhook enviado (${kind})`, 'sistema').catch(() => undefined);
           return;
@@ -76,7 +79,6 @@ export class Notifier {
       } catch {
         /* reintenta */
       }
-      await new Promise((r) => setTimeout(r, 1000 * 2 ** i));
     }
     await addEvent(ctx.db, order.id, 'aviso', `Webhook falló (${kind})`, 'sistema').catch(() => undefined);
   }

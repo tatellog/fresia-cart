@@ -19,6 +19,7 @@ import {
 import * as store from './store';
 import * as S from './schemas';
 import { deadlineText } from '../shared/schedule';
+import { maybeSweep, sweep } from './sweep';
 import { urgencySort } from '../shared/urgency';
 import { deviceOf, funnel, purgeOldEvents, recordEvent } from './analytics';
 import { clearSession, isAdmin, passwordMatches, secretMatches, rateLimit, requireAdmin, setSession } from './auth';
@@ -63,6 +64,7 @@ export async function createApp(config: Config, opts: { demoWebhookDelayMs?: num
   app.get('/api/health', (_req, res) => res.json({ ok: true, payments: provider.name }));
 
   app.get('/api/menu', async (_req, res) => {
+    maybeSweep(ctx, background);
     const [delivery, products, toppings, business, rules, schedule, features, popular] = await Promise.all([
       store.getDelivery(db), store.listProducts(db), store.listToppings(db), store.getBusiness(db), store.getRules(db), store.getSchedule(db), store.getFeatures(db),
       store.getPopular(db).catch(() => ({})),
@@ -88,8 +90,16 @@ export async function createApp(config: Config, opts: { demoWebhookDelayMs?: num
     if (!secretMatches(got, config.cronSecret)) throw new HttpError(401, 'No autorizado.');
     const purged = await purgeOldDeliveryPhotos(db);
     const events = await purgeOldEvents(db);
-    console.log(`[cron] latido ok · ${purged} foto(s) de entrega borradas · ${events} evento(s) viejos`);
+    const swept = await sweep(ctx);
+    console.log(`[cron] latido ok · ${purged} foto(s) de entrega borradas · ${events} evento(s) viejos · barrido ${JSON.stringify(swept)}`);
     res.json({ ok: true, purgedPhotos: purged, purgedEvents: events });
+  });
+
+  // Barrido de recuperación para un ping externo cada 1–5 min (p. ej. cron-job.org) con «Authorization: Bearer CRON_SECRET».
+  app.get('/api/cron/sweep', async (req, res) => {
+    const got = String(req.headers.authorization ?? '').replace(/^Bearer\s+/i, '');
+    if (!secretMatches(got, config.cronSecret)) throw new HttpError(401, 'No autorizado.');
+    res.json({ ok: true, ...(await sweep(ctx)) });
   });
 
   // Código postal → colonias y alcaldía (catálogo de SEPOMEX) para autollenar la dirección.
@@ -173,6 +183,7 @@ export async function createApp(config: Config, opts: { demoWebhookDelayMs?: num
       scheduledFor: input.scheduledFor ?? null,
       group: input.group ?? null,
       attribution: input.attribution ?? null,
+      expectedTotal: input.expectedTotal,
       device: deviceOf(req.headers['user-agent']),
       address: input.fulfillment === 'delivery' ? input.address : null,
       notes: input.notes,
@@ -247,7 +258,7 @@ export async function createApp(config: Config, opts: { demoWebhookDelayMs?: num
   });
 
   // ── Notificaciones de Mercado Pago ─────────────────────────────────
-  app.post('/api/webhooks/mercadopago', async (req, res) => {
+  app.post('/api/webhooks/mercadopago', rateLimit(300, 60_000), async (req, res) => {
     const type = String(req.query.type ?? req.body?.type ?? req.query.topic ?? '');
     const dataId = String(req.query['data.id'] ?? req.body?.data?.id ?? req.query.id ?? '');
     let verified = false;
@@ -332,6 +343,7 @@ export async function createApp(config: Config, opts: { demoWebhookDelayMs?: num
     res.json({ orders: filter === 'activos' ? urgencySort(orders) : orders });
   });
   admin.get('/summary', async (_req, res) => {
+    maybeSweep(ctx, background);
     // Cancelaciones del cliente de los últimos 30 min: el panel las anuncia una vez.
     const canceled = await db.query<{ id: string; number: string; at: Date }>(
       `select o.id, o.number, e.at from office.order_events e join office.orders o on o.id = e.order_id
@@ -399,7 +411,9 @@ export async function createApp(config: Config, opts: { demoWebhookDelayMs?: num
   admin.post('/orders/:id/collected', async (req, res) => {
     await orderOr404(String(req.params.id));
     const { received, by } = S.collectedSchema.parse(req.body ?? {});
-    res.json({ order: await toAdmin(db, await markCollected(ctx, String(req.params.id), 'panel', received, by), ctx.now()) });
+    const row = await markCollected(ctx, String(req.params.id), 'panel', received, by);
+    background(syncClub(ctx, row.id));
+    res.json({ order: await toAdmin(db, row, ctx.now()) });
   });
   admin.post('/orders/:id/collect-pending', async (req, res) => {
     await orderOr404(String(req.params.id));

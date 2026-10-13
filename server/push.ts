@@ -49,7 +49,7 @@ export async function sendPushToAll(cfg: Config, db: DB, payload: PushPayload): 
   await Promise.all(
     subs.map(async (s) => {
       try {
-        await webpush.sendNotification({ endpoint: s.endpoint, keys: s.keys }, JSON.stringify(payload), { TTL: 60 * 60, urgency: 'high', topic: payload.tag.slice(0, 32) });
+        await webpush.sendNotification({ endpoint: s.endpoint, keys: s.keys }, JSON.stringify(payload), { TTL: 60 * 60, urgency: 'high', topic: payload.tag.slice(0, 32), timeout: 8000 });
         sent++;
         await db.query('update office.push_subscriptions set last_success_at = now(), failures = 0 where endpoint = $1', [s.endpoint]);
       } catch (e) {
