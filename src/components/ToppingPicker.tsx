@@ -38,7 +38,7 @@ export function ToppingPicker({
   const group = (title: string, items: Topping[]) =>
     items.length > 0 && (
       <div className="options">
-        <p className="muted small" style={{ marginTop: 4 }}>{title}</p>
+        {title && <p className="muted small" style={{ marginTop: 4 }}>{title}</p>}
         {items.map((t) => {
           const on = chosen.includes(t.id);
           return (
@@ -58,15 +58,18 @@ export function ToppingPicker({
 
   return (
     <fieldset className="stack" style={{ gap: 8 }}>
-      <legend className="label">
-        Toppings{' '}
-        <span className="muted small">
+      <legend className="choice-legend">
+        <span>Toppings</span>
+        <span className={`req${product.includedToppings > 0 && includedLeft === 0 ? ' done' : ''}`}>
           {product.includedToppings > 0
-            ? `· ${product.includedToppings} incluido${product.includedToppings > 1 ? 's' : ''}${includedLeft < product.includedToppings ? ` (te ${includedLeft === 1 ? 'queda 1' : `quedan ${includedLeft}`})` : ''}, adicionales ${money(rules.extraToppingPrice)}`
-            : '(opcional)'}
+            ? includedLeft === 0
+              ? '✓ Incluidos elegidos'
+              : `${includedLeft} incluido${includedLeft > 1 ? 's' : ''} por elegir`
+            : 'Opcional'}
         </span>
       </legend>
-      {group('Toppings', regular)}
+      {product.includedToppings > 0 && <p className="muted small" style={{ margin: '-6px 0 0' }}>Adicionales {money(rules.extraToppingPrice)} c/u.</p>}
+      {group(premium.length ? 'Clásicos' : '', regular)}
       {group('Premium · no gastan tus incluidos', premium)}
     </fieldset>
   );

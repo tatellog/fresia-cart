@@ -1,10 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useCart } from '../lib/cart';
+import { CartIcon, Wordmark } from './ui';
 
 /** Encabezado de la tienda: marca a la izquierda; carrito y menú a la derecha. */
 export function SiteHeader() {
-  const { count } = useCart();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -23,15 +22,9 @@ export function SiteHeader() {
   return (
     <header className="site-header">
       <div className="inner">
-        <Link to="/" className="wordmark" aria-label="Frésia, inicio">Frésia</Link>
+        <Link to="/" className="wordmark" aria-label="Frésia, inicio"><Wordmark height={30} /></Link>
         <div className="actions" ref={ref}>
-          <Link to="/carrito" className="icon-btn" aria-label={count ? `Carrito, ${count} producto${count === 1 ? '' : 's'}` : 'Carrito'}>
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <path d="M6 8h12l-1 12H7L6 8Z" />
-              <path d="M9 8V6a3 3 0 0 1 6 0v2" />
-            </svg>
-            {count > 0 && <span className="dot-count" aria-hidden="true">{count}</span>}
-          </Link>
+          <CartIcon />
           <button type="button" className="icon-btn" aria-label="Menú" aria-expanded={open} aria-controls="site-menu" onClick={() => setOpen((o) => !o)}>
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
               <path d="M5 9h14M9 15h10" />

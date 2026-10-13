@@ -110,7 +110,7 @@ export default function ComboBuilder({ product, editing }: { product: Product; e
     <>
       <DemoBanner />
       <main className="page">
-        <TopBar back={editing ? '/carrito' : '/'} />
+        <TopBar back={editing ? '/carrito' : '/'} cart={!group} />
         <GroupModeBanner />
         {product.image && (
           <div className="product-hero">
