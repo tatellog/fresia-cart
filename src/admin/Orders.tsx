@@ -162,8 +162,8 @@ function OrderRow({ o, onChanged }: { o: AdminOrder; onChanged: () => void }) {
     if (!next) return;
     // El cobro se registra en el pedido (cuánto dio y el cambio); nunca junto con la entrega.
     if (next.kind === 'collect') return navigate(`/admin/pedidos/${o.id}?cobrar=1`);
-    // A domicilio, «Confirmar entrega» necesita la foto: abre el pedido en ese paso.
-    if (next.status === 'entregado' && o.fulfillment === 'delivery') return navigate(`/admin/pedidos/${o.id}?entregar=1`);
+    // Entregar abre el último paso en el pedido: foto (a domicilio) y, con efectivo pendiente, el cobro.
+    if (next.status === 'entregado' && (o.fulfillment === 'delivery' || (o.paymentMethod === 'contra_entrega' && o.paymentStatus !== 'aprobado'))) return navigate(`/admin/pedidos/${o.id}?entregar=1`);
     setBusy(true);
     setErr(null);
     try {
@@ -177,12 +177,13 @@ function OrderRow({ o, onChanged }: { o: AdminOrder; onChanged: () => void }) {
     setBusy(false);
   }
   return (
-    <div className={`order-card ${o.orderStatus === 'recibido' && !o.seenAt ? 'new' : ''} ${o.urgency?.level === 'late' ? 'late' : ''}`}>
+    <div className={`order-card ${o.orderStatus === 'recibido' && !o.seenAt ? 'new' : ''} ${o.urgency?.level === 'late' ? 'late' : ''} ${o.collectPending && o.paymentStatus !== 'aprobado' ? 'cash-pending' : ''}`}>
       <Link to={`/admin/pedidos/${o.id}`} className="order-row">
         <div className="row" style={{ flexWrap: 'wrap', gap: 8 }}>
           <strong>{o.number}</strong>
           <span className={`badge ${o.orderStatus === 'recibido' ? 'red' : ''}`}>{ORDER_LABEL[o.orderStatus]}</span>
           <ReceptionBadge order={o} />
+          {o.collectPending && o.paymentStatus !== 'aprobado' && <span className="badge warn">⏳ Cobro pendiente: {o.collectPending.reason}</span>}
           {o.needsReview && <span className="badge example">Revisar</span>}
           {o.refundStatus === 'pendiente' && <span className="badge example">Reembolso pendiente</span>}
           {o.demo && o.paymentMethod === 'online' && <span className="badge">Demo</span>}

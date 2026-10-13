@@ -75,6 +75,9 @@ export type OrderRow = {
   seen_at: Date | string | null;
   cash_received: number | null;
   change_given: number | null;
+  collected_by: string | null;
+  collect_pending_at: Date | string | null;
+  collect_pending_reason: string | null;
   demo: boolean;
   paid_at: Date | string | null;
   last_reconcile_at: Date | string | null;
@@ -318,6 +321,8 @@ export async function toAdmin(db: DB, row: OrderRow, now = new Date()): Promise<
     seenAt: isoOrNull(row.seen_at),
     cashReceived: row.cash_received ?? null,
     changeGiven: row.change_given ?? null,
+    collectedBy: row.collected_by ?? null,
+    collectPending: row.collect_pending_at ? { at: iso(row.collect_pending_at), reason: row.collect_pending_reason ?? '' } : null,
     urgency: urgencyOf({ ...pub, paidAt: isoOrNull(row.paid_at) }, cfg, now),
     id: row.id,
     source: row.source ?? null,
@@ -425,7 +430,7 @@ export async function setShippingQuote(ctx: Ctx, id: string, fee: number, etaTex
  * Registrar el cobro de un pedido para pagar al recibir. Es un paso aparte de la entrega:
  * entregar NO marca pagado. Con efectivo se guarda lo que dio el cliente y el cambio.
  */
-export async function markCollected(ctx: Ctx, id: string, actor: string, received?: number | null): Promise<OrderRow> {
+export async function markCollected(ctx: Ctx, id: string, actor: string, received?: number | null, by?: string | null): Promise<OrderRow> {
   return ctx.db.tx(async (q) => {
     const row = await q.one<OrderRow>('select * from office.orders where id = $1 for update', [id]);
     if (!row) throw new HttpError(404, 'Pedido no encontrado.');
@@ -436,15 +441,35 @@ export async function markCollected(ctx: Ctx, id: string, actor: string, receive
     const got = received ?? total;
     if (got < total) throw new HttpError(422, `Recibiste menos del total (${fmt(got)} de ${fmt(total)}).`);
     const change = got - total;
-    await addEvent(q, id, 'pago', `Cobrado ${fmt(total)} · recibió ${fmt(got)}${change ? ` · cambio ${fmt(change)}` : ' · exacto'}`, actor);
+    const who = by?.trim() || null;
+    await addEvent(q, id, 'pago', `Cobrado ${fmt(total)} · recibió ${fmt(got)}${change ? ` · cambio ${fmt(change)}` : ' · exacto'}${who ? ` · por ${who}` : ''}`, actor);
+    // Cobrar concilia cualquier cobro que hubiera quedado pendiente.
     return (await q.one<OrderRow>(
-      "update office.orders set payment_status = 'aprobado', paid_at = now(), cash_received = $2, change_given = $3, updated_at = now() where id = $1 returning *",
-      [id, got, change],
+      `update office.orders set payment_status = 'aprobado', paid_at = now(), cash_received = $2, change_given = $3, collected_by = $4,
+         collect_pending_at = null, collect_pending_reason = null, updated_at = now() where id = $1 returning *`,
+      [id, got, change, who],
     ))!;
   });
 }
 
 const fmt = (c: number) => `$${(c / 100).toLocaleString('es-MX', { maximumFractionDigits: 2 })}`;
+
+/**
+ * Entregado sin registrar el dinero (excepción autorizada: p. ej. lo cobra recepción después).
+ * No bloquea la entrega; el pedido queda destacado hasta que se registre el cobro.
+ */
+export async function markCollectPending(ctx: Ctx, id: string, reason: string, by: string, actor: string): Promise<OrderRow> {
+  return ctx.db.tx(async (q) => {
+    const row = await q.one<OrderRow>('select * from office.orders where id = $1 for update', [id]);
+    if (!row) throw new HttpError(404, 'Pedido no encontrado.');
+    if (row.payment_method !== 'contra_entrega' || row.payment_status === 'aprobado') return row;
+    await addEvent(q, id, 'pago', `Cobro pendiente al entregar: ${reason} · ${by}`, actor);
+    return (await q.one<OrderRow>(
+      'update office.orders set collect_pending_at = now(), collect_pending_reason = $2, updated_at = now() where id = $1 returning *',
+      [id, `${reason} (${by})`],
+    ))!;
+  });
+}
 
 /** Alguien del local abrió el pedido: «visto» (no es lo mismo que empezar a prepararlo). */
 export async function markSeen(ctx: Ctx, id: string, actor: string): Promise<void> {

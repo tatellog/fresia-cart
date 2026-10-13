@@ -9,7 +9,7 @@ import { LineDetails } from '../pages/parts';
 import { CollectBox } from './Collect';
 import { StatusFlow } from './StatusFlow';
 import { CourierShare } from './CourierShare';
-import { CollectCash, CourierPanel, KitchenTicket } from './Ops';
+import { CashHandoff, CollectCash, CourierPanel, KitchenTicket, applyCash, type CashDecision } from './Ops';
 import { DeliveryProof } from './DeliveryProof';
 import { GiftNotice } from './GiftCard';
 import { slotLabel } from '../../shared/schedule';
@@ -66,20 +66,30 @@ export default function OrderDetail() {
     return ok;
   }
 
-  async function setStatus(status: OrderStatus, photoConfirmed = false) {
-    // A domicilio: antes de confirmar la entrega hay que tomar la foto.
-    if (status === 'entregado' && order!.fulfillment === 'delivery' && !photoConfirmed) {
+  const cashPending = (o: AdminOrder) => o.paymentMethod === 'contra_entrega' && o.paymentStatus !== 'aprobado';
+
+  async function setStatus(status: OrderStatus, confirmed = false, cash: CashDecision | null = null) {
+    // Entregar abre el último paso: foto (a domicilio) y, si hay efectivo pendiente, el cobro.
+    if (status === 'entregado' && !confirmed && (order!.fulfillment === 'delivery' || cashPending(order!))) {
       setDelivering(true);
       return;
     }
     if (status === 'en_camino') setShareNow(true);
     if (!(await act(`orders/${order!.id}/status`, { status }))) return;
-    setDelivering(false);
-    // Entregado y ya pagado: de vuelta a la lista. Si falta cobrar, se queda aquí con el cobro abierto.
-    if (status === 'entregado') {
-      if (order!.paymentMethod === 'contra_entrega' && order!.paymentStatus !== 'aprobado') setCollecting(true);
-      else navigate('/admin', { state: { completed: { number: order!.number, collected: null } } });
+    if (status === 'entregado' && cash) {
+      try {
+        const r = await applyCash(order!.id, cash);
+        setOrder(r.order);
+      } catch (e) {
+        // La entrega ya quedó; el cobro se puede registrar después desde el pedido.
+        setActionError(`Entregado, pero no se guardó el cobro: ${(e as Error).message}`);
+        setDelivering(false);
+        setCollecting(true);
+        return;
+      }
     }
+    setDelivering(false);
+    if (status === 'entregado') navigate('/admin', { state: { completed: { number: order!.number, collected: cash?.mode === 'received' ? order!.total : null } } });
   }
 
   // Desde la lista («Confirmar entrega») o un enlace ?entregar=1: abre directo el paso de la foto.
@@ -87,6 +97,7 @@ export default function OrderDetail() {
     if (!order || !askedDeliver.current) return;
     askedDeliver.current = false;
     if (order.orderStatus === 'en_camino' || order.orderStatus === 'listo') setDelivering(true);
+    if (order.orderStatus === 'entregado' && cashPending(order)) setCollecting(true);
   }, [order]);
 
   if (error) return <LoadError message={error} retry={load} />;
@@ -136,7 +147,7 @@ export default function OrderDetail() {
             onSet={(st) => setStatus(st)}
             onCollect={() => setCollecting(true)}
             // A domicilio, salir y entregar se hacen desde el panel de entrega (abajo).
-            hideNext={order.fulfillment === 'delivery' && ['en_preparacion', 'listo', 'en_camino'].includes(order.orderStatus)}
+            hideNext={delivering || (order.fulfillment === 'delivery' && ['en_preparacion', 'listo', 'en_camino'].includes(order.orderStatus))}
           />
         )}
         {order.orderStatus === 'cancelado' && (
@@ -185,6 +196,12 @@ export default function OrderDetail() {
         )}
       </section>
 
+      {order.collectPending && !paid && (
+        <div className="notice warn" role="alert">
+          ⏳ <strong>Cobro pendiente desde {new Date(order.collectPending.at).toLocaleTimeString('es-MX', { hour: 'numeric', minute: '2-digit' })}:</strong> {order.collectPending.reason}.{' '}
+          <button className="linkbtn" onClick={() => setCollecting(true)}>Registrar cobro</button>
+        </div>
+      )}
       {cod && !paid && collecting && order.orderStatus !== 'cancelado' && order.orderStatus !== 'cotizando_envio' && (
         <CollectCash order={order} onDone={(o) => { setOrder(o); setCollecting(false); if (o.orderStatus === 'entregado') navigate('/admin', { state: { completed: { number: o.number, collected: o.total } } }); }} />
       )}
@@ -195,8 +212,11 @@ export default function OrderDetail() {
         </CourierPanel>
       )}
 
-      {delivering && order.orderStatus !== 'entregado' && (
-        <DeliveryProof order={order} busy={busy} onCancel={() => setDelivering(false)} onConfirm={() => setStatus('entregado', true)} />
+      {delivering && order.orderStatus !== 'entregado' && order.fulfillment === 'delivery' && (
+        <DeliveryProof order={order} busy={busy} onCancel={() => setDelivering(false)} onConfirm={(cash) => setStatus('entregado', true, cash)} />
+      )}
+      {delivering && order.orderStatus !== 'entregado' && order.fulfillment === 'pickup' && (
+        <PickupHandoff order={order} busy={busy} onCancel={() => setDelivering(false)} onConfirm={(cash) => setStatus('entregado', true, cash)} />
       )}
 
       {order.deliveryPhotoAt && order.orderStatus === 'entregado' && (
@@ -357,7 +377,7 @@ function CompletedBox({ order }: { order: AdminOrder }) {
         {order.fulfillment === 'delivery' ? 'Entregado' : 'Recogido'}
         {time && ` a las ${time}`}
         {order.total != null && (paid ? ` · ${order.paymentMethod === 'online' ? 'Pagado en línea' : 'Cobrado'} ${money(order.total)}` : ` · ⚠️ Falta registrar el cobro de ${money(order.total)}`)}
-        {paid && order.cashReceived != null && ` · recibió ${money(order.cashReceived)}${order.changeGiven ? `, cambio ${money(order.changeGiven)}` : ' (exacto)'}`}
+        {paid && order.cashReceived != null && ` · recibió ${money(order.cashReceived)}${order.changeGiven ? `, cambio ${money(order.changeGiven)}` : ' (exacto)'}${order.collectedBy ? ` · ${order.collectedBy}` : ''}${order.paidAt ? ` · ${new Date(order.paidAt).toLocaleTimeString('es-MX', { hour: 'numeric', minute: '2-digit' })}` : ''}`}
       </span>
     </div>
   );
@@ -391,3 +411,21 @@ function InvoiceCard({ order, busy, onEmitted }: { order: AdminOrder; busy: bool
     </section>
   );
 }
+
+/** Recoger en Frésia con efectivo pendiente: al entregar se indica si se cobró o queda pendiente. */
+function PickupHandoff({ order, busy, onConfirm, onCancel }: { order: AdminOrder; busy: boolean; onConfirm: (cash: CashDecision | null) => void; onCancel: () => void }) {
+  const needsCash = order.paymentMethod === 'contra_entrega' && order.paymentStatus !== 'aprobado';
+  const [cash, setCash] = useState<CashDecision | null>(null);
+  return (
+    <section className="card stack" aria-labelledby="handoff-title">
+      <h2 id="handoff-title">🛍️ Entregar al cliente</h2>
+      {needsCash && <CashHandoff order={order} onChange={setCash} />}
+      <button type="button" className="btn primary block big-action" disabled={busy || (needsCash && !cash)} onClick={() => onConfirm(cash)}>
+        <span className="big-action-hint">{needsCash && !cash ? 'Falta indicar el cobro' : 'Último paso'}</span>
+        <span>✅ Entregado al cliente</span>
+      </button>
+      <button type="button" className="linkbtn" onClick={onCancel}>Todavía no</button>
+    </section>
+  );
+}
+

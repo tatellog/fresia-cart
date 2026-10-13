@@ -20,9 +20,29 @@ self.addEventListener('push', (event) => {
       icon: '/brand/icon-192.png',
       badge: '/brand/icon-192.png',
       data: { url: data.url },
-    }),
+    }).then(() => ack()),
   );
 });
+
+/**
+ * Acuse: avisa al servidor que el aviso SÍ se mostró en este dispositivo, y si el panel
+ * estaba cerrado o en segundo plano. Así se puede comprobar que los avisos llegan de verdad.
+ */
+async function ack() {
+  try {
+    const sub = await self.registration.pushManager.getSubscription();
+    if (!sub) return;
+    const wins = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    const visible = wins.some((w) => w.visibilityState === 'visible' && w.url.startsWith(self.location.origin + '/admin'));
+    await fetch('/api/push/ack', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ endpoint: sub.endpoint, background: !visible }),
+    });
+  } catch (_) {
+    /* sin red: el aviso ya se mostró igual */
+  }
+}
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
