@@ -35,6 +35,8 @@ export type OrderInput = {
   scheduledFor?: string | null;
   /** Pedido de equipo: el servidor toma los productos del grupo. */
   group?: { code: string; token: string } | null;
+  /** Total que el cliente vio al confirmar (null si el envío se cotiza). Si cambió, no se crea el pedido. */
+  expectedTotal?: number | null;
   /** Campaña de origen (UTM) y dispositivo, solo para medición. */
   attribution?: Attribution | null;
   device?: string | null;
@@ -128,8 +130,14 @@ export async function quoteOrder(db: DB, input: Pick<OrderInput, 'fulfillment' |
 const hasCombo = (items: CartLineInput[], products: { id: string; combo: unknown }[]) =>
   items.some((i) => products.find((p) => p.id === i.productId)?.combo);
 
+/**
+ * Huella del pedido para la idempotencia: solo lo que el cliente decide. Lo que el servidor deduce
+ * (dispositivo) o lo que puede vencer entre reintentos (campaña) no cuenta, para que un reintento
+ * legítimo nunca parezca «otro pedido».
+ */
 function requestHash(input: OrderInput): string {
-  return createHash('sha256').update(JSON.stringify(input)).digest('hex');
+  const { device: _device, attribution: _attribution, ...mine } = input;
+  return createHash('sha256').update(JSON.stringify(mine)).digest('hex');
 }
 
 /**
@@ -142,7 +150,11 @@ export async function createOrder(ctx: Ctx, idempotencyKey: string, input: Order
   const hash = requestHash(input);
   const existing = async () => {
     const row = await db.one<OrderRow>('select * from office.orders where idempotency_key = $1', [idempotencyKey]);
-    if (row && row.request_hash !== hash) throw new HttpError(409, 'Este pedido cambió. Revisa el resumen e inténtalo de nuevo.', { code: 'idempotency_mismatch' });
+    // Misma llave con otro contenido: ya existe un pedido con esta llave. Se devuelve cuál es (a quien tiene la
+    // llave) para que el cliente lo abra, en vez de volver a enviar y crear un duplicado.
+    if (row && row.request_hash !== hash) {
+      throw new HttpError(409, 'Ya enviaste este pedido. Lo abrimos para que lo revises.', { code: 'idempotency_mismatch', number: row.number, token: row.access_token });
+    }
     return row;
   };
 
@@ -195,6 +207,10 @@ export async function createOrder(ctx: Ctx, idempotencyKey: string, input: Order
 
   const quote = await quoteOrder(db, input, { group: !!group, gift: !!gift });
   if (quote.errors.length) throw new HttpError(422, quote.errors[0], { errors: quote.errors });
+  // El total que vio el cliente debe ser el que se cobra: si cambió (precios, envío, alguien del equipo agregó algo), no se crea.
+  if (input.expectedTotal !== undefined && quote.total !== input.expectedTotal) {
+    throw new HttpError(409, 'El total cambió. Revísalo antes de confirmar.', { code: 'total_changed', total: quote.total });
+  }
   const cfg = await getDelivery(db);
   const cod = input.paymentMethod === 'contra_entrega';
   if (cod ? !cfg.cashOnDelivery : !cfg.onlinePayment || !onlinePaymentReady(ctx)) throw new HttpError(422, 'Ese método de pago no está disponible.');
@@ -209,6 +225,16 @@ export async function createOrder(ctx: Ctx, idempotencyKey: string, input: Order
   const orderStatus: OrderStatus = manual ? 'cotizando_envio' : cod ? 'recibido' : 'esperando_pago';
   const id = randomUUID();
   const inserted = await db.tx(async (q) => {
+    // Equipo: se bloquea el grupo y se comprueba, DENTRO de la transacción, que nadie agregó ni quitó nada
+    // desde que se calculó el total. Así el pedido y el grupo nunca difieren.
+    if (group) {
+      const locked = await q.one<{ status: string }>('select status from office.group_orders where id = $1 for update', [group.id]);
+      if (!locked || (locked.status !== 'abierto' && locked.status !== 'cerrado')) throw new HttpError(409, 'Este pedido de equipo ya se envió.');
+      const fresh = await q.query<{ line: CartLineInput }>('select line from office.group_items where group_id = $1 order by created_at, id', [group.id]);
+      if (JSON.stringify(fresh.map((f) => f.line)) !== JSON.stringify(input.items)) {
+        throw new HttpError(409, 'El pedido del equipo cambió mientras pagabas. Revisa el total y confirma de nuevo.', { code: 'group_changed' });
+      }
+    }
     const number = await nextOrderNumber(q);
     const row = await q.one<OrderRow>(
       `insert into office.orders (id, number, access_token, idempotency_key, request_hash, customer_name, customer_phone,
@@ -369,7 +395,7 @@ export async function setOrderStatus(ctx: Ctx, id: string, status: OrderStatus, 
     if (status !== 'en_camino') await q.query('delete from office.order_tracking where order_id = $1', [id]);
     await addEvent(q, id, 'estado', status, actor);
     return (await q.one<OrderRow>(
-      "update office.orders set order_status = $2, delivered_at = case when $2 = 'entregado' then now() else delivered_at end, updated_at = now() where id = $1 returning *",
+      "update office.orders set order_status = $2, delivered_at = case when $2 = 'entregado' then now() else null end, updated_at = now() where id = $1 returning *",
       [id, status],
     ))!;
   });
@@ -468,6 +494,7 @@ export async function markCollectPending(ctx: Ctx, id: string, reason: string, b
     const row = await q.one<OrderRow>('select * from office.orders where id = $1 for update', [id]);
     if (!row) throw new HttpError(404, 'Pedido no encontrado.');
     if (row.payment_method !== 'contra_entrega' || row.payment_status === 'aprobado') return row;
+    if (row.order_status === 'cancelado' || row.order_status === 'cotizando_envio') throw new HttpError(409, 'Este pedido no tiene un cobro pendiente.');
     await addEvent(q, id, 'pago', `Cobro pendiente al entregar: ${reason} · ${by}`, actor);
     return (await q.one<OrderRow>(
       'update office.orders set collect_pending_at = now(), collect_pending_reason = $2, updated_at = now() where id = $1 returning *',

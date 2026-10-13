@@ -53,6 +53,12 @@ export function idempotencyKeyFor(fingerprint: string): string {
 export function resetIdempotencyKey() {
   remove(IKEY);
 }
+/**
+ * Pedido creado (confirmado por el servidor): la llave se libera para que el siguiente pedido, aunque
+ * sea idéntico (p. ej. lo mismo de todos los días), sea un pedido nuevo. Antes de esta confirmación la
+ * llave se conserva: un reintento tras perder la respuesta devuelve el MISMO pedido.
+ */
+export const orderPlaced = resetIdempotencyKey;
 
 // ── Pedidos recientes del cliente (solo en este dispositivo) ──
 export type RecentOrder = { number: string; token: string; at: string; cartFingerprint?: string; groupName?: string | null };

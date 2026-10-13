@@ -1,4 +1,4 @@
-import { randomBytes, randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import type { DB } from './db';
 import { iso, isoOrNull } from './db';
 import { HttpError } from './context';
@@ -136,7 +136,7 @@ export async function groupView(ctx: Ctx, code: string, viewer: { memberKey?: st
       .filter((i) => i.line),
     subtotal: priced.subtotal,
     pieces: priced.lines.reduce((s, l) => s + l.qty, 0),
-    isOrganizer: !!viewer.adminToken && viewer.adminToken === g.admin_token,
+    isOrganizer: tokenMatches(viewer.adminToken, g.admin_token),
   };
 }
 
@@ -144,9 +144,10 @@ const CLOSED_MSG = 'Este pedido de equipo ya cerró: ya no se pueden agregar pro
 
 /** Entrar al pedido con tu nombre (aunque aún no elijas). Repetirlo solo actualiza el nombre. */
 export async function joinGroup(ctx: Ctx, code: string, input: { memberName: string; memberKey: string }) {
-  const g = await getGroupRow(ctx.db, code);
-  if (isClosed(g, ctx.now())) throw new HttpError(409, CLOSED_MSG, { code: 'group_closed' });
   await ctx.db.tx(async (q) => {
+    // Con el grupo bloqueado: el cierre no se cruza con quien entra o se renombra.
+    const g = await lockGroup(q, code);
+    if (isClosed(g, ctx.now())) throw new HttpError(409, CLOSED_MSG, { code: 'group_closed' });
     await q.query(
       `insert into office.group_members (group_id, member_key, name) values ($1, $2, $3)
        on conflict (group_id, member_key) do update set name = excluded.name`,
@@ -195,36 +196,62 @@ export async function addGroupItem(ctx: Ctx, code: string, input: { memberName: 
 
 /** Cada quien quita lo suyo mientras está abierto; ya cerrado, solo el organizador ajusta antes de pagar. */
 export async function removeGroupItem(ctx: Ctx, code: string, itemId: string, who: { memberKey?: string; adminToken?: string }) {
-  const g = await getGroupRow(ctx.db, code);
-  const organizer = who.adminToken === g.admin_token;
-  if (g.status === 'pedido' || g.status === 'cancelado') throw new HttpError(409, 'Este pedido de equipo ya se envió.');
-  if (isClosed(g, ctx.now()) && !organizer) throw new HttpError(409, 'El pedido ya cerró. Pídele a quien organiza que haga el cambio.');
-  const item = await ctx.db.one<{ member_key: string }>('select member_key from office.group_items where id = $1 and group_id = $2', [itemId, g.id]);
-  if (!item) throw new HttpError(404, 'Ese producto ya no está.');
-  if (!organizer && who.memberKey !== item.member_key) throw new HttpError(403, 'Solo puedes quitar lo que tú agregaste.');
-  await ctx.db.query('delete from office.group_items where id = $1', [itemId]);
+  await ctx.db.tx(async (q) => {
+    // Bloqueado: no se puede quitar algo en el instante en que el organizador hace el pedido.
+    const g = await lockGroup(q, code);
+    const organizer = tokenMatches(who.adminToken, g.admin_token);
+    if (g.status === 'pedido' || g.status === 'cancelado') throw new HttpError(409, 'Este pedido de equipo ya se envió.');
+    if (isClosed(g, ctx.now()) && !organizer) throw new HttpError(409, 'El pedido ya cerró. Pídele a quien organiza que haga el cambio.');
+    const item = await q.one<{ member_key: string }>('select member_key from office.group_items where id = $1 and group_id = $2', [itemId, g.id]);
+    if (!item) throw new HttpError(404, 'Ese producto ya no está.');
+    if (!organizer && who.memberKey !== item.member_key) throw new HttpError(403, 'Solo puedes quitar lo que tú agregaste.');
+    await q.query('delete from office.group_items where id = $1', [itemId]);
+  });
+}
+
+async function lockGroup(q: DB, code: string): Promise<GroupRow> {
+  const g = await q.one<GroupRow>('select * from office.group_orders where code = $1 for update', [code]);
+  if (!g) throw new HttpError(404, 'Este pedido de equipo no existe.');
+  return g;
+}
+
+/** Compara la llave del organizador sin filtrar tiempos. */
+function tokenMatches(given: string | undefined, real: string): boolean {
+  if (!given) return false;
+  const a = createHash('sha256').update(given).digest();
+  const b = createHash('sha256').update(real).digest();
+  return timingSafeEqual(a, b);
 }
 
 /** El organizador cierra (nadie más agrega) o reabre antes de pagar. */
 export async function setGroupOpen(ctx: Ctx, code: string, adminToken: string, open: boolean) {
-  const g = await getGroupRow(ctx.db, code);
-  if (g.admin_token !== adminToken) throw new HttpError(403, 'Solo quien organiza puede cerrar o reabrir el pedido.');
-  if (g.status === 'pedido' || g.status === 'cancelado') throw new HttpError(409, 'Este pedido de equipo ya se envió.');
-  if (open) {
-    // Si ya pasó la hora límite, reabrir quita el límite.
-    const expired = g.closes_at != null && new Date(g.closes_at).getTime() < ctx.now().getTime();
-    await ctx.db.query(`update office.group_orders set status = 'abierto'${expired ? ', closes_at = null' : ''} where id = $1`, [g.id]);
-  } else {
-    await ctx.db.query("update office.group_orders set status = 'cerrado' where id = $1 and status = 'abierto'", [g.id]);
-  }
+  await ctx.db.tx(async (q) => {
+    const g = await lockGroup(q, code);
+    if (!tokenMatches(adminToken, g.admin_token)) throw new HttpError(403, 'Solo quien organiza puede cerrar o reabrir el pedido.');
+    if (g.status === 'pedido') {
+      // Si el pedido de este grupo se canceló, el organizador puede reabrir (el pedido cancelado queda como estaba).
+      const o = g.order_id ? await q.one<{ order_status: string }>('select order_status from office.orders where id = $1', [g.order_id]) : null;
+      if (!(open && o?.order_status === 'cancelado')) throw new HttpError(409, 'Este pedido de equipo ya se envió.');
+      await q.query("update office.group_orders set status = 'abierto', order_id = null, closes_at = null where id = $1 and status = 'pedido'", [g.id]);
+      return;
+    }
+    if (g.status === 'cancelado') throw new HttpError(409, 'Este pedido de equipo ya se envió.');
+    if (open) {
+      // Si ya pasó la hora límite, reabrir quita el límite. Nunca sobrescribe un pedido ya hecho.
+      const expired = g.closes_at != null && new Date(g.closes_at).getTime() < ctx.now().getTime();
+      await q.query(`update office.group_orders set status = 'abierto'${expired ? ', closes_at = null' : ''} where id = $1 and status in ('abierto', 'cerrado')`, [g.id]);
+    } else {
+      await q.query("update office.group_orders set status = 'cerrado' where id = $1 and status = 'abierto'", [g.id]);
+    }
+  });
 }
 
 /** Líneas del pedido de equipo para crear la orden (solo el organizador). */
 export async function groupLinesForOrder(ctx: Ctx, code: string, adminToken: string) {
   const g = await getGroupRow(ctx.db, code);
-  if (g.admin_token !== adminToken) throw new HttpError(403, 'Solo quien organizó el pedido de equipo puede enviarlo.');
+  if (!tokenMatches(adminToken, g.admin_token)) throw new HttpError(403, 'Solo quien organizó el pedido de equipo puede enviarlo.');
   if (g.status !== 'abierto' && g.status !== 'cerrado') throw new HttpError(409, 'Este pedido de equipo ya se envió.');
-  const items = await ctx.db.query<{ line: CartLineInput }>('select line from office.group_items where group_id = $1 order by created_at', [g.id]);
+  const items = await ctx.db.query<{ line: CartLineInput }>('select line from office.group_items where group_id = $1 order by created_at, id', [g.id]);
   if (!items.length) throw new HttpError(422, 'El pedido de equipo está vacío.');
   return { group: g, lines: items.map((i) => i.line) };
 }

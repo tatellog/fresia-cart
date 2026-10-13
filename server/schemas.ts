@@ -80,6 +80,8 @@ export const eventSchema = z.object({
 
 export const orderSchema = quoteSchema.extend({
   idempotencyKey: z.string().uuid(),
+  /** Total mostrado al cliente; si el del servidor es distinto se rechaza con 409 (sin cobrar otra cosa). */
+  expectedTotal: z.number().int().min(0).max(100_000_000).nullable().optional(),
   paymentMethod: z.enum(['online', 'contra_entrega']).default('online'),
   source: z.string().regex(/^[a-z0-9-]{1,40}$/).nullable().optional(),
   attribution: attributionSchema.nullable().optional(),

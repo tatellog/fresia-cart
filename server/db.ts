@@ -68,6 +68,8 @@ export function postgres(url: string): Sql {
     // Pocas conexiones por instancia: en Vercel hay varias instancias contra el pooler de Supabase.
     max: Number(process.env.DB_POOL_MAX ?? 3),
     idleTimeoutMillis: 10_000,
+    // Si la base no responde, falla rápido con un error claro (en vez de agotar los 30 s de la función).
+    connectionTimeoutMillis: 8_000,
     ssl: sslFor(url),
   });
   pool.on('error', (e) => console.error('[db] error de conexión', e.message));

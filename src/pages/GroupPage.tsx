@@ -257,7 +257,11 @@ export default function GroupPage() {
             disabled={g.pieces < minPieces}
             onClick={async () => {
               // Al ir a pagar se cierra: el total que revisas es el que se cobra (se puede reabrir).
-              if (g.status === 'abierto') await api(`/api/groups/${code}/close`, { body: { adminToken: admin } }).catch(() => undefined);
+              if (g.status === 'abierto') {
+                // Si no se pudo cerrar, no se sigue: el total que revisas tiene que ser el que se cobra.
+                const ok = await api(`/api/groups/${code}/close`, { body: { adminToken: admin } }).then(() => true, (e: Error) => (setError(e.message), false));
+                if (!ok) return;
+              }
               setGroupCheckout({ code: g.code, token: admin!, name: g.name });
               navigate('/entrega');
             }}
