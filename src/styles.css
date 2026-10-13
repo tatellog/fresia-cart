@@ -244,6 +244,17 @@ p {
 .segmented .option { min-height: 72px; border-radius: var(--radius-sm); }
 .segmented .option strong { font-size: 1.05rem; }
 
+/* Entrega: cada bloque en su tarjeta */
+.form-card { display: grid; gap: 14px; }
+.form-card h2 { font-size: 1.15rem; }
+.fulfill .option { gap: 4px; }
+.fulfill .option .icon { font-size: 1.4rem; line-height: 1; margin-bottom: 2px; }
+.loc-block { display: grid; gap: 10px; padding-bottom: 14px; border-bottom: 1px solid var(--line); }
+.loc-block .notice { margin: 0; }
+.two.street { grid-template-columns: 2fr 1fr; }
+.two.contact { grid-template-columns: 1fr; }
+@media (min-width: 520px) { .two.contact { grid-template-columns: 1fr 1fr; } }
+
 /* ── Encabezado de la tienda ───────────── */
 .site-header {
   position: sticky;

@@ -148,46 +148,58 @@ export default function DeliveryPage() {
 
           <fieldset>
             <legend className="sr-only">Tipo de entrega</legend>
-            <div className="segmented">
+            <div className="segmented fulfill">
               <label className="option">
                 <input type="radio" name="f" checked={form.fulfillment === 'delivery'} disabled={data ? !data.delivery.deliveryEnabled : false} onChange={() => set({ fulfillment: 'delivery' })} />
-                <strong>A domicilio</strong>
-                <span className="muted small">En tu oficina</span>
+                <span className="icon" aria-hidden="true">🛵</span>
+                <strong>A tu oficina</strong>
+                <span className="muted small">
+                  {data?.delivery.mode === 'radius' ? `Envío ${money(data.delivery.radiusFee)}` : 'Envío según tu zona'}
+                  {data?.delivery.freeShippingFrom != null ? ` · gratis desde ${money(data.delivery.freeShippingFrom)}` : ''}
+                </span>
               </label>
               <label className="option">
                 <input type="radio" name="f" checked={form.fulfillment === 'pickup'} disabled={data ? !data.delivery.pickupEnabled : false} onChange={() => set({ fulfillment: 'pickup' })} />
-                <strong>Recoger</strong>
-                <span className="muted small">En Frésia</span>
+                <span className="icon" aria-hidden="true">🏪</span>
+                <strong>Recoger en Frésia</strong>
+                <span className="muted small">Sin costo{data && prepText(data.delivery) ? ` · listo en ${prepText(data.delivery)}` : ''}</span>
               </label>
             </div>
           </fieldset>
 
-          {form.fulfillment === 'delivery' && radiusMode && data && (
-            <section className="card stack" aria-labelledby="loc-title">
-              <h2 id="loc-title">¿Estás cerca?</h2>
-              <p className="muted">
-                Entregamos a oficinas {data.delivery.area ? 'dentro de nuestra zona, cerca de Frésia' : `a menos de ${data.delivery.radiusM} m de Frésia`}. Comparte tu ubicación <strong>desde el lugar de entrega</strong> para confirmarlo.
-              </p>
-              <button type="button" className={`btn ${location ? 'secondary' : 'primary'} block`} onClick={locate} disabled={locating === 'busy'}>
-                {locating === 'busy' ? <Spinner label="Buscando tu ubicación…" /> : location ? 'Actualizar mi ubicación' : 'Usar mi ubicación'}
-              </button>
-              {locating === 'denied' && (
-                <p className="small error-text" role="alert">No diste permiso de ubicación. Puedes activarlo en tu navegador, o seguir y confirmaremos el envío por WhatsApp.</p>
-              )}
-              {locating === 'unavailable' && (
-                <p className="small error-text" role="alert">No pudimos obtener tu ubicación. Puedes seguir y confirmaremos el envío por WhatsApp.</p>
-              )}
-              <CoverageNotice coverage={coverage} freeFrom={data?.delivery.freeShippingFrom ?? null} onPickup={data?.delivery.pickupEnabled ? () => set({ fulfillment: 'pickup' }) : undefined} />
-              <p className="muted small">Solo usamos tu ubicación para confirmar que llegamos; la verá Frésia junto con tu pedido.</p>
-            </section>
-          )}
-
           {form.fulfillment === 'delivery' ? (
-            <section className="stack" aria-labelledby="addr-title">
-              <h2 id="addr-title">Dirección de entrega</h2>
-              <Field label="Calle" autoComplete="address-line1" value={form.address.street} onChange={(e) => setAddr('street', e.target.value)} error={errors.street} maxLength={120} />
+            <section className="card form-card" aria-labelledby="addr-title">
+              <h2 id="addr-title">¿A dónde lo llevamos?</h2>
+              {radiusMode && data && (
+                <div className="loc-block">
+                  {location && coverage.state === 'done' && coverage.quote.status === 'covered' ? (
+                    <>
+                      <CoverageNotice coverage={coverage} freeFrom={data.delivery.freeShippingFrom} />
+                      <button type="button" className="linkbtn small" style={{ justifySelf: 'start' }} onClick={locate} disabled={locating === 'busy'}>
+                        {locating === 'busy' ? 'Buscando…' : 'Actualizar mi ubicación'}
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <p className="muted small" style={{ margin: 0 }}>
+                        Entregamos a oficinas {data.delivery.area ? 'cerca de Frésia' : `a menos de ${data.delivery.radiusM} m de Frésia`}. Comparte tu ubicación <strong>desde el lugar de entrega</strong> para confirmarlo al momento.
+                      </p>
+                      <button type="button" className={`btn ${location ? 'secondary' : 'primary'} block`} onClick={locate} disabled={locating === 'busy'}>
+                        {locating === 'busy' ? <Spinner label="Buscando tu ubicación…" /> : location ? '📍 Actualizar mi ubicación' : '📍 Usar mi ubicación'}
+                      </button>
+                      {locating === 'denied' && (
+                        <p className="small error-text" role="alert">No diste permiso de ubicación. Puedes activarlo en tu navegador, o seguir y confirmaremos el envío por WhatsApp.</p>
+                      )}
+                      {locating === 'unavailable' && (
+                        <p className="small error-text" role="alert">No pudimos obtener tu ubicación. Puedes seguir y confirmaremos el envío por WhatsApp.</p>
+                      )}
+                      <CoverageNotice coverage={coverage} freeFrom={data.delivery.freeShippingFrom} onPickup={data.delivery.pickupEnabled ? () => set({ fulfillment: 'pickup' }) : undefined} />
+                      <p className="muted small" style={{ margin: 0 }}>Solo usamos tu ubicación para confirmar que llegamos; la verá Frésia junto con tu pedido.</p>
+                    </>
+                  )}
+                </div>
+              )}
               <div className="two">
-                <Field label="Número" value={form.address.number} onChange={(e) => setAddr('number', e.target.value)} error={errors.number} maxLength={20} />
                 <Field
                   label="Código postal"
                   inputMode="numeric"
@@ -197,34 +209,38 @@ export default function DeliveryPage() {
                   error={errors.postalCode ?? (postal.state === 'not_found' ? POSTAL_NOT_FOUND : undefined)}
                   hint={postal.state === 'loading' ? 'Buscando…' : postal.state === 'found' ? `${postal.info.alcaldia}, ${postal.info.estado}` : undefined}
                 />
+                  {postal.state === 'found' && postal.info.colonias.length > 1 ? (
+                  <SelectField
+                    label="Colonia"
+                    value={form.address.colonia}
+                    onChange={(v) => setAddr('colonia', v)}
+                    error={errors.colonia}
+                    placeholder="Elige tu colonia"
+                    options={postal.info.colonias.map((c) => c.name)}
+                  />
+                ) : (
+                  <Field
+                    label="Colonia"
+                    autoComplete="address-level3"
+                    value={form.address.colonia}
+                    onChange={(e) => setAddr('colonia', e.target.value)}
+                    error={errors.colonia}
+                    maxLength={80}
+                    readOnly={postal.state === 'found'}
+                    hint={postal.state === 'found' ? 'Según tu código postal.' : postal.state === 'idle' && !isPostalCode(cp) ? 'Se llena sola con tu código postal.' : undefined}
+                  />
+                )}
               </div>
-              {postal.state === 'found' && postal.info.colonias.length > 1 ? (
-                <SelectField
-                  label="Colonia"
-                  value={form.address.colonia}
-                  onChange={(v) => setAddr('colonia', v)}
-                  error={errors.colonia}
-                  placeholder="Elige tu colonia"
-                  options={postal.info.colonias.map((c) => c.name)}
-                />
-              ) : (
-                <Field
-                  label="Colonia"
-                  autoComplete="address-level3"
-                  value={form.address.colonia}
-                  onChange={(e) => setAddr('colonia', e.target.value)}
-                  error={errors.colonia}
-                  maxLength={80}
-                  readOnly={postal.state === 'found'}
-                  hint={postal.state === 'found' ? 'Según tu código postal.' : postal.state === 'idle' && !isPostalCode(cp) ? 'Se llena sola con tu código postal.' : undefined}
-                />
-              )}
+              <div className="two street">
+                <Field label="Calle" autoComplete="address-line1" value={form.address.street} onChange={(e) => setAddr('street', e.target.value)} error={errors.street} maxLength={120} />
+                <Field label="Número" value={form.address.number} onChange={(e) => setAddr('number', e.target.value)} error={errors.number} maxLength={20} />
+              </div>
               {!radiusMode && <CoverageNotice coverage={coverage} freeFrom={data?.delivery.freeShippingFrom ?? null} onPickup={data?.delivery.pickupEnabled ? () => set({ fulfillment: 'pickup' }) : undefined} />}
               <Field label="Oficina o piso" placeholder="Ej. Piso 4, oficina 402" value={form.address.office} onChange={(e) => setAddr('office', e.target.value)} error={errors.office} maxLength={80} />
               <Field label="Referencias" optional placeholder="Ej. Dejar en recepción" value={form.address.references} onChange={(e) => setAddr('references', e.target.value)} maxLength={200} />
             </section>
           ) : (
-            <section className="card flat stack" aria-labelledby="pickup-title">
+            <section className="card form-card" aria-labelledby="pickup-title">
               <h2 id="pickup-title">Recoger en Frésia</h2>
               <p>{data?.business.address || 'Dirección pendiente de confirmar'}</p>
               {data?.delivery.origin && (
@@ -249,8 +265,9 @@ export default function DeliveryPage() {
             </section>
           )}
 
-          <section className="stack" aria-labelledby="contact-title">
-            <h2 id="contact-title">Tus datos</h2>
+          <section className="card form-card" aria-labelledby="contact-title">
+            <h2 id="contact-title">¿Quién recibe?</h2>
+            <div className="two contact">
             <Field label="Nombre" autoComplete="name" value={form.name} onChange={(e) => set({ name: e.target.value })} error={errors.name} maxLength={80} />
             <Field
               label="Teléfono"
@@ -263,14 +280,10 @@ export default function DeliveryPage() {
               hint="Solo para avisarte sobre tu pedido."
               maxLength={20}
             />
+            </div>
           </section>
 
-          <div className="field">
-            <label htmlFor="notes">
-              Notas del pedido <span className="muted small">(opcional)</span>
-            </label>
-            <textarea id="notes" className="textarea" maxLength={300} value={form.notes} onChange={(e) => set({ notes: e.target.value })} />
-          </div>
+          <NotesField value={form.notes} onChange={(notes) => set({ notes })} />
         </form>
       </main>
       <StickyAction>
@@ -318,3 +331,18 @@ function CoverageNotice({ coverage, freeFrom, onPickup }: { coverage: { state: s
     </div>
   );
 }
+
+/** Nota opcional: escondida tras un enlace para no alargar el formulario. */
+function NotesField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [open, setOpen] = useState(value.trim() !== '');
+  if (!open) {
+    return <button type="button" className="linkbtn" style={{ alignSelf: 'flex-start' }} onClick={() => setOpen(true)}>+ Agregar una nota al pedido</button>;
+  }
+  return (
+    <div className="field">
+      <label htmlFor="notes">Nota del pedido <span className="muted small">(opcional)</span></label>
+      <textarea id="notes" className="textarea" maxLength={300} value={value} autoFocus={value === ''} placeholder="Ej. Sin azúcar extra, entregar a Laura en recepción" onChange={(e) => onChange(e.target.value)} />
+    </div>
+  );
+}
+
