@@ -40,9 +40,9 @@ export function ClubCardView({ number, token, delivered }: { number: string; tok
       <p className="small">
         {club.rewardsPending > 0
           ? `¡Tienes ${club.rewardsPending === 1 ? 'una Frésia gratis' : `${club.rewardsPending} Frésias gratis`}! Muestra tu tarjeta en la tienda.`
-          : `${club.visits} de ${club.goal} sellos. ${delivered ? 'Este pedido ya suma.' : 'Este pedido suma un sello al entregarse.'}`}
+          : `${club.visits} de ${club.goal} sellos. ${delivered ? `Este pedido ya suma: ${club.goal - club.visits === 1 ? 'te falta 1 sello' : `te faltan ${club.goal - club.visits} sellos`} para tu Frésia gratis.` : 'Este pedido suma un sello al entregarse.'}`}
       </p>
-      <a className="btn block" href={club.cardUrl} target="_blank" rel="noopener">Ver mi tarjeta</a>
+      <a className="btn block" href={club.cardUrl} target="_blank" rel="noopener">{club.rewardsPending > 0 ? 'Ver mi recompensa' : 'Ver mi tarjeta y recompensas'}</a>
       <details className="small">
         <summary>Cómo funciona</summary>
         <p className="muted" style={{ margin: '6px 0 0' }}>

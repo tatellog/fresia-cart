@@ -286,6 +286,8 @@ export type MenuResponse = {
   delivery: Omit<DeliveryConfig, 'zones'> & { zoneNames: string[] };
   paymentsMode: 'demo' | 'mercadopago';
   features: Features;
+  /** Lo más pedido por producto (90 días; solo con suficientes pedidos). */
+  popular?: Record<string, { sizeId: string | null; toppingIds: string[] }>;
 };
 
 export type Quote = {

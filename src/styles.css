@@ -271,6 +271,15 @@ p {
 .secure-note { display: flex; gap: 8px; margin: 0; font-size: 0.85rem; color: var(--choc-2); }
 .pay-total { display: grid; gap: 10px; }
 
+/* Resumen visible del pedido */
+.order-summary { display: grid; gap: 10px; padding: 10px 0 12px; }
+.sum-group { display: grid; gap: 8px; }
+.sum-group + .sum-group { border-top: 1px dashed var(--line); padding-top: 8px; }
+.sum-who { margin: 0; font-weight: 700; }
+.sum-line { display: grid; grid-template-columns: 44px 1fr auto; gap: 10px; align-items: start; }
+.sum-line img { width: 44px; height: 44px; border-radius: 10px; object-fit: cover; }
+.sum-line p { margin: 2px 0 0; }
+
 /* Estado del pedido */
 .order-hero { display: grid; gap: 12px; }
 .order-hero h1 { font-size: 1.45rem; }
@@ -287,6 +296,18 @@ p {
 .track li.current span:last-child { font-weight: 700; }
 .order-help { display: grid; gap: 12px; justify-items: center; text-align: center; padding: 8px 0; }
 .linkbtn.danger { color: var(--red-ink); }
+
+/* Producto: tamaños lado a lado y toppings compactos */
+.size-grid { display: grid; gap: 8px; }
+.size-grid.cols-2 { grid-template-columns: repeat(2, 1fr); }
+.size-grid.cols-3 { grid-template-columns: repeat(3, 1fr); }
+.option.size-card { position: relative; flex-direction: column; align-items: center; text-align: center; gap: 2px; padding: 14px 6px 12px; min-height: 92px; }
+.option.size-card .price { margin-top: 4px; }
+.pop-tag { position: absolute; top: -9px; left: 50%; transform: translateX(-50%); white-space: nowrap; padding: 1px 8px; border-radius: 999px; background: var(--red); color: #fff; font-size: 0.68rem; font-weight: 700; }
+.option.topping .topping-main { min-height: 48px; padding-top: 8px; padding-bottom: 8px; }
+.option.topping { min-height: 48px; }
+.premium-group summary { cursor: pointer; padding: 10px 0; font-weight: 600; }
+.premium-group[open] summary { margin-bottom: 4px; }
 
 /* Toppings con porción doble */
 .option.topping { padding: 0 16px 0 0; gap: 10px; }

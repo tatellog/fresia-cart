@@ -24,6 +24,7 @@ export default function ProductPage() {
   const editing = editId ? cart.lines.find((l) => l.lineId === editId) : undefined;
 
   const product = data?.products.find((p) => p.id === id);
+  const popular = product ? data?.popular?.[product.id] : undefined;
   const group = activeGroup();
   const [adding, setAdding] = useState(false);
   // Mismo id si se reintenta: el servidor no duplica el producto en el pedido de equipo.
@@ -143,36 +144,25 @@ export default function ProductPage() {
               <span>Tamaño</span>
               <span className={`req${size ? ' done' : ''}`}>{size ? '✓ Listo' : 'Elige uno'}</span>
             </legend>
-            <div className="options">
-              {product.sizes.length === 1 && product.fresiaUnits > 0 && <p className="muted small">Solo disponible en este tamaño.</p>}
-              {product.sizes.map((s) => (
-                <label key={s.id} className="option">
-                  <input type="radio" name="size" value={s.id} checked={sizeId === s.id} onChange={() => setSizeId(s.id)} required />
-                  <span className="mark" aria-hidden="true" />
-                  <span className="grow">{s.label}</span>
-                  <span className="price">{money(s.price)}</span>
-                </label>
-              ))}
+            <div className={`size-grid cols-${Math.min(product.sizes.length, 3)}`}>
+              {product.sizes.map((s) => {
+                const [name, ...rest] = s.label.split(' ');
+                return (
+                  <label key={s.id} className="option size-card">
+                    <input type="radio" name="size" value={s.id} checked={sizeId === s.id} onChange={() => setSizeId(s.id)} required />
+                    {popular?.sizeId === s.id && <span className="pop-tag">⭐ Más pedido</span>}
+                    <strong>{name}</strong>
+                    {rest.length > 0 && <span className="muted small">{rest.join(' ')}</span>}
+                    <span className="price">{money(s.price)}</span>
+                  </label>
+                );
+              })}
             </div>
           </fieldset>
 
-          <ToppingPicker product={product} toppings={data.toppings} rules={rules} chosen={chosen} onChange={setChosen} />
+          <ToppingPicker product={product} toppings={data.toppings} rules={rules} chosen={chosen} onChange={setChosen} popular={popular?.toppingIds} />
 
-          {!group && <div className="field">
-            <label htmlFor="for-whom">
-              ¿Para quién es? <span className="muted small">(opcional)</span>
-            </label>
-            <input
-              id="for-whom"
-              className="input"
-              value={forWhom}
-              onChange={(e) => setForWhom(e.target.value)}
-              maxLength={MAX_FOR_WHOM}
-              placeholder="Ej. Laura, Diseño"
-              autoComplete="off"
-            />
-            <span className="hint">Te ayuda a repartir los pedidos del equipo.</span>
-          </div>}
+          {!group && <ForWhom value={forWhom} onChange={setForWhom} />}
           {addError && <p className="error-text" role="alert">{addError}</p>}
 
           <div className="row between">
@@ -192,3 +182,16 @@ export default function ProductPage() {
     </>
   );
 }
+
+/** «¿Para quién es?» plegado: útil para repartir, pero opcional. */
+function ForWhom({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [open, setOpen] = useState(value !== '');
+  if (!open) return <button type="button" className="linkbtn" style={{ alignSelf: 'flex-start' }} onClick={() => setOpen(true)}>+ ¿Para quién es? (para repartirlo)</button>;
+  return (
+    <div className="field">
+      <label htmlFor="for-whom">¿Para quién es? <span className="muted small">(opcional)</span></label>
+      <input id="for-whom" className="input" value={value} onChange={(e) => onChange(e.target.value)} maxLength={MAX_FOR_WHOM} placeholder="Ej. Laura, Diseño" autoComplete="off" autoFocus={value === ''} />
+    </div>
+  );
+}
+

@@ -63,8 +63,9 @@ export async function createApp(config: Config, opts: { demoWebhookDelayMs?: num
   app.get('/api/health', (_req, res) => res.json({ ok: true, payments: provider.name }));
 
   app.get('/api/menu', async (_req, res) => {
-    const [delivery, products, toppings, business, rules, schedule, features] = await Promise.all([
+    const [delivery, products, toppings, business, rules, schedule, features, popular] = await Promise.all([
       store.getDelivery(db), store.listProducts(db), store.listToppings(db), store.getBusiness(db), store.getRules(db), store.getSchedule(db), store.getFeatures(db),
+      store.getPopular(db).catch(() => ({})),
     ]);
     const { zones, ...rest } = delivery;
     const body: MenuResponse = {
@@ -76,6 +77,7 @@ export async function createApp(config: Config, opts: { demoWebhookDelayMs?: num
       delivery: { ...rest, onlinePayment: rest.onlinePayment && onlinePaymentReady(ctx), zoneNames: zones.filter((z) => z.active).map((z) => z.name) },
       paymentsMode: provider.name,
       features,
+      popular,
     };
     res.json(body);
   });

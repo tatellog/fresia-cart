@@ -6,7 +6,7 @@ import { toLineInput, useCart } from '../lib/cart';
 import { recentOrders } from '../lib/checkout';
 import { formatDate, money, whatsappLink } from '../lib/format';
 import { DemoBanner, Footer, Spinner, TopBar } from '../components/ui';
-import { OrderLines, Totals } from './parts';
+import { LineDetails, Totals } from './parts';
 import { LiveTracking } from '../components/LiveTracking';
 import { ClubCardView } from '../components/ClubCard';
 import { slotLabel } from '../../shared/schedule';
@@ -113,7 +113,6 @@ export default function OrderPage() {
   const business = menu?.business;
   const wa = (text: string) => (business ? whatsappLink(business, text) : null);
   const status = headline(order, !!verifying);
-  const pieces = order.items.reduce((n, l) => n + l.qty, 0);
 
   return (
     <>
@@ -136,11 +135,7 @@ export default function OrderPage() {
             <h1>{status.title}</h1>
           </div>
           <p className="muted" style={{ margin: 0 }}>{status.body}</p>
-          {(order.scheduledFor || order.deliveryQuote.status === 'quoted') && order.orderStatus !== 'cancelado' && order.orderStatus !== 'entregado' && (
-            <p className="when-chip">
-              {order.scheduledFor ? <>🗓 {order.fulfillment === 'delivery' ? 'Llega' : 'Listo'} <strong>{slotLabel(order.scheduledFor)}</strong></> : <>⏱ Tiempo estimado: <strong>{order.deliveryQuote.status === 'quoted' ? order.deliveryQuote.etaText : ''}</strong></>}
-            </p>
-          )}
+          <TimePromise order={order} />
           {(order.paymentStatus === 'aprobado' || (order.paymentMethod === 'contra_entrega' && order.orderStatus !== 'cotizando_envio' && order.orderStatus !== 'cancelado')) && (
             <Progress order={order} />
           )}
@@ -175,32 +170,21 @@ export default function OrderPage() {
           </section>
         )}
 
-        {(order.orderStatus === 'entregado' || order.orderStatus === 'cancelado') &&
+        {order.orderStatus === 'entregado' && (
+          <>
+            <AfterDelivery order={order} onRepeat={repeat} canRepeat={!!menu} />
+            <ClubCardView number={order.number} token={token} delivered />
+          </>
+        )}
+        {order.orderStatus === 'cancelado' &&
           (order.groupName ? (
             <Link to={`/equipo/nuevo?nombre=${encodeURIComponent(order.groupName)}`} className="btn primary block">👥 Nuevo pedido de equipo «{order.groupName}»</Link>
           ) : (
-            <button type="button" className="btn primary block" onClick={repeat} disabled={!menu}>🔁 Repetir este pedido</button>
+            <button type="button" className="btn primary block" onClick={repeat} disabled={!menu}>🔁 Volver a pedirlo</button>
           ))}
 
         <section className="card review" aria-label="Tu pedido">
-          <details className="review-items">
-            <summary>
-              <span className="thumbs" aria-hidden="true">
-                {order.items.slice(0, 4).map((l, i) => {
-                  const img = menu?.products.find((p) => p.id === l.productId)?.image;
-                  return img ? <img key={i} src={img} alt="" width={36} height={36} /> : null;
-                })}
-              </span>
-              <span className="grow">
-                <strong>{pieces} producto{pieces === 1 ? '' : 's'}</strong>
-                <span className="muted small"> · ver detalle</span>
-              </span>
-              <span className="price">{order.total != null ? money(order.total) : 'Por confirmar'}</span>
-            </summary>
-            <OrderLines lines={order.items} products={menu?.products ?? []} />
-            <Totals subtotal={order.subtotal} shippingFee={order.shippingFee} total={order.total} fulfillment={order.fulfillment} />
-            <div style={{ height: 10 }} />
-          </details>
+          <OrderSummary order={order} products={menu?.products ?? []} />
           <div className="review-row">
             <span className="icon" aria-hidden="true">{order.fulfillment === 'delivery' ? '🛵' : '🏪'}</span>
             <div className="grow">
@@ -233,8 +217,8 @@ export default function OrderPage() {
           )}
         </section>
 
-        {order.orderStatus !== 'cancelado' && order.orderStatus !== 'cotizando_envio' && (
-          <ClubCardView number={order.number} token={token} delivered={order.orderStatus === 'entregado'} />
+        {!['cancelado', 'cotizando_envio', 'entregado'].includes(order.orderStatus) && (
+          <ClubCardView number={order.number} token={token} delivered={false} />
         )}
 
         <section className="order-help" aria-label="Ayuda">
@@ -394,3 +378,120 @@ function CancelOrder({ number, token, paid, onDone }: { number: string; token: s
     </div>
   );
 }
+
+const clock = (d: Date) => d.toLocaleTimeString('es-MX', { hour: 'numeric', minute: '2-digit', timeZone: 'America/Mexico_City' });
+
+/**
+ * Qué tan firme es la hora: solicitada (aún no la confirmamos), confirmada (ya se está preparando
+ * para esa hora) o una estimación en rango. Nunca una hora exacta sin un cálculo confiable.
+ */
+function TimePromise({ order: o }: { order: PublicOrder }) {
+  if (['cancelado', 'entregado', 'cotizando_envio', 'esperando_pago'].includes(o.orderStatus)) return null;
+  const delivery = o.fulfillment === 'delivery';
+  if (o.scheduledFor) {
+    const confirmed = ['en_preparacion', 'listo', 'en_camino'].includes(o.orderStatus);
+    return (
+      <div className="when-chip">
+        {confirmed ? (
+          <>✅ {delivery ? 'Entrega programada' : 'Recolección programada'}: <strong>{slotLabel(o.scheduledFor)}</strong></>
+        ) : (
+          <>
+            🗓 Horario solicitado: <strong>{slotLabel(o.scheduledFor)}</strong>
+            <span className="muted small" style={{ display: 'block' }}>Lo confirmamos cuando empecemos a prepararlo.</span>
+          </>
+        )}
+      </div>
+    );
+  }
+  const q = o.deliveryQuote;
+  if (q.status === 'quoted' && q.etaText) {
+    return <div className="when-chip">⏱ Estimación: <strong>{q.etaText}</strong> <span className="muted small">· puede variar</span></div>;
+  }
+  if (q.status === 'covered' && q.etaMin != null && q.etaMax != null) {
+    const start = Date.parse(o.createdAt);
+    const from = new Date(start + q.etaMin * 60_000);
+    const to = new Date(start + q.etaMax * 60_000);
+    return (
+      <div className="when-chip">
+        ⏱ Estimación de {delivery ? 'llegada' : 'entrega'}: <strong>entre {clock(from)} y {clock(to)}</strong>
+        <span className="muted small" style={{ display: 'block' }}>Es un cálculo aproximado; te avisamos aquí si cambia.</span>
+      </div>
+    );
+  }
+  return null;
+}
+
+/** Qué se pidió y cuánto se paga, a la vista: tamaño, toppings/extras, cantidades y para quién. */
+function OrderSummary({ order, products }: { order: PublicOrder; products: { id: string; image: string }[] }) {
+  const team = !!order.groupName;
+  const groups = new Map<string, typeof order.items>();
+  order.items.forEach((l) => {
+    const who = team ? l.forWhom || 'Sin nombre' : '';
+    groups.set(who, [...(groups.get(who) ?? []), l]);
+  });
+  return (
+    <div className="order-summary">
+      {[...groups].map(([who, lines]) => (
+        <div key={who || '_'} className="sum-group">
+          {who && (
+            <p className="sum-who">
+              👤 {who} <span className="muted small">· {money(lines.reduce((s, l) => s + l.lineTotal, 0))}</span>
+            </p>
+          )}
+          {lines.map((l, i) => {
+            const img = products.find((p) => p.id === l.productId)?.image;
+            return (
+              <div key={i} className="sum-line">
+                {img ? <img src={img} alt="" width={44} height={44} /> : <span />}
+                <div className="grow">
+                  <strong>{l.qty}× {l.name}</strong>
+                  {!l.choices && <span className="muted"> · {l.sizeLabel}</span>}
+                  <LineDetails line={team ? { ...l, forWhom: '' } : l} />
+                </div>
+                <span className="price">{money(l.lineTotal)}</span>
+              </div>
+            );
+          })}
+        </div>
+      ))}
+      <Totals subtotal={order.subtotal} shippingFee={order.shippingFee} total={order.total} fulfillment={order.fulfillment} />
+      {order.paymentMethod === 'contra_entrega' && order.paymentStatus !== 'aprobado' && order.total != null && (
+        <p className="small" style={{ margin: 0 }}>
+          💵 Pagas {money(order.total)} {order.fulfillment === 'pickup' ? 'al recoger' : 'al recibir'}
+          {order.cashTendered != null && order.cashTendered > order.total ? ` · llevamos ${money(order.cashTendered - order.total)} de cambio` : ''}.
+        </p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Después de entregar (momento de alta intención): repetir, y compartir con el equipo.
+ * Una sola tarjeta; Frésia Club va justo debajo con los sellos.
+ */
+function AfterDelivery({ order, onRepeat, canRepeat }: { order: PublicOrder; onRepeat: () => void; canRepeat: boolean }) {
+  const [shared, setShared] = useState(false);
+  const link = `${window.location.origin}/?utm_source=referido&utm_medium=pedido&utm_campaign=post-entrega`;
+  async function share() {
+    const text = '🍓 Pedimos fresas con crema de Frésia a la oficina. Cada quien elige lo suyo y llega todo junto:';
+    if (navigator.share) await navigator.share({ title: 'Frésia Office', text, url: link }).catch(() => undefined);
+    else {
+      await navigator.clipboard.writeText(`${text} ${link}`).catch(() => undefined);
+      setShared(true);
+    }
+  }
+  return (
+    <section className="card stack after-delivery" aria-labelledby="after-title">
+      <h2 id="after-title">¿Se antoja otra vez?</h2>
+      {order.groupName ? (
+        <Link to={`/equipo/nuevo?nombre=${encodeURIComponent(order.groupName)}`} className="btn primary block">👥 Nuevo pedido de equipo «{order.groupName}»</Link>
+      ) : (
+        <button type="button" className="btn primary block" onClick={onRepeat} disabled={!canRepeat}>🔁 Repetir este pedido</button>
+      )}
+      <button type="button" className="linkbtn" style={{ justifySelf: 'center' }} onClick={share}>
+        {shared ? '✓ Enlace copiado' : '📣 Comparte Frésia Office con tu equipo'}
+      </button>
+    </section>
+  );
+}
+
