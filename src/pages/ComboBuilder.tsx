@@ -82,7 +82,7 @@ export default function ComboBuilder({ product, editing }: { product: Product; e
     if (group && !editing) {
       setAdding(true);
       setAddError(null);
-      api(`/api/groups/${group.code}/items`, { body: { memberName: group.memberName, memberKey: memberKey(), line, itemId } }).then(
+      api(`/api/groups/${group.code}/items`, { body: { memberName: group.memberName, memberKey: memberKey(group.code), line, itemId } }).then(
         () => {
           trackGroupJoin(group.code);
           track('agregar_carrito', { mode: 'equipo', productId: product.id });

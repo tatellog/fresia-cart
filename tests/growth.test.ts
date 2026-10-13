@@ -244,6 +244,35 @@ describe('pedido de equipo', () => {
     expect(html).toContain('<div id="root">');
   });
 
+  it('identidad por llave, no por nombre: usar el nombre de otro no da acceso a lo suyo', async () => {
+    const g = await group();
+    await g.add('Lali', 'key-lali-123456', item('clasica', 'chico'));
+    // Alguien escribe «Lali» desde otro teléfono: es otra persona.
+    await g.add('Lali', 'key-impostor-1234', item('uvas', 'chico'));
+    const v = (await t.api('GET', `/api/groups/${g.code}?k=key-impostor-1234`)).body;
+    expect(v.participants.map((p: any) => [p.name, p.mine])).toEqual([['Lali', false], ['Lali (2)', true]]);
+    const lali = v.items.find((i: any) => i.line.productId === 'clasica');
+    expect((await t.api('POST', `/api/groups/${g.code}/items/${lali.id}/delete`, { memberKey: 'key-impostor-1234' })).status).toBe(403);
+    // Renombrarse cambia SOLO lo propio.
+    await t.api('POST', `/api/groups/${g.code}/join`, { memberName: 'Tania Anahí', memberKey: 'key-impostor-1234' });
+    const after = (await t.api('GET', `/api/groups/${g.code}`)).body.items.map((i: any) => [i.memberName, i.line.forWhom]);
+    expect(after).toEqual([['Lali', 'Lali'], ['Tania Anahí', 'Tania Anahí']]);
+    // Solo el organizador cierra.
+    expect((await t.api('POST', `/api/groups/${g.code}/close`, { adminToken: 'key-impostor-1234' })).status).toBe(403);
+  });
+
+  it('al entregar se guarda la hora para confirmarla al cliente', async () => {
+    const g = await group();
+    await g.add('Ana', 'key-ana-123456', item('clasica', 'chico'));
+    const r = await t.api('POST', '/api/orders', pickup({ items: [], group: { code: g.code, token: g.adminToken } }));
+    await login();
+    const id = (await t.api('GET', '/api/admin/orders?filter=todos')).body.orders[0].id;
+    for (const s of ['en_preparacion', 'listo', 'entregado']) await t.api('POST', `/api/admin/orders/${id}/status`, { status: s });
+    const pub = (await t.api('GET', `/api/orders/${r.body.number}?t=${r.body.token}`)).body.order;
+    expect(pub.deliveredAt).not.toBeNull();
+    expect(pub.paymentStatus).toBe('por_cobrar'); // entregar no marca pagado
+  });
+
   it('respeta la hora límite', async () => {
     const g = (await t.api('POST', '/api/groups', { name: 'Junta', organizerName: 'Ana', closesInMinutes: 10 })).body;
     const add = () => t.api('POST', `/api/groups/${g.code}/items`, { memberName: 'Luis', memberKey: 'key-luis-123456', line: item('clasica', 'chico') });

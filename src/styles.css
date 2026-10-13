@@ -280,6 +280,11 @@ p {
 .sum-line img { width: 44px; height: 44px; border-radius: 10px; object-fit: cover; }
 .sum-line p { margin: 2px 0 0; }
 
+/* Estado del pago en un pedido entregado */
+.pay-state { margin: 0; padding: 10px 12px; border-radius: var(--radius-sm); font-size: 0.95rem; }
+.pay-state.ok { background: var(--ok-bg); color: var(--ok); font-weight: 600; }
+.pay-state.pending { background: var(--warn-bg); color: var(--warn); }
+
 /* Estado del pedido */
 .order-hero { display: grid; gap: 12px; }
 .order-hero h1 { font-size: 1.45rem; }
@@ -1114,3 +1119,4 @@ legend {
 .gift-cta { display: flex; align-items: center; gap: 12px; text-align: left; border: 0; width: 100%; padding: 14px 16px; border-radius: var(--radius); background: var(--rose-soft); color: var(--choc); cursor: pointer; font: inherit; }
 .gift-cta strong { color: var(--red-ink); }
 .linklike { background: none; border: 0; padding: 0; font: inherit; color: var(--red-ink); text-decoration: underline; cursor: pointer; }
+.group-banner.closed { background: var(--warn-bg); color: var(--warn); }

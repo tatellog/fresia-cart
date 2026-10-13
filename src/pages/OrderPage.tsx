@@ -140,6 +140,7 @@ export default function OrderPage() {
             <Progress order={order} />
           )}
 
+          {order.orderStatus === 'entregado' && <PaymentState order={order} />}
           {order.canPay && !verifying && (
             <button type="button" className="btn primary block" onClick={pay} disabled={paying}>
               {paying ? <Spinner label="Abriendo pago…" /> : order.paymentStatus === 'sin_pagar' ? `Pagar ${money(order.total!)}` : `Intentar de nuevo · ${money(order.total!)}`}
@@ -170,12 +171,6 @@ export default function OrderPage() {
           </section>
         )}
 
-        {order.orderStatus === 'entregado' && (
-          <>
-            <AfterDelivery order={order} onRepeat={repeat} canRepeat={!!menu} />
-            <ClubCardView number={order.number} token={token} delivered />
-          </>
-        )}
         {order.orderStatus === 'cancelado' &&
           (order.groupName ? (
             <Link to={`/equipo/nuevo?nombre=${encodeURIComponent(order.groupName)}`} className="btn primary block">👥 Nuevo pedido de equipo «{order.groupName}»</Link>
@@ -217,6 +212,13 @@ export default function OrderPage() {
           )}
         </section>
 
+        {/* Primero qué se entregó y el pago; después, la invitación a repetir. */}
+        {order.orderStatus === 'entregado' && (
+          <>
+            <AfterDelivery order={order} onRepeat={repeat} canRepeat={!!menu} />
+            <ClubCardView number={order.number} token={token} delivered />
+          </>
+        )}
         {!['cancelado', 'cotizando_envio', 'entregado'].includes(order.orderStatus) && (
           <ClubCardView number={order.number} token={token} delivered={false} />
         )}
@@ -256,6 +258,15 @@ function WhatsAppButton({ href, label, primary }: { href: string | null; label: 
 }
 
 function headline(o: PublicOrder, verifying: boolean): { title: string; body: string; spinner?: boolean } {
+  if (o.orderStatus === 'entregado') {
+    const d = o.deliveredAt ? new Date(o.deliveredAt) : null;
+    const day = d ? d.toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'short', timeZone: 'America/Mexico_City' }) : '';
+    return {
+      title: o.fulfillment === 'delivery' ? '✅ Entrega completada' : '✅ Pedido recogido',
+      // clock() ya termina en «a.m.»/«p.m.»: no se agrega otro punto.
+      body: `${o.fulfillment === 'delivery' ? 'Entregamos tu pedido' : 'Recogiste tu pedido'}${d ? ` el ${day} a las ${clock(d)}` : '.'} ¡Gracias!`,
+    };
+  }
   if (o.orderStatus === 'cancelado') {
     return {
       title: 'Pedido cancelado',
@@ -269,7 +280,7 @@ function headline(o: PublicOrder, verifying: boolean): { title: string; body: st
     const when = o.fulfillment === 'pickup' ? 'al recoger (efectivo o tarjeta)' : 'en efectivo al recibir';
     const change = o.cashTendered != null && o.total != null && o.cashTendered > o.total ? ` Te llevamos ${money(o.cashTendered - o.total)} de cambio.` : '';
     return {
-      title: o.orderStatus === 'entregado' ? '¡Entregado!' : o.orderStatus === 'recibido' ? 'Pedido recibido' : nextTitle(o.orderStatus),
+      title: o.orderStatus === 'recibido' ? 'Pedido recibido' : nextTitle(o.orderStatus),
       body: `${nextStep(o.orderStatus, o.fulfillment === 'delivery')} ${o.paymentStatus === 'aprobado' ? '' : `Pagas ${o.total != null ? money(o.total) : ''} ${when}.${change}`}`.trim(),
     };
   }
@@ -386,8 +397,20 @@ const clock = (d: Date) => d.toLocaleTimeString('es-MX', { hour: 'numeric', minu
  * para esa hora) o una estimación en rango. Nunca una hora exacta sin un cálculo confiable.
  */
 function TimePromise({ order: o }: { order: PublicOrder }) {
+  // Se recalcula cada 30 s: una estimación vencida no se queda en pantalla como si fuera vigente.
+  const [, tick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => tick((n) => n + 1), 30_000);
+    return () => clearInterval(id);
+  }, []);
   if (['cancelado', 'entregado', 'cotizando_envio', 'esperando_pago'].includes(o.orderStatus)) return null;
   const delivery = o.fulfillment === 'delivery';
+  if (o.orderStatus === 'en_camino' && delivery) {
+    return <div className="when-chip">🛵 <strong>Va en camino.</strong> <span className="muted small">La hora de llegada se calcula con la ubicación del repartidor cuando la comparte.</span></div>;
+  }
+  if (o.orderStatus === 'listo' && !delivery) {
+    return <div className="when-chip">🛍️ <strong>Listo para recoger</strong> en Frésia.</div>;
+  }
   if (o.scheduledFor) {
     const confirmed = ['en_preparacion', 'listo', 'en_camino'].includes(o.orderStatus);
     return (
@@ -411,10 +434,18 @@ function TimePromise({ order: o }: { order: PublicOrder }) {
     const start = Date.parse(o.createdAt);
     const from = new Date(start + q.etaMin * 60_000);
     const to = new Date(start + q.etaMax * 60_000);
+    if (Date.now() > to.getTime()) {
+      return (
+        <div className="when-chip">
+          ⏱ <strong>Va un poco más tarde de lo estimado</strong> ({clock(from)}–{clock(to)}).
+          <span className="muted small" style={{ display: 'block' }}>Esta página se actualiza sola en cuanto avance.</span>
+        </div>
+      );
+    }
     return (
       <div className="when-chip">
         ⏱ Estimación de {delivery ? 'llegada' : 'entrega'}: <strong>entre {clock(from)} y {clock(to)}</strong>
-        <span className="muted small" style={{ display: 'block' }}>Es un cálculo aproximado; te avisamos aquí si cambia.</span>
+        <span className="muted small" style={{ display: 'block' }}>Es un cálculo aproximado; se ajusta aquí cuando tu pedido avanza.</span>
       </div>
     );
   }
@@ -455,7 +486,7 @@ function OrderSummary({ order, products }: { order: PublicOrder; products: { id:
         </div>
       ))}
       <Totals subtotal={order.subtotal} shippingFee={order.shippingFee} total={order.total} fulfillment={order.fulfillment} />
-      {order.paymentMethod === 'contra_entrega' && order.paymentStatus !== 'aprobado' && order.total != null && (
+      {order.paymentMethod === 'contra_entrega' && order.paymentStatus !== 'aprobado' && order.total != null && order.orderStatus !== 'entregado' && (
         <p className="small" style={{ margin: 0 }}>
           💵 Pagas {money(order.total)} {order.fulfillment === 'pickup' ? 'al recoger' : 'al recibir'}
           {order.cashTendered != null && order.cashTendered > order.total ? ` · llevamos ${money(order.cashTendered - order.total)} de cambio` : ''}.
@@ -493,5 +524,21 @@ function AfterDelivery({ order, onRepeat, canRepeat }: { order: PublicOrder; onR
       </button>
     </section>
   );
+}
+
+/** Pago de un pedido entregado, separado de la entrega: no pide pagar si solo falta registrarlo. */
+function PaymentState({ order: o }: { order: PublicOrder }) {
+  if (o.paymentStatus === 'aprobado') {
+    return <p className="pay-state ok">{o.paymentMethod === 'online' ? '💳 Pagado en línea' : '💵 Pago en efectivo registrado'}{o.total != null ? ` · ${money(o.total)}` : ''}</p>;
+  }
+  if (o.paymentMethod === 'contra_entrega') {
+    return (
+      <p className="pay-state pending">
+        💵 <strong>Pago pendiente de registro</strong> · {o.total != null ? money(o.total) : ''}
+        <span className="small" style={{ display: 'block' }}>Si ya pagaste {o.fulfillment === 'delivery' ? 'al repartidor' : 'en Frésia'}, no tienes que hacer nada: solo falta que lo registremos.</span>
+      </p>
+    );
+  }
+  return null;
 }
 

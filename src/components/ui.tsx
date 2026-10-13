@@ -1,7 +1,8 @@
-import { useId } from 'react';
+import { useEffect, useId } from 'react';
 import type { InputHTMLAttributes, ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useMenu } from '../lib/menu';
+import { api } from '../lib/api';
 import { useCart } from '../lib/cart';
 import { activeGroup, setActiveGroup } from '../lib/groupState';
 import { useState } from 'react';
@@ -96,7 +97,27 @@ export function CheckoutSteps({ current }: { current: 'entrega' | 'pago' }) {
 /** Aviso cuando este teléfono está agregando a un pedido de equipo. */
 export function GroupModeBanner() {
   const [g, setG] = useState(activeGroup);
+  const [closed, setClosed] = useState(false);
+  // Si quien organiza cierra mientras eliges, te enteras aquí (no al intentar agregar).
+  useEffect(() => {
+    if (!g) return;
+    const check = () => api<{ closed: boolean }>(`/api/groups/${encodeURIComponent(g.code)}`).then((r) => setClosed(r.closed), () => undefined);
+    void check();
+    const id = setInterval(check, 15000);
+    return () => clearInterval(id);
+  }, [g]);
   if (!g) return null;
+  if (closed) {
+    return (
+      <div className="group-banner closed" role="alert">
+        <span>🔒 El pedido <strong>«{g.name}»</strong> ya cerró: no se pueden agregar más productos.</span>
+        <span className="row" style={{ gap: 12 }}>
+          <Link to={`/equipo/${g.code}`}>Ver lo que se pidió</Link>
+          <button type="button" className="linkbtn" onClick={() => { setActiveGroup(null); setG(null); }}>Entendido</button>
+        </span>
+      </div>
+    );
+  }
   return (
     <div className="group-banner" role="status">
       <span>

@@ -146,10 +146,22 @@ const CLOSED_MSG = 'Este pedido de equipo ya cerró: ya no se pueden agregar pro
 export async function joinGroup(ctx: Ctx, code: string, input: { memberName: string; memberKey: string }) {
   const g = await getGroupRow(ctx.db, code);
   if (isClosed(g, ctx.now())) throw new HttpError(409, CLOSED_MSG, { code: 'group_closed' });
-  await ctx.db.query(
-    `insert into office.group_members (group_id, member_key, name) values ($1, $2, $3)
-     on conflict (group_id, member_key) do update set name = excluded.name`,
-    [g.id, input.memberKey, input.memberName],
+  await ctx.db.tx(async (q) => {
+    await q.query(
+      `insert into office.group_members (group_id, member_key, name) values ($1, $2, $3)
+       on conflict (group_id, member_key) do update set name = excluded.name`,
+      [g.id, input.memberKey, input.memberName],
+    );
+    await renameOwnItems(q, g.id, input.memberKey, input.memberName);
+  });
+}
+
+/** Cambiar tu nombre renombra SOLO lo que agregaste con tu llave; nunca lo de otra persona. */
+async function renameOwnItems(q: DB, groupId: string, key: string, name: string) {
+  await q.query(
+    `update office.group_items set member_name = $3, line = jsonb_set(line, '{forWhom}', to_jsonb($3::text))
+     where group_id = $1 and member_key = $2 and member_name <> $3`,
+    [groupId, key, name],
   );
 }
 
@@ -173,6 +185,7 @@ export async function addGroupItem(ctx: Ctx, code: string, input: { memberName: 
        on conflict (group_id, member_key) do update set name = excluded.name`,
       [g.id, input.memberKey, input.memberName],
     );
+    await renameOwnItems(q, g.id, input.memberKey, input.memberName);
     await q.query(
       'insert into office.group_items (id, group_id, member_name, member_key, line) values ($1, $2, $3, $4, $5::jsonb) on conflict (id) do nothing',
       [input.itemId ?? randomUUID(), g.id, input.memberName, input.memberKey, JSON.stringify(line)],

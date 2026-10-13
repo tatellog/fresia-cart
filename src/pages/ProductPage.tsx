@@ -94,7 +94,7 @@ export default function ProductPage() {
       setAdding(true);
       setAddError(null);
       try {
-        await api(`/api/groups/${group.code}/items`, { body: { memberName: group.memberName, memberKey: memberKey(), line, itemId } });
+        await api(`/api/groups/${group.code}/items`, { body: { memberName: group.memberName, memberKey: memberKey(group.code), line, itemId } });
         trackGroupJoin(group.code);
         track('agregar_carrito', { mode: 'equipo', productId: product!.id });
         navigate(`/equipo/${group.code}`);

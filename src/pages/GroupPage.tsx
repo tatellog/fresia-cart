@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../lib/api';
 import { money } from '../lib/format';
-import { activeGroup, groupAdminToken, memberKey, setActiveGroup, setGroupCheckout } from '../lib/groupState';
+import { activeGroup, groupAdminToken, memberKey, newMemberKey, setActiveGroup, setGroupCheckout } from '../lib/groupState';
 import { useMenu } from '../lib/menu';
 import { DemoBanner, Spinner, StickyAction, TopBar } from '../components/ui';
 import { LineDetails } from './parts';
@@ -45,7 +45,7 @@ export default function GroupPage() {
 
   const load = useCallback(async () => {
     try {
-      setG(await api<GroupView>(`/api/groups/${encodeURIComponent(code)}?k=${encodeURIComponent(memberKey())}${admin ? `&a=${encodeURIComponent(admin)}` : ''}`));
+      setG(await api<GroupView>(`/api/groups/${encodeURIComponent(code)}?k=${encodeURIComponent(memberKey(code))}${admin ? `&a=${encodeURIComponent(admin)}` : ''}`));
       setError(null);
     } catch (e) {
       setError((e as Error).message);
@@ -83,13 +83,23 @@ export default function GroupPage() {
     if (name.trim().length < 2 || joining) return;
     setJoining(true);
     try {
-      await api(`/api/groups/${code}/join`, { body: { memberName: name.trim(), memberKey: memberKey() } });
+      await api(`/api/groups/${code}/join`, { body: { memberName: name.trim(), memberKey: memberKey(code) } });
       setActiveGroup({ code: g!.code, name: g!.name, memberName: name.trim() });
       navigate('/');
     } catch (e) {
       setError((e as Error).message);
       setJoining(false);
     }
+  }
+
+  // Quién soy en este pedido según la llave de este teléfono (no según el nombre escrito).
+  const me = g.participants.find((p) => p.mine);
+  function otherPerson() {
+    newMemberKey(code);
+    setActiveGroup(null);
+    setName('');
+    void load();
+    document.getElementById('member')?.focus();
   }
 
   async function setOpen(open: boolean) {
@@ -100,7 +110,7 @@ export default function GroupPage() {
   }
 
   async function remove(id: string) {
-    await api(`/api/groups/${code}/items/${id}/delete`, { body: { memberKey: memberKey(), adminToken: admin ?? undefined } }).catch((e: Error) => setError(e.message));
+    await api(`/api/groups/${code}/items/${id}/delete`, { body: { memberKey: memberKey(code), adminToken: admin ?? undefined } }).catch((e: Error) => setError(e.message));
     void load();
   }
 
@@ -173,6 +183,12 @@ export default function GroupPage() {
               <input id="member" className="input" value={name} onChange={(e) => setName(e.target.value)} maxLength={40} autoComplete="given-name" />
             </div>
             <button type="button" className="btn primary" disabled={name.trim().length < 2 || joining} onClick={join}>{joining ? 'Entrando…' : 'Elegir mi Frésia'}</button>
+            {me && (
+              <p className="small" style={{ margin: 0 }}>
+                En este teléfono entraste como <strong>{me.name}</strong>; solo tú puedes quitar o cambiar lo tuyo.{' '}
+                <button type="button" className="linkbtn small" onClick={otherPerson}>¿Eres otra persona? Entra con tu nombre</button>
+              </p>
+            )}
             <p className="muted small">Sin mínimo: cada quien pide lo que quiera, desde 1 pieza.</p>
           </section>
         )}
@@ -261,8 +277,11 @@ function StateNotice({ g, deadline }: { g: GroupView; deadline: string | null })
       return <div className="notice">🟢 Abierto · {deadline ? `se pueden agregar productos hasta ${deadline}` : 'sin hora límite: cierra cuando quien organiza haga el pedido.'}</div>;
     case 'cerrado':
       return (
-        <div className="notice warn">
-          🔒 <strong>Cerrado.</strong> Ya no se aceptan selecciones nuevas. {g.isOrganizer ? 'Revisa y paga cuando estés listo.' : `${g.organizerName} está por hacer el pedido.`}
+        <div className="notice warn" role="alert">
+          🔒 <strong>Pedido cerrado.</strong> Ya nadie puede agregar, quitar ni cambiar productos.{' '}
+          {g.isOrganizer
+            ? 'Revisa y paga cuando estés listo; se cobra exactamente lo que aparece abajo.'
+            : `${g.organizerName} hará el pedido con exactamente lo que aparece abajo. Si estabas eligiendo algo y no alcanzaste a agregarlo, ya no entra.`}
         </div>
       );
     case 'pendiente_pago':

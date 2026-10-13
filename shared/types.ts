@@ -224,6 +224,8 @@ export type RefundStatus = 'no_aplica' | 'pendiente' | 'reembolsado';
 
 export type PublicOrder = {
   number: string;
+  /** Hora en que se entregó (o se recogió). */
+  deliveredAt: string | null;
   createdAt: string;
   customerName: string;
   customerPhone: string;

@@ -78,6 +78,7 @@ export type OrderRow = {
   collected_by: string | null;
   collect_pending_at: Date | string | null;
   collect_pending_reason: string | null;
+  delivered_at: Date | string | null;
   demo: boolean;
   paid_at: Date | string | null;
   last_reconcile_at: Date | string | null;
@@ -279,6 +280,7 @@ export function canPay(row: OrderRow): boolean {
 export function toPublic(row: OrderRow): PublicOrder {
   return {
     number: row.number,
+    deliveredAt: isoOrNull(row.delivered_at),
     createdAt: iso(row.created_at),
     customerName: row.customer_name,
     customerPhone: row.customer_phone,
@@ -366,7 +368,10 @@ export async function setOrderStatus(ctx: Ctx, id: string, status: OrderStatus, 
     // Al dejar de ir en camino, se borra la ubicación del repartidor (privacidad).
     if (status !== 'en_camino') await q.query('delete from office.order_tracking where order_id = $1', [id]);
     await addEvent(q, id, 'estado', status, actor);
-    return (await q.one<OrderRow>('update office.orders set order_status = $2, updated_at = now() where id = $1 returning *', [id, status]))!;
+    return (await q.one<OrderRow>(
+      "update office.orders set order_status = $2, delivered_at = case when $2 = 'entregado' then now() else delivered_at end, updated_at = now() where id = $1 returning *",
+      [id, status],
+    ))!;
   });
 }
 
