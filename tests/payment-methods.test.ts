@@ -62,7 +62,7 @@ describe('aviso al panel (push)', () => {
   it('pedido pagado al recibir: dice cuánto cobrar', async () => {
     const r = await t.api('POST', '/api/orders', orderBody({ paymentMethod: 'contra_entrega' }));
     await tick(50);
-    expect(push(r.body.number)!.body).toContain('💵 COBRAR EN EFECTIVO $756 · Monto con el que paga: no indicado'); // $726 + $30 de envío
+    expect(push(r.body.number)!.body).toContain('💵 COBRAR EN EFECTIVO $726 · Monto con el que paga: no indicado'); // $696 + $30 de envío
     expect(push(r.body.number)!.url).toMatch(/^\/admin\/pedidos\//);
   });
 
@@ -84,11 +84,11 @@ describe('efectivo al recibir: ¿cobrar o ya está pagado?', () => {
     expect(r.body.order.cashTendered).toBe(80000);
     await tick(50);
     const msg = t.ctx.notifier.pushOutbox.find((m) => m.title.includes(r.body.number))!;
-    expect(msg.body).toContain('💵 COBRAR EN EFECTIVO $756 · Paga con $800 → llevar $44 de cambio');
+    expect(msg.body).toContain('💵 COBRAR EN EFECTIVO $726 · Paga con $800 → llevar $74 de cambio');
   });
 
   it('monto exacto', async () => {
-    const r = await t.api('POST', '/api/orders', orderBody({ paymentMethod: 'contra_entrega', cashTendered: 75600 }));
+    const r = await t.api('POST', '/api/orders', orderBody({ paymentMethod: 'contra_entrega', cashTendered: 72600 }));
     await tick(50);
     expect(t.ctx.notifier.pushOutbox.find((m) => m.title.includes(r.body.number))!.body).toContain('Paga con el monto exacto');
   });
@@ -109,7 +109,7 @@ describe('efectivo al recibir: ¿cobrar o ya está pagado?', () => {
     const o = await adminOrder(r.body.number);
     const { collectInfo } = await import('../shared/status');
     const { money } = await import('../shared/money');
-    expect(collectInfo(o, money)).toMatchObject({ tone: 'collect', label: 'COBRAR EN EFECTIVO $756', change: 4400 });
+    expect(collectInfo(o, money)).toMatchObject({ tone: 'collect', label: 'COBRAR EN EFECTIVO $726', change: 7400 });
     const c = (await t.api('POST', `/api/admin/orders/${o.id}/collected`, {})).body.order;
     expect(collectInfo(c, money)).toMatchObject({ tone: 'paid', label: 'COBRADO' });
   });

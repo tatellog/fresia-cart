@@ -13,15 +13,15 @@ describe('menú en línea', () => {
     const { products } = (await t.api('GET', '/api/menu')).body;
     const table = Object.fromEntries(products.map((p: any) => [p.name, p.sizes.map((z: any) => z.price / 100)]));
     expect(table).toEqual({
-      'Frésia Clásica': [100, 120, 140],
-      Uvas: [100, 120, 140],
-      'Mix Frésia': [100, 120, 140],
-      'Frésia Balance': [110, 130, 150],
-      'Frésia Choco Crema': [120, 140, 160],
-      'Chocolate sin crema': [140],
-      'Pan tradicional': [45],
-      'Pan relleno Frésia': [100],
-      'Waffle Frésia': [104],
+      'Frésia Clásica': [95, 115, 135],
+      Uvas: [95, 115, 135],
+      'Mix Frésia': [95, 115, 135],
+      'Frésia Balance': [105, 125, 145],
+      'Frésia Choco Crema': [115, 135, 155],
+      'Chocolate sin crema': [135],
+      'Pan tradicional': [40],
+      'Pan relleno Frésia': [95],
+      'Waffle Frésia': [99],
       'Pausa Frésia': [640],
       'Dulce Tradición': [500],
       'Cumple con Frésia': [564],
@@ -88,8 +88,8 @@ describe('toppings', () => {
 
   it('2 incluidos, adicionales a $18 y premium a $25 sin gastar incluidos', async () => {
     const l = await unit({ productId: 'clasica', sizeId: 'chico', toppingIds: ['nuez', 'pistache', 'coco', 'oreo'], qty: 1 });
-    // $100 + pistache $25 + oreo adicional $18 (nuez y coco incluidos)
-    expect(l.unitPrice).toBe(10000 + 2500 + 1800);
+    // $95 + pistache $25 + oreo adicional $18 (nuez y coco incluidos)
+    expect(l.unitPrice).toBe(9500 + 2500 + 1800);
     expect(l.toppings.map((x: any) => [x.id, x.included, x.price])).toEqual([
       ['nuez', true, 0], ['pistache', false, 2500], ['coco', true, 0], ['oreo', false, 1800],
     ]);
@@ -97,22 +97,22 @@ describe('toppings', () => {
 
   it('el mismo topping se puede repetir: doble nuez cuenta como 2', async () => {
     const l = await unit({ productId: 'clasica', sizeId: 'chico', toppingIds: ['nuez', 'nuez'], qty: 1 });
-    expect(l.unitPrice).toBe(10000); // los 2 incluidos
+    expect(l.unitPrice).toBe(9500); // los 2 incluidos
     expect(l.toppings.map((x: any) => x.id)).toEqual(['nuez', 'nuez']);
     const triple = await unit({ productId: 'clasica', sizeId: 'chico', toppingIds: ['nuez', 'nuez', 'nuez'], qty: 1 });
-    expect(triple.unitPrice).toBe(10000 + 1800); // la tercera es adicional
+    expect(triple.unitPrice).toBe(9500 + 1800); // la tercera es adicional
     const r = await create([{ productId: 'clasica', sizeId: 'chico', toppingIds: ['nuez', 'nuez', 'nuez', 'nuez'], qty: 2 }]);
     expect(r.status).toBe(422);
     expect(r.body.error).toMatch(/hasta 3 veces el mismo topping/);
   });
 
   it('el pan relleno incluye solo 1', async () => {
-    expect((await unit({ productId: 'pan-relleno', sizeId: 'pieza', toppingIds: ['nuez', 'coco'], qty: 1 })).unitPrice).toBe(10000 + 1800);
+    expect((await unit({ productId: 'pan-relleno', sizeId: 'pieza', toppingIds: ['nuez', 'coco'], qty: 1 })).unitPrice).toBe(9500 + 1800);
   });
 
   it('en el Waffle el Turín y las mermeladas cuentan como incluidos', async () => {
-    expect((await unit({ productId: 'waffle', sizeId: 'pieza', toppingIds: ['turin', 'mermelada-fresa'], qty: 1 })).unitPrice).toBe(10400);
-    expect((await unit({ productId: 'waffle', sizeId: 'pieza', toppingIds: ['turin', 'mermelada-fresa', 'lotus'], qty: 1 })).unitPrice).toBe(10400 + 2500);
+    expect((await unit({ productId: 'waffle', sizeId: 'pieza', toppingIds: ['turin', 'mermelada-fresa'], qty: 1 })).unitPrice).toBe(9900);
+    expect((await unit({ productId: 'waffle', sizeId: 'pieza', toppingIds: ['turin', 'mermelada-fresa', 'lotus'], qty: 1 })).unitPrice).toBe(9900 + 2500);
   });
 
   it('el pan tradicional no lleva toppings', async () => {

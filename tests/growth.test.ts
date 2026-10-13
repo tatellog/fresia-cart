@@ -130,7 +130,7 @@ describe('pedido de equipo', () => {
     expect((await g.add('Sofía', 'key-sofi-123456', item('pan-relleno', 'pieza', ['cajeta']))).status).toBe(201);
     const v = (await t.api('GET', `/api/groups/${g.code}?k=key-luis-123456`)).body;
     expect(v.items.map((i: any) => [i.memberName, i.line.forWhom, i.mine])).toEqual([['Ana', 'Ana', false], ['Luis', 'Luis', true], ['Sofía', 'Sofía', false]]);
-    expect(v.subtotal).toBe(10000 + 14000 + 10000);
+    expect(v.subtotal).toBe(9500 + 13500 + 9500);
     expect(v.isOrganizer).toBe(false);
     expect((await t.api('GET', `/api/groups/${g.code}?a=${g.adminToken}`)).body.isOrganizer).toBe(true);
   });
@@ -153,7 +153,7 @@ describe('pedido de equipo', () => {
     const ref = { code: g.code, token: g.adminToken };
     const q = await t.api('POST', '/api/quote', { fulfillment: 'pickup', address: null, items: [], group: ref });
     expect(q.body.errors).toEqual([]);
-    expect(q.body.total).toBe(30000);
+    expect(q.body.total).toBe(28500);
     const r = await t.api('POST', '/api/orders', pickup({ items: [], group: ref }));
     expect(r.status).toBe(201);
     expect(r.body.order.groupName).toBe('Equipo de Ventas');

@@ -8,8 +8,8 @@ let t: Awaited<ReturnType<typeof start>>;
 beforeEach(async () => { t = await start(); });
 afterEach(async () => { await t.close(); });
 
-// Menú en línea: Clásica mediano $120, adicional $18, Waffle $104; envío de ejemplo $30.
-const EXPECTED_SUBTOTAL = (12000 + 1800) * 3 + 10400 * 3; // $726 (mínimo 3 piezas por producto)
+// Menú en línea: Clásica mediano $115, adicional $18, Waffle $99; envío de ejemplo $30.
+const EXPECTED_SUBTOTAL = (11500 + 1800) * 3 + 9900 * 3; // $696 (mínimo 3 piezas por producto)
 const EXPECTED_TOTAL = EXPECTED_SUBTOTAL + 3000;
 
 async function createPaidReadyOrder(body = orderBody()) {
@@ -30,7 +30,7 @@ describe('totales', () => {
     expect(r.body.order.subtotal).toBe(EXPECTED_SUBTOTAL);
     expect(r.body.order.shippingFee).toBe(3000);
     expect(r.body.order.total).toBe(EXPECTED_TOTAL);
-    expect(r.body.order.items[0].unitPrice).toBe(13800);
+    expect(r.body.order.items[0].unitPrice).toBe(13300); // mediano $115 + adicional $18
   });
 
   it('rechaza productos fuera del menú, tamaños inexistentes y cantidades inválidas', async () => {
@@ -300,7 +300,7 @@ describe('panel', () => {
       { productId: 'waffle', sizeId: 'pieza', toppingIds: [], qty: 3 },
       { productId: 'clasica', sizeId: 'chico', toppingIds: [], qty: 3 },
     ] }));
-    expect(r.body.order.total).toBe(12000 * 3 + 10000 * 3);
+    expect(r.body.order.total).toBe(12000 * 3 + 9500 * 3);
   });
 
   it('el QR permanente redirige al menú y cuenta escaneos', async () => {
