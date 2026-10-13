@@ -7,6 +7,7 @@ import { useMenu } from '../lib/menu';
 import { money } from '../lib/format';
 import { recentOrders } from '../lib/checkout';
 import { CartBar, DemoBanner, Footer, GroupModeBanner, LoadError } from '../components/ui';
+import { SiteHeader } from '../components/SiteHeader';
 import { activeGroup, myGroups } from '../lib/groupState';
 import { GIFT_KEY, emptyGift } from '../components/GiftFields';
 import { load as loadStored, save } from '../lib/storage';
@@ -19,38 +20,61 @@ export default function MenuPage() {
   const { data, error, reload } = useMenu();
   const added = (useLocation().state as { added?: string } | null)?.added;
   const active = useActiveOrder();
+  const group = activeGroup();
 
   return (
     <>
       <DemoBanner />
+      <SiteHeader />
       <GroupModeBanner />
       <main className="page wide">
-        <section className="hero">
-          <img src="/brand/fresia-logo.svg" alt="Frésia, fresas con crema" className="logo" width={132} height={196} />
-          <h1>Fresas con crema para tu oficina</h1>
-          <p className="muted">Para ti o para todo el equipo. Sin crear cuenta.</p>
-          {!activeGroup() && <ModeChoice />}
-          {data && !activeGroup() && (data.rules.minQtyPerItem > 1 || data.rules.minFresias > 1) && (
-            <p className="badge min-banner">
-              {data.rules.minQtyPerItem > 1 ? `Mínimo ${data.rules.minQtyPerItem} piezas por producto · combos desde 1` : `Pedido mínimo: ${data.rules.minFresias} Frésias`}
-            </p>
-          )}
-          {data && <DeliveryTerms d={data.delivery} />}
-          {data?.features?.fresigrama && data.delivery.deliveryEnabled && !activeGroup() && <GiftCta />}
-          {data && !isOpenAt(new Date(), data.schedule) && (
-            <p className="notice closed-banner small">
-              Ahora estamos cerrados{nextOpening(new Date(), data.schedule) ? `; abrimos ${nextOpening(new Date(), data.schedule)}` : ''}{nextOpening(new Date(), data.schedule)?.endsWith('.') ? '' : '.'} Puedes programar tu pedido.
-            </p>
-          )}
-          {active && (
-            <Link to={`/pedido/${active.number}?t=${active.token}`} className="btn ghost small">
-              Ver mi pedido {active.number} · {ORDER_LABEL[active.status]}
-            </Link>
-          )}
-          {(recentOrders().length > 0 || myGroups().length > 0) && (
-            <Link to="/mis-pedidos" className="linkbtn small">Mis pedidos · repetir uno anterior</Link>
-          )}
-        </section>
+        {active && (
+          <Link to={`/pedido/${active.number}?t=${active.token}`} className="active-order">
+            <span>Tu pedido <strong>{active.number}</strong> · {ORDER_LABEL[active.status]}</span>
+            <span aria-hidden="true">Ver →</span>
+          </Link>
+        )}
+
+        {group ? (
+          <section className="hero-team">
+            <p className="eyebrow">Pedido de equipo</p>
+            <h1>Elige lo tuyo para «{group.name}»</h1>
+            <p className="muted">Toca un producto y agrégalo; llega todo junto con tu equipo.</p>
+          </section>
+        ) : (
+          <section className="home-hero" aria-labelledby="hero-title">
+            <div className="copy">
+              <p className="eyebrow">Frésia Office</p>
+              <h1 id="hero-title">El break sabe mejor en equipo.</h1>
+              <p className="lead">Cada quien elige sus fresas. Nosotros llevamos el pedido a tu oficina.</p>
+            </div>
+            <img className="hero-photo" src="/images/combo-pausa.jpg" alt="Frésias clásicas y de chocolate listas para la oficina" width={1200} height={750} fetchPriority="high" />
+            <div className="ctas">
+              <Link to="/equipo/nuevo" className="btn primary cta-main">
+                <span>Crear pedido de equipo</span>
+                <small>Invita a tus compañeros</small>
+              </Link>
+              <a href="#menu" className="btn outline cta-alt" onClick={(e) => { e.preventDefault(); document.getElementById('menu')?.scrollIntoView({ behavior: 'smooth' }); }}>
+                Pedir solo para mí
+              </a>
+              <ol className="how" aria-label="Cómo funciona el pedido de equipo">
+                <li><b>1</b> Crea</li>
+                <li><b>2</b> Comparte el enlace</li>
+                <li><b>3</b> Reciban juntos</li>
+              </ol>
+            </div>
+            {data && <HomeFacts data={data} />}
+            {data && !isOpenAt(new Date(), data.schedule) && (
+              <p className="notice closed-banner small">
+                Ahora estamos cerrados{nextOpening(new Date(), data.schedule) ? `; abrimos ${nextOpening(new Date(), data.schedule)}` : ''}{nextOpening(new Date(), data.schedule)?.endsWith('.') ? '' : '.'} Puedes programar tu pedido.
+              </p>
+            )}
+            {data?.features?.fresigrama && data.delivery.deliveryEnabled && <GiftCta />}
+            {(recentOrders().length > 0 || myGroups().length > 0) && (
+              <Link to="/mis-pedidos" className="linkbtn small" style={{ justifySelf: 'center' }}>Mis pedidos · repetir uno anterior</Link>
+            )}
+          </section>
+        )}
 
         <div aria-live="polite" className="sr-only">{added ? `${added} se agregó al carrito` : ''}</div>
         {added && (
@@ -59,15 +83,24 @@ export default function MenuPage() {
           </div>
         )}
 
-        <section id="menu" aria-labelledby="menu-title" className="stack-lg" style={{ marginTop: 24 }}>
-          <h2 id="menu-title" className="sr-only">Menú</h2>
+        <section id="menu" aria-labelledby="menu-title" className="stack-lg menu-block">
+          <div className="menu-head">
+            <h2 id="menu-title">Menú</h2>
+            {data && sections(data.products).length > 1 && (
+              <nav className="section-nav" aria-label="Secciones del menú">
+                {sections(data.products).map(([title]) => (
+                  <a key={title} href={`#s-${slug(title)}`} onClick={(e) => { e.preventDefault(); document.getElementById(`s-${slug(title)}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }}>{title}</a>
+                ))}
+              </nav>
+            )}
+          </div>
 
           {error && <LoadError message={error} retry={reload} />}
           {!data && !error && <MenuSkeleton />}
           {data &&
             sections(data.products).map(([title, items]) => (
-              <section key={title} className="stack" aria-labelledby={`s-${title}`}>
-                <h2 id={`s-${title}`}>{title}</h2>
+              <section key={title} className="stack" aria-labelledby={`s-${slug(title)}`}>
+                <h3 id={`s-${slug(title)}`} className="section-title">{title}</h3>
                 <div className="grid">
                   {items.map((p) => (
                     <ProductCard key={p.id} product={p} rules={data.rules} />
@@ -86,6 +119,26 @@ export default function MenuPage() {
 }
 
 /** Agrupa por sección, en el orden del primer producto de cada una. */
+const slug = (t: string) => t.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-');
+
+/** Condiciones de un vistazo: a dónde llegamos, cuánto cuesta el envío y el mínimo. */
+function HomeFacts({ data }: { data: MenuResponse }) {
+  const d = data.delivery;
+  const min = data.rules.minQtyPerItem > 1 ? `Mín. ${data.rules.minQtyPerItem} piezas por producto` : data.rules.minFresias > 1 ? `Pedido mínimo: ${data.rules.minFresias} Frésias` : null;
+  return (
+    <ul className="facts" aria-label="Condiciones de entrega">
+      <li>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M12 21s7-6.2 7-12a7 7 0 1 0-14 0c0 5.8 7 12 7 12Z" /><circle cx="12" cy="9" r="2.5" /></svg>
+        {d.deliveryEnabled ? 'Entregas a oficinas cercanas' : 'Por ahora solo para recoger'}
+      </li>
+      {d.deliveryEnabled && d.mode === 'radius' && (
+        <li>Envío {money(d.radiusFee)}{d.freeShippingFrom != null && <> · <strong className="ok-text">gratis desde {money(d.freeShippingFrom)}</strong></>}</li>
+      )}
+      {min && <li>{min}</li>}
+    </ul>
+  );
+}
+
 function sections(products: Product[]): [string, Product[]][] {
   const map = new Map<string, Product[]>();
   for (const p of products) map.set(p.section, [...(map.get(p.section) ?? []), p]);
@@ -145,7 +198,7 @@ function MenuSkeleton() {
 function BusinessSection({ business: b, delivery: d }: { business: BusinessInfo; delivery: MenuResponse['delivery'] }) {
   const pending = <span className="muted">Pendiente de confirmar</span>;
   return (
-    <section aria-labelledby="info-title" className="card flat stack" style={{ marginTop: 48 }}>
+    <section id="info" aria-labelledby="info-title" className="card flat stack" style={{ marginTop: 48 }}>
       <div className="row between">
         <h2 id="info-title">Frésia</h2>
         {b.example && <span className="badge example">Datos por confirmar</span>}
@@ -254,45 +307,5 @@ function GiftCta() {
         )}
       </span>
     </button>
-  );
-}
-
-/** Dos formas de pedir; la de equipo va primero y destacada. */
-function ModeChoice() {
-  return (
-    <div className="mode-choice">
-      <section className="mode-card team" aria-labelledby="mode-team">
-        <h2 id="mode-team">👥 Para tu equipo</h2>
-        <ol className="mode-steps">
-          <li><strong>Crea</strong> el pedido y ponle hora de cierre.</li>
-          <li><strong>Comparte</strong> el enlace: cada quien elige lo suyo.</li>
-          <li><strong>Reciban</strong> todo junto; quien organiza paga una vez.</li>
-        </ol>
-        <Link to="/equipo/nuevo" className="btn primary block">Pedir en equipo</Link>
-      </section>
-      <section className="mode-card" aria-labelledby="mode-solo">
-        <h2 id="mode-solo">🍓 Solo para ti</h2>
-        <p className="muted small">Elige del menú, agrega al carrito y paga al final.</p>
-        <a href="#menu" className="btn secondary block" onClick={(e) => { e.preventDefault(); document.getElementById('menu')?.scrollIntoView({ behavior: 'smooth' }); }}>
-          Ver el menú
-        </a>
-      </section>
-    </div>
-  );
-}
-
-/** Condiciones de entrega antes de elegir productos: a dónde llegamos, cuánto cuesta y desde cuánto es gratis. */
-function DeliveryTerms({ d }: { d: MenuResponse['delivery'] }) {
-  if (!d.deliveryEnabled) {
-    return <p className="small muted" style={{ margin: 0 }}>{d.pickupEnabled ? 'Por ahora solo para recoger en Frésia.' : 'Por ahora no recibimos pedidos en línea.'}</p>;
-  }
-  const where = d.mode === 'radius' ? (d.area ? 'Entregamos a oficinas cerca de Frésia' : `Entregamos a oficinas a menos de ${d.radiusM} m`) : 'Entregamos en nuestras zonas de cobertura';
-  return (
-    <p className="small muted" style={{ margin: 0 }}>
-      {where}
-      {d.mode === 'radius' ? <> · envío {money(d.radiusFee)}</> : ' · el envío depende de tu zona'}
-      {d.freeShippingFrom != null && <> · <strong className="ok-text">gratis desde {money(d.freeShippingFrom)}</strong></>}
-      {d.pickupEnabled && ' · o recoge sin costo'}
-    </p>
   );
 }

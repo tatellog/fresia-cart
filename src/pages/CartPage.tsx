@@ -52,8 +52,11 @@ export default function CartPage() {
     <>
       <DemoBanner />
       <main className="page stack-lg">
-        <TopBar back="/" step="Carrito" />
-        <h1>Tu pedido</h1>
+        <TopBar back="/" />
+        <div className="page-title">
+          <h1>Tu pedido</h1>
+          <span className="muted">{cart.count} producto{cart.count === 1 ? '' : 's'}</span>
+        </div>
         {repeatNotes.length > 0 && (
           <div className="notice warn" role="status">
             <strong>Revisa tu pedido repetido:</strong>
@@ -100,20 +103,16 @@ export default function CartPage() {
           </section>
         )}
 
-        <div className="totals">
-          <div className="row">
+        <section className="card summary-card" aria-label="Resumen">
+          <div className="row between">
             <span>Subtotal</span>
-            <span className="price">{money(cart.subtotal)}</span>
+            <span className="price big">{money(cart.subtotal)}</span>
           </div>
-          <p className="muted small">El envío se calcula con tu dirección en el siguiente paso.</p>
           {data?.delivery.deliveryEnabled && data.delivery.freeShippingFrom != null && (
-            <p className={`small ${cart.subtotal >= data.delivery.freeShippingFrom ? 'ok-text' : ''}`}>
-              {cart.subtotal >= data.delivery.freeShippingFrom
-                ? '🎉 Tu pedido tiene envío gratis.'
-                : `Te faltan ${money(data.delivery.freeShippingFrom - cart.subtotal)} para el envío gratis.`}
-            </p>
+            <FreeShipping subtotal={cart.subtotal} from={data.delivery.freeShippingFrom} />
           )}
-        </div>
+          <p className="muted small">El envío se calcula con tu dirección en el siguiente paso.</p>
+        </section>
 
         {data && rules.minFresias > 1 && minMsg && (
           <div className="notice warn stack" role="status" style={{ gap: 8 }}>
@@ -132,7 +131,7 @@ export default function CartPage() {
           <p className="notice small" role="status">🎁 Es un Fresigrama: no tiene pedido mínimo. Al final escribes para quién es.</p>
         )}
 
-        <Link to="/" className="btn secondary block">Seguir comprando</Link>
+        <Link to="/" className="linkbtn" style={{ alignSelf: 'center' }}>+ Agregar más productos</Link>
       </main>
       <StickyAction>
         <button type="button" className="btn primary block" disabled={hasProblems || !data || !!minMsg} onClick={() => navigate('/entrega')}>
@@ -142,3 +141,20 @@ export default function CartPage() {
     </>
   );
 }
+
+/** Barra de avance hacia el envío gratis. */
+function FreeShipping({ subtotal, from }: { subtotal: number; from: number }) {
+  const done = subtotal >= from;
+  const pct = Math.min(100, Math.round((subtotal / from) * 100));
+  return (
+    <div className="free-ship">
+      <p className={`small ${done ? 'ok-text' : ''}`} style={{ margin: 0 }}>
+        {done ? '🎉 Tu pedido tiene envío gratis.' : <>Te faltan <strong>{money(from - subtotal)}</strong> para el envío gratis.</>}
+      </p>
+      <div className="bar" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct} aria-label="Avance al envío gratis">
+        <span style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  );
+}
+

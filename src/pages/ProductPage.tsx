@@ -118,7 +118,7 @@ export default function ProductPage() {
     <>
       <DemoBanner />
       <main className="page">
-        <TopBar back={editing ? '/carrito' : '/'} />
+        <TopBar back={editing ? '/carrito' : '/'} cart={!group} />
         <GroupModeBanner />
         <div className="product-hero">
           <img src={product.image} alt={product.name} width={600} height={600} />
@@ -131,17 +131,17 @@ export default function ProductPage() {
             submit();
           }}
         >
-          <div className="stack" style={{ gap: 6 }}>
-            <div className="row between">
-              <h1>{product.name}</h1>
-              {product.example && <span className="badge example">Ejemplo</span>}
-            </div>
-            <p className="muted">{product.description}</p>
+          <div className="product-title">
+            {product.example && <span className="badge example">Ejemplo</span>}
+            <h1>{product.name}</h1>
+            <p className="from">{product.sizes.length > 1 ? 'Desde ' : ''}{money(Math.min(...product.sizes.map((s) => s.price)))}</p>
+            {product.description && <p className="muted">{product.description}</p>}
           </div>
 
-          <fieldset>
-            <legend id="size-legend" className="label">
-              Tamaño {!size && <span className="muted small">· elige uno</span>}
+          <fieldset className="choice-group">
+            <legend id="size-legend" className="choice-legend">
+              <span>Tamaño</span>
+              <span className={`req${size ? ' done' : ''}`}>{size ? '✓ Listo' : 'Elige uno'}</span>
             </legend>
             <div className="options">
               {product.sizes.length === 1 && product.fresiaUnits > 0 && <p className="muted small">Solo disponible en este tamaño.</p>}

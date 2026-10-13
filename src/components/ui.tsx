@@ -27,22 +27,43 @@ export function DemoBanner() {
   );
 }
 
-export function TopBar({ back, step }: { back?: string | (() => void); step?: string }) {
+/** Barra superior de las pantallas internas: volver, la marca al centro y, si aplica, el carrito. */
+export function TopBar({ back, cart }: { back?: string | (() => void); step?: string; cart?: boolean }) {
   const navigate = useNavigate();
   return (
     <header className="topbar">
       {back ? (
-        <button type="button" className="back" onClick={() => (typeof back === 'string' ? navigate(back) : back())}>
-          <span aria-hidden="true">←</span> Volver
+        <button type="button" className="icon-btn" aria-label="Volver" onClick={() => (typeof back === 'string' ? navigate(back) : back())}>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M15 5l-7 7 7 7" />
+          </svg>
         </button>
       ) : (
-        <span />
+        <span className="icon-spacer" />
       )}
-      {step && <span className="steps">{step}</span>}
-      <Link to="/" className="logo-link" aria-label="Frésia, ir al menú">
-        <img src="/brand/fresia-puerta.svg" alt="" className="logo-sm" width={30} height={44} />
+      <Link to="/" className="topbar-brand" aria-label="Frésia, ir al inicio">
+        <Wordmark height={26} />
       </Link>
+      {cart ? <CartIcon /> : <span className="icon-spacer" />}
     </header>
+  );
+}
+
+/** Logotipo «Frésia» (versión de palabra). */
+export function Wordmark({ height = 30 }: { height?: number }) {
+  return <img src="/brand/fresia-wordmark.png" alt="Frésia" height={height} width={Math.round((height * 368) / 108)} className="wordmark-img" />;
+}
+
+export function CartIcon() {
+  const { count } = useCart();
+  return (
+    <Link to="/carrito" className="icon-btn" aria-label={count ? `Carrito, ${count} producto${count === 1 ? '' : 's'}` : 'Carrito'}>
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M6 8h12l-1 12H7L6 8Z" />
+        <path d="M9 8V6a3 3 0 0 1 6 0v2" />
+      </svg>
+      {count > 0 && <span className="dot-count" aria-hidden="true">{count}</span>}
+    </Link>
   );
 }
 
